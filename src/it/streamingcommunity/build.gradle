@@ -1,0 +1,7 @@
+ext {
+    extName = 'StreamingCommunity'
+    extClass = '.StreamingCommunity'
+    extVersionCode = 4
+}
+
+apply from: "$rootDir/common.gradle"

@@ -1,0 +1,7 @@
+ext {
+    extName = 'Akwam'
+    extClass = '.Akwam'
+    extVersionCode = 9
+}
+
+apply from: "$rootDir/common.gradle"

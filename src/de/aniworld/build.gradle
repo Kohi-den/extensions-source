@@ -1,0 +1,13 @@
+ext {
+    extName = 'AniWorld'
+    extClass = '.AniWorld'
+    extVersionCode = 23
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:voe-extractor'))
+    implementation(project(':lib:streamtape-extractor'))
+    implementation(project(':lib:dood-extractor'))
+}
