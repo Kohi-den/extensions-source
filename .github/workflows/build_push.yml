@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - master
+      - main
     paths:
       - '**'
       - '!**.md'
@@ -28,7 +28,7 @@ jobs:
       - name: Clone repo
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
         with:
-          ref: master
+          ref: main
           token: ${{ secrets.ANIYOMIORG_BOT_PAT }}
 
       - name: Find lib changes
@@ -85,10 +85,10 @@ jobs:
     strategy:
       matrix: ${{ fromJSON(needs.prepare.outputs.individualMatrix) }}
     steps:
-      - name: Checkout master branch
+      - name: Checkout main branch
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
         with:
-          ref: master
+          ref: main
 
       - name: Set up JDK
         uses: actions/setup-java@387ac29b308b003ca37ba93a6cab5eb57c8f5f93 # v4
@@ -113,7 +113,7 @@ jobs:
 
       - name: Upload APKs (chunk ${{ matrix.chunk }})
         uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4
-        if: "github.repository == 'aniyomiorg/aniyomi-extensions'"
+        if: "github.repository == 'almightyhak/aniyomi-extensions'"
         with:
           name: "individual-apks-${{ matrix.chunk }}"
           path: "**/*.apk"
@@ -126,7 +126,7 @@ jobs:
     name: Publish repo
     needs:
       - build_individual
-    if: "github.repository == 'aniyomiorg/aniyomi-extensions'"
+    if: "github.repository == 'almightyhak/aniyomi-extensions'"
     runs-on: ubuntu-latest
     steps:
       - name: Download APK artifacts
@@ -140,15 +140,15 @@ jobs:
           java-version: 17
           distribution: temurin
 
-      - name: Checkout master branch
+      - name: Checkout main branch
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
         with:
-          ref: master
-          path: master
+          ref: main
+          path: main
 
       - name: Create repo artifacts
         run: |
-          cd master
+          cd main
           python ./.github/scripts/move-apks.py
           INSPECTOR_LINK="$(curl -s "https://api.github.com/repos/aniyomiorg/aniyomi-extensions-inspector/releases/latest" | jq -r '.assets[0].browser_download_url')"
           curl -L "$INSPECTOR_LINK" -o ./Inspector.jar
@@ -158,9 +158,9 @@ jobs:
       - name: Checkout repo branch
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
         with:
-          repository: aniyomiorg/aniyomi-extensions
+          repository: almightyhak/aniyomi-anime-repo
           token: ${{ secrets.ANIYOMIORG_BOT_PAT }}
-          ref: repo
+          ref: main
           path: repo
 
       - name: Import GPG key
@@ -175,4 +175,4 @@ jobs:
       - name: Deploy repo
         run: |
           cd repo
-          ../master/.github/scripts/commit-repo.sh
+          ../main/.github/scripts/commit-repo.sh
