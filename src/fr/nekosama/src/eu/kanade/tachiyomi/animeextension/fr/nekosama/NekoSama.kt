@@ -68,18 +68,16 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val pageBody = response.asJsoup()
-        val episodesJson = pageBody.selectFirst("script:containsData(var episodes =)")!!.data()
-            .substringAfter("var episodes = ").substringBefore(";")
-        val json = json.decodeFromString<List<EpisodesJson>>(episodesJson)
+        val episodes = pageBody.select(".episodes a")
 
-        return json.map {
+        return episodes.map {
             SEpisode.create().apply {
-                name = try { it.episode!! } catch (e: Exception) { "episode" }
-                url = it.url!!.replace("\\", "")
+                name = "Episode " + it.text().substringAfter("-").substringBefore("-").trim()
+                setUrlWithoutDomain(it.attr("href"))
 
-                episode_number = try { it.episode!!.substringAfter(". ").toFloat() } catch (e: Exception) { (0..10).random() }.toFloat()
+                episode_number = it.text().substringAfterLast("-").toFloat()
             }
-        }.reversed()
+        }
     }
 
     override fun episodeListSelector() = throw UnsupportedOperationException()
