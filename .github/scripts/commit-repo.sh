@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-rsync -a --delete --exclude .git --exclude .gitignore ../master/repo/ .
+rsync -a --delete --exclude .git --exclude .gitignore ../main/repo/ .
 git config --global user.email "aniyomi-bot@aniyomi.org"
 git config --global user.name "aniyomi-bot[bot]"
 git status
