@@ -157,7 +157,7 @@ jobs:
 
       - name: Sync repo
         run: |
-          rsync -a --delete --exclude .git --exclude .gitignore main/repo/ repo
+          rsync -a --delete --exclude .git --exclude .gitignore main/repo/ repo --exclude README.md
 
       - name: Deploy repo
         uses: EndBug/add-and-commit@v9
