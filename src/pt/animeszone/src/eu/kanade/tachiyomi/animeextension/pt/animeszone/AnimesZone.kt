@@ -16,6 +16,7 @@ import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
+import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.Serializable
@@ -86,6 +87,26 @@ class AnimesZone : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // =============================== Search ===============================
+    override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
+        return if (query.startsWith(PREFIX_SEARCH)) {
+            val path = query.removePrefix(PREFIX_SEARCH)
+            client.newCall(GET("$baseUrl/$path"))
+                .awaitSuccess()
+                .use(::searchAnimeByIdParse)
+        } else {
+            super.getSearchAnime(page, query, filters)
+        }
+    }
+
+    private fun searchAnimeByIdParse(response: Response): AnimesPage {
+        val details = animeDetailsParse(response).apply {
+            setUrlWithoutDomain(response.request.url.toString())
+            initialized = true
+        }
+
+        return AnimesPage(listOf(details), false)
+    }
+
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val params = AnimesZoneFilters.getSearchParameters(filters)
 
@@ -405,6 +426,8 @@ class AnimesZone : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     companion object {
+        const val PREFIX_SEARCH = "id:"
+
         private val EPISODE_REGEX by lazy { Regex("""Episódio ?\d+\.?\d* ?""") }
 
         private const val PREF_QUALITY_KEY = "preferred_quality"
