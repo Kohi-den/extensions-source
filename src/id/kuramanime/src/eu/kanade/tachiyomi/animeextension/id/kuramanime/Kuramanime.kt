@@ -25,7 +25,7 @@ import uy.kohesive.injekt.injectLazy
 class Kuramanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override val name = "Kuramanime"
 
-    override val baseUrl = "https://kuramanime.pro"
+    override val baseUrl = "https://kuramanime.boo"
 
     override val lang = "id"
 
