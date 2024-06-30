@@ -47,29 +47,14 @@ class AnimePlayer : DooPlay(
     }
 
     // ============================== Episodes ==============================
-    override fun episodeListParse(response: Response): List<SEpisode> {
-        val doc = getRealAnimeDoc(response.asJsoup())
-        val seasonList = doc.select(seasonListSelector)
-        return if (seasonList.size < 1) {
-            SEpisode.create().apply {
-                setUrlWithoutDomain(doc.location())
-                episode_number = 1F
-                name = episodeMovieText
-            }.let(::listOf)
-        } else {
-            seasonList.flatMap(::getSeasonEpisodes)
-        }
-    }
+    override fun episodeListParse(response: Response) = super.episodeListParse(response).reversed()
 
     override fun getSeasonEpisodes(season: Element): List<SEpisode> {
         val seasonName = season.selectFirst("span.title")!!.text()
         return season.select(episodeListSelector()).mapNotNull { element ->
-            try {
+            runCatching {
                 episodeFromElement(element, seasonName)
-            } catch (e: Throwable) {
-                e.printStackTrace()
-                null
-            }
+            }.onFailure { it.printStackTrace() }.getOrNull()
         }
     }
 
@@ -91,17 +76,36 @@ class AnimePlayer : DooPlay(
     override val prefQualityValues = arrayOf("360p", "720p")
     override val prefQualityEntries = prefQualityValues
 
-    private val bloggerExtractor by lazy { BloggerExtractor(client) }
-
     override fun videoListParse(response: Response): List<Video> {
-        val playerUrl = response.asJsoup()
+        val document = response.asJsoup()
+        val playerUrl = document
             .selectFirst("div.playex iframe")
             ?.absUrl("src")
             ?.toHttpUrlOrNull()
             ?: return emptyList()
 
+        val quality = document
+            .selectFirst("span.qualityx")
+            ?.text()
+            ?.substringAfterLast(" ")
+            ?: "Default"
+
         val url = playerUrl.queryParameter("link") ?: playerUrl.toString()
-        return bloggerExtractor.videosFromUrl(url, headers)
+        return getVideosFromURL(url, quality)
+    }
+
+    private val bloggerExtractor by lazy { BloggerExtractor(client) }
+    private fun getVideosFromURL(url: String, quality: String): List<Video> {
+        return when {
+            "cdn.animeson.com.br" in url -> {
+                listOf(
+                    Video(url, quality, url, headers),
+                )
+            }
+
+            "blogger.com" in url -> bloggerExtractor.videosFromUrl(url, headers)
+            else -> emptyList()
+        }
     }
 
     // ============================== Filters ===============================
