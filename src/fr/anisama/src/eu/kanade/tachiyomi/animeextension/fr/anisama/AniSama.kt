@@ -40,7 +40,7 @@ class AniSama : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     override val name = "AniSama"
 
-    override val baseUrl = "https://v1.anisama.net"
+    override val baseUrl = "https://animesz.xyz"
 
     override val lang = "fr"
 
