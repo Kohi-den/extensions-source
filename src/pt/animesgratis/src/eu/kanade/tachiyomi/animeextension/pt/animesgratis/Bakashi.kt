@@ -17,6 +17,8 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class Bakashi : DooPlay(
     "pt-BR",
@@ -25,6 +27,10 @@ class Bakashi : DooPlay(
 ) {
 
     override val id: Long = 2969482460524685571L
+
+    override val dateFormatter by lazy {
+        SimpleDateFormat("dd/MM/yy", Locale("pt", "BR"))
+    }
 
     // ============================== Popular ===============================
     override fun popularAnimeSelector() = "div.items.featured article div.poster"
@@ -35,11 +41,18 @@ class Bakashi : DooPlay(
     override fun searchAnimeFromElement(element: Element) = popularAnimeFromElement(element)
 
     // ============================== Episodes ==============================
-    override fun episodeListParse(response: Response) =
-        getRealAnimeDoc(response.asJsoup())
-            .select(episodeListSelector())
-            .map(::episodeFromElement)
-            .reversed()
+    override fun getSeasonEpisodes(season: Element): List<SEpisode> {
+        val seasonName = season.selectFirst("span.se-t")?.text()
+        return season.select(episodeListSelector()).mapNotNull { element ->
+            runCatching {
+                if (seasonName.isNullOrBlank()) {
+                    episodeFromElement(element)
+                } else {
+                    episodeFromElement(element, seasonName)
+                }
+            }.onFailure { it.printStackTrace() }.getOrNull()
+        }
+    }
 
     override fun episodeListSelector() = "ul.episodios > li > div.episodiotitle > a"
 
@@ -49,6 +62,9 @@ class Bakashi : DooPlay(
             name = it
             episode_number = it.substringAfter(" ").toFloatOrNull() ?: 0F
         }
+        date_upload = element.parent()?.selectFirst(episodeDateSelector)
+            ?.text()
+            ?.toDate() ?: 0L
     }
 
     // ============================ Video Links =============================
@@ -93,6 +109,7 @@ class Bakashi : DooPlay(
                 when {
                     it.contains("/aviso/") ->
                         it.toHttpUrl().queryParameter("url")
+
                     else -> it
                 }
             }
@@ -124,5 +141,19 @@ class Bakashi : DooPlay(
             client.newCall(GET(it.attr("href"), headers)).execute()
                 .asJsoup()
         } ?: document
+    }
+
+    override fun List<Video>.sort(): List<Video> {
+        val quality = preferences.getString(videoSortPrefKey, videoSortPrefDefault)!!
+        return sortedWith(
+            compareBy(
+                { it.quality.contains(quality) },
+                { REGEX_QUALITY.find(it.quality)?.groupValues?.get(1)?.toIntOrNull() ?: 0 },
+            ),
+        ).reversed()
+    }
+
+    companion object {
+        private val REGEX_QUALITY by lazy { Regex("""(\d+)p""") }
     }
 }
