@@ -15,16 +15,14 @@ import eu.kanade.tachiyomi.lib.fusevideoextractor.FusevideoExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
+import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import uy.kohesive.injekt.injectLazy
-import java.lang.Exception
 
 class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
@@ -36,13 +34,12 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val supportsLatest = true
 
-    private val json: Json by injectLazy()
-
     private val preferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
 
-    override fun popularAnimeSelector(): String = "div.anime"
+    // ============================== Popular ===============================
+    override fun popularAnimeSelector() = "div.anime"
 
     override fun popularAnimeRequest(page: Int): Request {
         return if (page > 1) {
@@ -52,70 +49,20 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
     }
 
-    override fun popularAnimeFromElement(element: Element): SAnime {
-        val anime = SAnime.create()
-        anime.setUrlWithoutDomain(
-            element.select("div.info a").attr("href"),
-        )
-        anime.title = element.select("div.info a div").text()
-        val thumb1 = element.select("div.cover a div img:not(.placeholder)").attr("data-src")
-        val thumb2 = element.select("div.cover a div img:not(.placeholder)").attr("src")
-        anime.thumbnail_url = thumb1.ifBlank { thumb2 }
-        return anime
+    override fun popularAnimeFromElement(element: Element) = SAnime.create().apply {
+        with(element.selectFirst("div.info a")!!) {
+            setUrlWithoutDomain(attr("href"))
+            title = text()
+        }
+
+        element.selectFirst("div.cover a div img:not(.placeholder)")?.run {
+            thumbnail_url = attr("data-src").ifBlank { attr("src") }
+        }
     }
 
-    override fun popularAnimeNextPageSelector(): String = "div.nekosama.pagination a.active ~ a"
+    override fun popularAnimeNextPageSelector() = "div.nekosama.pagination a.active ~ a"
 
-    override fun episodeListParse(response: Response): List<SEpisode> {
-        val pageBody = response.asJsoup()
-        val episodesJson = pageBody.selectFirst("script:containsData(var episodes =)")!!.data()
-            .substringAfter("var episodes = ").substringBefore(";")
-        val json = json.decodeFromString<List<EpisodesJson>>(episodesJson)
-
-        return json.map {
-            SEpisode.create().apply {
-                name = try { it.episode!! } catch (e: Exception) { "episode" }
-                url = it.url!!.replace("\\", "")
-
-                episode_number = try { it.episode!!.substringAfter(". ").toFloat() } catch (e: Exception) { (0..10).random() }.toFloat()
-            }
-        }.reversed()
-    }
-
-    override fun episodeListSelector() = throw UnsupportedOperationException()
-
-    override fun episodeFromElement(element: Element) = throw UnsupportedOperationException()
-
-    override fun videoListParse(response: Response): List<Video> {
-        val document = response.asJsoup()
-        val script = document.selectFirst("script:containsData(var video = [];)")!!.data()
-        val playersRegex = Regex("video\\s*\\[\\d*]\\s*=\\s*'(.*?)'")
-        return playersRegex.findAll(script).flatMap {
-            val url = it.groupValues[1]
-            with(url) {
-                when {
-                    contains("fusevideo") -> FusevideoExtractor(client, headers).videosFromUrl(this)
-                    contains("streamtape") -> listOfNotNull(StreamTapeExtractor(client).videoFromUrl(this))
-                    else -> emptyList()
-                }
-            }
-        }.toList()
-    }
-
-    override fun videoListSelector() = throw UnsupportedOperationException()
-
-    override fun videoUrlParse(document: Document) = throw UnsupportedOperationException()
-
-    override fun videoFromElement(element: Element) = throw UnsupportedOperationException()
-
-    override fun List<Video>.sort(): List<Video> {
-        val quality = preferences.getString("preferred_quality", "1080")!!
-
-        return this.sortedWith(
-            compareBy { it.quality.contains(quality) },
-        ).reversed()
-    }
-
+    // =============================== Search ===============================
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val filterList = if (filters.isEmpty()) getFilterList() else filters
         val typeFilter = filterList.find { it is TypeFilter } as TypeFilter
@@ -144,32 +91,22 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
         return when {
             pageUrl.contains("animes-search") -> {
-                val jsonSearch = json.decodeFromString<List<SearchJson>>(response.asJsoup().body().text())
-                val animes = mutableListOf<SAnime>()
-                jsonSearch.map {
-                    if (it.title!!.lowercase().contains(query)) {
-                        val animeResult = SAnime.create().apply {
-                            url = it.url!!
-                            title = it.title!!
-                            thumbnail_url = try {
-                                it.url_image
-                            } catch (e: Exception) {
-                                "$baseUrl/images/default_poster.png"
-                            }
+                val jsonSearch = response.parseAs<List<SearchJson>>()
+                val animes = jsonSearch
+                    .filter { it.title.orEmpty().lowercase().contains(query) }
+                    .mapNotNull {
+                        SAnime.create().apply {
+                            url = it.url ?: return@mapNotNull null
+                            title = it.title ?: return@mapNotNull null
+                            thumbnail_url = it.url_image ?: "$baseUrl/images/default_poster.png"
                         }
-                        animes.add(animeResult)
                     }
-                }
-                AnimesPage(
-                    animes,
-                    false,
-                )
+                AnimesPage(animes, false)
             }
             else -> {
-                AnimesPage(
-                    response.asJsoup().select(popularAnimeSelector()).map { popularAnimeFromElement(it) },
-                    true,
-                )
+                val page = response.asJsoup()
+                val animes = page.select(popularAnimeSelector()).map(::popularAnimeFromElement)
+                AnimesPage(animes, true)
             }
         }
     }
@@ -180,29 +117,53 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun searchAnimeSelector(): String = throw UnsupportedOperationException()
 
-    override fun animeDetailsParse(document: Document): SAnime {
-        val anime = SAnime.create()
-        anime.title = document.selectFirst("div.col.offset-lg-3.offset-md-4 h1")!!.ownText()
-        var description = document.select("div.synopsis p").text() + "\n\n"
+    // =============================== Latest ===============================
+    override fun latestUpdatesRequest(page: Int) = GET(baseUrl, headers)
 
-        val scoreElement = document.selectFirst("div#anime-info-list div.item:contains(Score)")!!
-        if (scoreElement.ownText().isNotEmpty()) description += "Score moyen: ★${scoreElement.ownText().trim()}"
+    override fun latestUpdatesSelector() = throw UnsupportedOperationException()
 
-        val statusElement = document.selectFirst("div#anime-info-list div.item:contains(Status)")!!
-        if (statusElement.ownText().isNotEmpty()) description += "\nStatus: ${statusElement.ownText().trim()}"
+    override fun latestUpdatesFromElement(element: Element) = throw UnsupportedOperationException()
 
-        val formatElement = document.selectFirst("div#anime-info-list div.item:contains(Format)")!!
-        if (formatElement.ownText().isNotEmpty()) description += "\nFormat: ${formatElement.ownText().trim()}"
+    override fun latestUpdatesParse(response: Response): AnimesPage {
+        val jsonLatest = response.parseAs<List<SearchJson>> { it.substringAfter("var lastEpisodes = ").substringBefore(";\n") }
 
-        val diffusionElement = document.selectFirst("div#anime-info-list div.item:contains(Diffusion)")!!
-        if (diffusionElement.ownText().isNotEmpty()) description += "\nDiffusion: ${diffusionElement.ownText().trim()}"
+        val animeList = jsonLatest.mapNotNull { item ->
+            SAnime.create().apply {
+                val itemUrl = item.url ?: return@mapNotNull null
+                title = item.title ?: return@mapNotNull null
+                val type = itemUrl.substringAfterLast("-")
+                url = itemUrl.replace("episode", "info").substringBeforeLast("-").substringBeforeLast("-") + "-$type"
+                thumbnail_url = item.url_image ?: "$baseUrl/images/default_poster.png"
+            }
+        }
 
-        anime.status = parseStatus(statusElement.ownText().trim())
-        anime.description = description
-        anime.thumbnail_url = document.select("div.cover img").attr("src")
-        anime.genre = document.select("div.col.offset-lg-3.offset-md-4 div.list a").eachText().joinToString(separator = ", ")
-        return anime
+        return AnimesPage(animeList, false)
     }
+
+    override fun latestUpdatesNextPageSelector() = throw UnsupportedOperationException()
+
+    // =========================== Anime Details ============================
+    override fun animeDetailsParse(document: Document) = SAnime.create().apply {
+        title = document.selectFirst("div.row > div.col > h1")!!.ownText()
+        genre = document.select("div.col > div.list span").joinToString { it.text() }
+
+        with(document.selectFirst("div.row > div#details")!!) {
+            thumbnail_url = selectFirst("div.cover img")?.absUrl("src") ?: "$baseUrl/images/default_poster.png"
+            description = buildString {
+                document.selectFirst("div.synopsis p")?.also { append(it.text(), "\n\n") }
+                getInfo("Score")?.also { append("Score moyen: *", it, "\n") }
+                getInfo("Status")?.also {
+                    append("Status: ", it, "\n")
+                    status = parseStatus(it)
+                }
+                getInfo("Format")?.also { append("Format: ", it, "\n") }
+                getInfo("Diffusion")?.also { append("Diffusion: ", it, "\n") }
+            }
+        }
+    }
+
+    private fun Element.getInfo(item: String) =
+        selectFirst("div#anime-info-list div.item:contains($item)")?.ownText()?.trim()
 
     private fun parseStatus(statusString: String): Int {
         return when (statusString) {
@@ -212,40 +173,50 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
     }
 
-    override fun latestUpdatesNextPageSelector() = throw UnsupportedOperationException()
+    // ============================== Episodes ==============================
+    override fun episodeListSelector() = "div.episodes div > a.button"
 
-    override fun latestUpdatesFromElement(element: Element) = throw UnsupportedOperationException()
-
-    override fun latestUpdatesRequest(page: Int): Request {
-        return GET(baseUrl)
+    override fun episodeFromElement(element: Element) = SEpisode.create().apply {
+        setUrlWithoutDomain(element.attr("href"))
+        val text = element.text()
+        name = text.substringBeforeLast(" - ")
+        episode_number = text.substringAfterLast("- ").toFloatOrNull() ?: 0F
     }
 
-    override fun latestUpdatesParse(response: Response): AnimesPage {
-        val animeList = mutableListOf<SAnime>()
+    // ============================ Video Links =============================
+    private val fusevideoExtractor by lazy { FusevideoExtractor(client, headers) }
+    private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
 
-        val jsonLatest = json.decodeFromString<List<SearchJson>>(
-            response.body.string().substringAfter("var lastEpisodes = ").substringBefore(";\n"),
-        )
-
-        for (item in jsonLatest) {
-            val animeResult = SAnime.create().apply {
-                val type = item.url!!.substringAfterLast("-")
-                url = item.url!!.replace("episode", "info").substringBeforeLast("-").substringBeforeLast("-") + "-$type"
-                title = item.title!!
-                thumbnail_url = try {
-                    item.url_image
-                } catch (e: Exception) {
-                    "$baseUrl/images/default_poster.png"
+    override fun videoListParse(response: Response): List<Video> {
+        val document = response.asJsoup()
+        val script = document.selectFirst("script:containsData(var video = [];)")!!.data()
+        return PLAYERS_REGEX.findAll(script).flatMap {
+            val url = it.groupValues[1]
+            with(url) {
+                when {
+                    contains("fusevideo") -> fusevideoExtractor.videosFromUrl(this)
+                    contains("streamtape") -> streamTapeExtractor.videosFromUrl(this)
+                    else -> emptyList()
                 }
             }
-            animeList.add(animeResult)
-        }
-
-        return AnimesPage(animeList, false)
+        }.toList()
     }
 
-    override fun latestUpdatesSelector() = throw UnsupportedOperationException()
+    override fun videoListSelector() = throw UnsupportedOperationException()
 
+    override fun videoUrlParse(document: Document) = throw UnsupportedOperationException()
+
+    override fun videoFromElement(element: Element) = throw UnsupportedOperationException()
+
+    override fun List<Video>.sort(): List<Video> {
+        val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
+
+        return sortedWith(
+            compareBy { it.quality.contains(quality) },
+        ).reversed()
+    }
+
+    // ============================== Filters ===============================
     override fun getFilterList(): AnimeFilterList = AnimeFilterList(
         AnimeFilter.Header("Utilisez ce filtre pour affiner votre recherche"),
         TypeFilter(),
@@ -265,22 +236,16 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         fun toUriPart() = vals[state].second
     }
 
+    // ============================== Settings ==============================
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
-        val videoQualityPref = ListPreference(screen.context).apply {
-            key = "preferred_quality"
-            title = "Preferred quality"
-            entries = arrayOf("1080p", "720p", "480p", "360p")
-            entryValues = arrayOf("1080", "720", "480", "360")
-            setDefaultValue("1080")
+        ListPreference(screen.context).apply {
+            key = PREF_QUALITY_KEY
+            title = PREF_QUALITY_TITLE
+            entries = PREF_QUALITY_ENTRIES
+            entryValues = PREF_QUALITY_ENTRIES
+            setDefaultValue(PREF_QUALITY_DEFAULT)
             summary = "%s"
-
-            setOnPreferenceChangeListener { _, newValue ->
-                val selected = newValue as String
-                val index = findIndexOfValue(selected)
-                val entry = entryValues[index] as String
-                preferences.edit().putString(key, entry).commit()
-            }
-        }
+        }.also(screen::addPreference)
 
         ListPreference(screen.context).apply {
             key = PREF_DOMAIN_KEY
@@ -289,15 +254,7 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             entryValues = PREF_DOMAIN_ENTRIES
             setDefaultValue(PREF_DOMAIN_DEFAULT)
             summary = "%s"
-
-            setOnPreferenceChangeListener { _, newValue ->
-                val selected = newValue as String
-                val index = findIndexOfValue(selected)
-                val entry = entryValues[index] as String
-                preferences.edit().putString(key, entry).commit()
-            }
         }.also(screen::addPreference)
-        screen.addPreference(videoQualityPref)
     }
 
     @Serializable
@@ -331,9 +288,15 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     )
 
     companion object {
+        private val PLAYERS_REGEX = Regex("video\\s*\\[\\d*]\\s*=\\s*'(.*?)'")
         private const val PREF_DOMAIN_KEY = "pref_domain_key"
         private const val PREF_DOMAIN_TITLE = "Preferred domain"
         private const val PREF_DOMAIN_DEFAULT = "animecat.net"
         private val PREF_DOMAIN_ENTRIES = arrayOf("animecat.net", "neko-sama.fr")
+
+        private const val PREF_QUALITY_KEY = "preferred_quality"
+        private const val PREF_QUALITY_TITLE = "Preferred quality"
+        private const val PREF_QUALITY_DEFAULT = "1080p"
+        private val PREF_QUALITY_ENTRIES = arrayOf("1080p", "720p", "480p", "360p")
     }
 }
