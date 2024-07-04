@@ -14,10 +14,8 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
 import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
-import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
-import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -140,7 +138,7 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             serverList.add(Pair(name, url))
         }
 
-        val videoList = serverList.parallelCatchingFlatMapBlocking { server ->
+        val videoList = serverList.flatMap { server ->
             val url = server.second
             when {
                 url.contains("streamingaw") -> {
@@ -148,10 +146,6 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 }
                 url.contains("https://doo") -> {
                     DoodExtractor(client).videoFromUrl(url, redirect = true)
-                        ?.let(::listOf)
-                }
-                url.contains("streamtape") -> {
-                    StreamTapeExtractor(client).videoFromUrl(url.replace("/v/", "/e/"))
                         ?.let(::listOf)
                 }
                 url.contains("filemoon") -> {
