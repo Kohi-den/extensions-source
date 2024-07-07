@@ -8,7 +8,7 @@ import android.util.Log
 import kotlin.system.exitProcess
 
 /**
- * Springboard that accepts https://www.hentaizm.fun/hentai-detay/<item> intents
+ * Springboard that accepts https://www.hentaizm.life/hentai-detay/<item> intents
  * and redirects them to the main Aniyomi process.
  */
 class HentaiZMUrlActivity : Activity() {
