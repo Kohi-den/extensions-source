@@ -13,7 +13,7 @@ just paste this into your anime repo https://raw.githubusercontent.com/almightyh
 
 i am maintaining this but keep in mind that i'm NOT a developer so expect issues to take a while to fix
 
-If your interested in installing the just apks they can be found [Here](https://github.com/almightyhak/aniyomi-anime-repo)
+If your interested in installing just the apks they can be found [Here](https://github.com/almightyhak/aniyomi-anime-repo)
 
 ## Contact
 
