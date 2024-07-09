@@ -151,7 +151,7 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 }
                 url.contains("streamtape") -> {
                     StreamTapeExtractor(client).videoFromUrl(url.replace("/v/", "/e/"))
-                        ?.let(::listOf
+                        ?.let(::listOf)
                 }
                 url.contains("filemoon") -> {
                     FilemoonExtractor(client).videosFromUrl(url, prefix = "${server.first} - ", headers = headers)
