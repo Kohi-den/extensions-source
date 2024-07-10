@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
 import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
+import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import kotlinx.serialization.Serializable
@@ -146,6 +147,10 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 }
                 url.contains("https://doo") -> {
                     DoodExtractor(client).videoFromUrl(url, redirect = true)
+                        ?.let(::listOf)
+                }
+                url.contains("streamtape") -> {
+                    StreamTapeExtractor(client).videoFromUrl(url.replace("/v/", "/e/"))
                         ?.let(::listOf)
                 }
                 url.contains("filemoon") -> {
