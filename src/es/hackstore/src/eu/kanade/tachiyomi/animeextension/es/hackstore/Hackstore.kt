@@ -16,6 +16,7 @@ import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
 import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.vidhideextractor.VidHideExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
@@ -32,7 +33,7 @@ class Hackstore : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "Hackstore"
 
-    override val baseUrl = "https://hackstore.to"
+    override val baseUrl = "https://hackstore.fo"
 
     override val lang = "es"
 
@@ -177,6 +178,7 @@ class Hackstore : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val filemoonExtractor by lazy { FilemoonExtractor(client) }
     private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
     private val doodExtractor by lazy { DoodExtractor(client) }
+    private val vidHideExtractor by lazy { VidHideExtractor(client, headers) }
 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
@@ -201,6 +203,9 @@ class Hackstore : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 }
                 server.contains("doodstream") || server.contains("dood.") || server.contains("ds2play") || server.contains("doods.") -> {
                     doodExtractor.videosFromUrl(url, "$prefix DoodStream")
+                }
+                server.contains("vidhide") || server.contains("vid.") -> {
+                    vidHideExtractor.videosFromUrl(url) { "$prefix VidHide:$it" }
                 }
                 else -> emptyList()
             }
