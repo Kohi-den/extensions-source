@@ -2,8 +2,8 @@ ext {
     extName = 'MiniOppai'
     extClass = '.MiniOppai'
     themePkg = 'animestream'
-    baseUrl = 'https://minioppai.org'
-    overrideVersionCode = 5
+    baseUrl = 'https://minioppai.biz'
+    overrideVersionCode = 6
     isNsfw = true
 }
 
