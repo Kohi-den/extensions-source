@@ -1,0 +1,14 @@
+ext {
+    extName = 'AnimesOnlineCC'
+    extClass = '.AnimesOnlineCC'
+    themePkg = 'dooplay'
+    baseUrl = 'https://animesonlinecc.to'
+    overrideVersionCode = 1
+    isNsfw = true
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(":lib:blogger-extractor"))
+}
