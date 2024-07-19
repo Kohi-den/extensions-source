@@ -18,7 +18,7 @@ import java.util.Locale
 class MiniOppai : AnimeStream(
     "id",
     "MiniOppai",
-    "https://minioppai.org",
+    "https://minioppai.biz",
 ) {
     override fun headersBuilder() = super.headersBuilder().add("Referer", baseUrl)
 
