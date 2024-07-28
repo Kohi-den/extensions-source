@@ -312,6 +312,22 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
     }
 
+    private fun getDecryptionKey(): String {
+        var prefKey = preferences.getString(PREF_VERIFY_KEY_DECRYPT_KEY, null)
+        if (prefKey.isNullOrBlank()) {
+            prefKey = PREF_VERIFY_KEY_DECRYPT_VALUE
+        }
+        return prefKey
+    }
+
+    private fun getEncryptionKey(): String {
+        var prefKey = preferences.getString(PREF_VERIFY_KEY_ENCRYPT_KEY, null)
+        if (prefKey.isNullOrBlank()) {
+            prefKey = PREF_VERIFY_KEY_ENCRYPT_VALUE
+        }
+        return prefKey
+    }
+
     companion object {
         private val SOFTSUB_REGEX by lazy { Regex("""\bsoftsub\b""", RegexOption.IGNORE_CASE) }
         private val RELEASE_REGEX by lazy { Regex("""Release: (\d+\/\d+\/\d+ \d+:\d+)""") }
@@ -355,6 +371,13 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private const val PREF_TYPE_TOGGLE_KEY = "type_selection"
         private val TYPES = arrayOf("Sub", "Softsub", "Dub")
         private val PREF_TYPES_TOGGLE_DEFAULT = TYPES.toSet()
+
+        // https://rowdy-avocado.github.io/multi-keys/
+        private const val PREF_VERIFY_KEY_DECRYPT_KEY = "verify_key_decrypt"
+        private const val PREF_VERIFY_KEY_DECRYPT_VALUE = "ctpAbOz5u7S6OMkx"
+
+        private const val PREF_VERIFY_KEY_ENCRYPT_KEY = "verify_key_encrypt"
+        private const val PREF_VERIFY_KEY_ENCRYPT_VALUE = "p01EDKu734HJP1Tm"
     }
 
     // ============================== Settings ==============================
@@ -458,6 +481,30 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             setOnPreferenceChangeListener { _, newValue ->
                 @Suppress("UNCHECKED_CAST")
                 preferences.edit().putStringSet(key, newValue as Set<String>).commit()
+            }
+        }.also(screen::addPreference)
+
+        EditTextPreference(screen.context).apply {
+            key = PREF_VERIFY_KEY_DECRYPT_KEY
+            title = "Custom decryption key"
+            setDefaultValue("")
+
+            setOnPreferenceChangeListener { _, newValue ->
+                @Suppress("UNCHECKED_CAST")
+                val newKey = newValue as String
+                preferences.edit().putString(key, newKey).commit()
+            }
+        }.also(screen::addPreference)
+
+        EditTextPreference(screen.context).apply {
+            key = PREF_VERIFY_KEY_ENCRYPT_KEY
+            title = "Custom encryption key"
+            setDefaultValue("")
+
+            setOnPreferenceChangeListener { _, newValue ->
+                @Suppress("UNCHECKED_CAST")
+                val newKey = newValue as String
+                preferences.edit().putString(key, newKey).commit()
             }
         }.also(screen::addPreference)
     }
