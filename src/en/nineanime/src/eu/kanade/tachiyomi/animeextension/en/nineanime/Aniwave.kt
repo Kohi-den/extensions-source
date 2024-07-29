@@ -266,10 +266,10 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             val parsed = response.parseAs<ServerResponse>()
             val embedLink = utils.vrfDecrypt(getDecryptionKey(), parsed.result.url)
             when (server.serverName) {
-                "vidplay", "mycloud" -> {
+                "Vidstream", "Megaf" -> {
                     val hosterName = when (server.serverName) {
-                        "vidplay" -> "VidPlay"
-                        else -> "MyCloud"
+                        "Vidstream" -> "Vidstream"
+                        else -> "Megaf"
                     }
                     vidsrcExtractor.videosFromUrl(embedLink, hosterName, server.type)
                 }
@@ -347,22 +347,22 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private const val PREF_LANG_DEFAULT = "Sub"
 
         private const val PREF_SERVER_KEY = "preferred_server"
-        private const val PREF_SERVER_DEFAULT = "vidplay"
+        private const val PREF_SERVER_DEFAULT = "Vidstream"
 
         private const val PREF_MARK_FILLERS_KEY = "mark_fillers"
         private const val PREF_MARK_FILLERS_DEFAULT = true
 
         private const val PREF_HOSTER_KEY = "hoster_selection"
         private val HOSTERS = arrayOf(
-            "VidPlay",
-            "MyCloud",
+            "Vidstream",
+            "Megaf",
             "Filemoon",
             "StreamTape",
             "Mp4Upload",
         )
         private val HOSTERS_NAMES = arrayOf(
-            "vidplay",
-            "mycloud",
+            "Vidstream",
+            "Megaf",
             "filemoon",
             "streamtape",
             "mp4upload",
