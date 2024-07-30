@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.animeextension.en.nineanime
 import android.app.Application
 import android.content.SharedPreferences
 import android.widget.Toast
-import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
@@ -90,7 +89,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val filters = AniwaveFilters.getSearchParameters(filters)
 
-        val vrf = if (query.isNotBlank()) utils.vrfEncrypt(getEncryptionKey(), query) else ""
+        val vrf = if (query.isNotBlank()) utils.vrfEncrypt(KEY_ENCRYPT, query) else ""
         var url = "$baseUrl/filter?keyword=$query"
 
         if (filters.genre.isNotBlank()) url += filters.genre
@@ -140,7 +139,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun episodeListRequest(anime: SAnime): Request {
         val id = client.newCall(GET(baseUrl + anime.url)).execute().asJsoup()
             .selectFirst("div[data-id]")!!.attr("data-id")
-        val vrf = utils.vrfEncrypt(getEncryptionKey(), id)
+        val vrf = utils.vrfEncrypt(KEY_ENCRYPT, id)
 
         val listHeaders = headers.newBuilder().apply {
             add("Accept", "application/json, text/javascript, */*; q=0.01")
@@ -196,7 +195,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun videoListRequest(episode: SEpisode): Request {
         val ids = episode.url.substringBefore("&")
-        val vrf = utils.vrfEncrypt(getEncryptionKey(), ids)
+        val vrf = utils.vrfEncrypt(KEY_ENCRYPT, ids)
         val url = "/ajax/server/list/$ids?vrf=$vrf"
         val epurl = episode.url.substringAfter("epurl=")
 
@@ -249,7 +248,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
 
     private fun extractVideo(server: VideoData, epUrl: String): List<Video> {
-        val vrf = utils.vrfEncrypt(getEncryptionKey(), server.serverId)
+        val vrf = utils.vrfEncrypt(KEY_ENCRYPT, server.serverId)
 
         val listHeaders = headers.newBuilder().apply {
             add("Accept", "application/json, text/javascript, */*; q=0.01")
@@ -264,7 +263,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
         return runCatching {
             val parsed = response.parseAs<ServerResponse>()
-            val embedLink = utils.vrfDecrypt(getDecryptionKey(), parsed.result.url)
+            val embedLink = utils.vrfDecrypt(KEY_DECRYPT, parsed.result.url)
             when (server.serverName) {
                 "Vidstream", "Megaf" -> {
                     val hosterName = when (server.serverName) {
@@ -313,14 +312,6 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
     }
 
-    private fun getDecryptionKey(): String {
-        return preferences.getString(PREF_VERIFY_KEY_DECRYPT_KEY, PREF_VERIFY_KEY_DECRYPT_VALUE)!!
-    }
-
-    private fun getEncryptionKey(): String {
-        return preferences.getString(PREF_VERIFY_KEY_ENCRYPT_KEY, PREF_VERIFY_KEY_ENCRYPT_VALUE)!!
-    }
-
     companion object {
         private val SOFTSUB_REGEX by lazy { Regex("""\bsoftsub\b""", RegexOption.IGNORE_CASE) }
         private val RELEASE_REGEX by lazy { Regex("""Release: (\d+\/\d+\/\d+ \d+:\d+)""") }
@@ -366,11 +357,8 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private val PREF_TYPES_TOGGLE_DEFAULT = TYPES.toSet()
 
         // https://rowdy-avocado.github.io/multi-keys/
-        private const val PREF_VERIFY_KEY_DECRYPT_KEY = "verify_key_decrypt"
-        private const val PREF_VERIFY_KEY_DECRYPT_VALUE = "ctpAbOz5u7S6OMkx"
-
-        private const val PREF_VERIFY_KEY_ENCRYPT_KEY = "verify_key_encrypt"
-        private const val PREF_VERIFY_KEY_ENCRYPT_VALUE = "p01EDKu734HJP1Tm"
+        private const val KEY_DECRYPT = "ctpAbOz5u7S6OMkx"
+        private const val KEY_ENCRYPT = "p01EDKu734HJP1Tm"
     }
 
     // ============================== Settings ==============================
