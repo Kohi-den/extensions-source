@@ -314,19 +314,11 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     private fun getDecryptionKey(): String {
-        var prefKey = preferences.getString(PREF_VERIFY_KEY_DECRYPT_KEY, null)
-        if (prefKey.isNullOrBlank()) {
-            prefKey = PREF_VERIFY_KEY_DECRYPT_VALUE
-        }
-        return prefKey
+        return preferences.getString(PREF_VERIFY_KEY_DECRYPT_KEY, PREF_VERIFY_KEY_DECRYPT_VALUE)!!
     }
 
     private fun getEncryptionKey(): String {
-        var prefKey = preferences.getString(PREF_VERIFY_KEY_ENCRYPT_KEY, null)
-        if (prefKey.isNullOrBlank()) {
-            prefKey = PREF_VERIFY_KEY_ENCRYPT_VALUE
-        }
-        return prefKey
+        return preferences.getString(PREF_VERIFY_KEY_ENCRYPT_KEY, PREF_VERIFY_KEY_ENCRYPT_VALUE)!!
     }
 
     companion object {
@@ -482,30 +474,6 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             setOnPreferenceChangeListener { _, newValue ->
                 @Suppress("UNCHECKED_CAST")
                 preferences.edit().putStringSet(key, newValue as Set<String>).commit()
-            }
-        }.also(screen::addPreference)
-
-        EditTextPreference(screen.context).apply {
-            key = PREF_VERIFY_KEY_DECRYPT_KEY
-            title = "Custom decryption key"
-            setDefaultValue("")
-
-            setOnPreferenceChangeListener { _, newValue ->
-                @Suppress("UNCHECKED_CAST")
-                val newKey = newValue as String
-                preferences.edit().putString(key, newKey).commit()
-            }
-        }.also(screen::addPreference)
-
-        EditTextPreference(screen.context).apply {
-            key = PREF_VERIFY_KEY_ENCRYPT_KEY
-            title = "Custom encryption key"
-            setDefaultValue("")
-
-            setOnPreferenceChangeListener { _, newValue ->
-                @Suppress("UNCHECKED_CAST")
-                val newKey = newValue as String
-                preferences.edit().putString(key, newKey).commit()
             }
         }.also(screen::addPreference)
     }
