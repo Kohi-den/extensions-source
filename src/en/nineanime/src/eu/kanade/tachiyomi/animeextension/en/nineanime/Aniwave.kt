@@ -265,16 +265,12 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             val parsed = response.parseAs<ServerResponse>()
             val embedLink = utils.vrfDecrypt(KEY_DECRYPT, parsed.result.url)
             when (server.serverName) {
-                "Vidstream", "Megaf" -> {
-                    val hosterName = when (server.serverName) {
-                        "Vidstream" -> "Vidstream"
-                        else -> "Megaf"
-                    }
-                    vidsrcExtractor.videosFromUrl(embedLink, hosterName, server.type)
+                "vidstream", "megaf" -> {
+                    vidsrcExtractor.videosFromUrl(embedLink, server.serverName, server.type)
                 }
-                "filemoon" -> filemoonExtractor.videosFromUrl(embedLink, "Filemoon - ${server.type} - ")
+                "moonf" -> filemoonExtractor.videosFromUrl(embedLink, "MoonF - ${server.type} - ")
                 "streamtape" -> streamtapeExtractor.videoFromUrl(embedLink, "StreamTape - ${server.type}")?.let(::listOf) ?: emptyList()
-                "mp4upload" -> mp4uploadExtractor.videosFromUrl(embedLink, headers, suffix = " - ${server.type}")
+                "mp4u" -> mp4uploadExtractor.videosFromUrl(embedLink, headers, suffix = " - ${server.type}")
                 else -> emptyList()
             }
         }.getOrElse { emptyList() }
@@ -339,16 +335,16 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private val HOSTERS = arrayOf(
             "Vidstream",
             "Megaf",
-            "Filemoon",
+            "MoonF",
             "StreamTape",
-            "Mp4Upload",
+            "MP4u",
         )
         private val HOSTERS_NAMES = arrayOf(
-            "Vidstream",
-            "Megaf",
-            "filemoon",
+            "vidstream",
+            "megaf",
+            "moonf",
             "streamtape",
-            "mp4upload",
+            "mp4u",
         )
         private val PREF_HOSTER_DEFAULT = HOSTERS_NAMES.toSet()
 
