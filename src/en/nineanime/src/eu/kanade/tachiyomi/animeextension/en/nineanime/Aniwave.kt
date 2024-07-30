@@ -217,7 +217,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun videoListParse(response: Response): List<Video> {
         val epurl = response.request.url.fragment!!
         val document = response.parseAs<ResultResponse>().toDocument()
-        val hosterSelection = preferences.getStringSet(PREF_HOSTER_KEY, PREF_HOSTER_DEFAULT)!!
+        val hosterSelection = getHosters()
         val typeSelection = preferences.getStringSet(PREF_TYPE_TOGGLE_KEY, PREF_TYPES_TOGGLE_DEFAULT)!!
 
         return document.select("div.servers > div").parallelFlatMapBlocking { elem ->
@@ -308,6 +308,25 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
     }
 
+    private fun getHosters(): Set<String> {
+        val hosterSelection = preferences.getStringSet(PREF_HOSTER_KEY, PREF_HOSTER_DEFAULT)!!
+        var invalidRecord = false
+        hosterSelection.forEach { str ->
+            val index = HOSTERS_NAMES.indexOf(str)
+            if (index == -1) {
+                invalidRecord = true
+            }
+        }
+
+        // found invalid record, reset to defaults
+        if (invalidRecord) {
+            preferences.edit().putStringSet(PREF_HOSTER_KEY, PREF_HOSTER_DEFAULT).apply()
+            return PREF_HOSTER_DEFAULT.toSet()
+        }
+
+        return hosterSelection.toSet()
+    }
+
     companion object {
         private val SOFTSUB_REGEX by lazy { Regex("""\bsoftsub\b""", RegexOption.IGNORE_CASE) }
         private val RELEASE_REGEX by lazy { Regex("""Release: (\d+\/\d+\/\d+ \d+:\d+)""") }
@@ -360,6 +379,9 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     // ============================== Settings ==============================
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        // validate hosters preferences and if invalid reset
+        getHosters()
+
         ListPreference(screen.context).apply {
             key = PREF_DOMAIN_KEY
             title = "Preferred domain"
