@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.animeextension.en.nineanime
 import android.app.Application
 import android.content.SharedPreferences
 import android.widget.Toast
-import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
@@ -90,7 +89,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val filters = AniwaveFilters.getSearchParameters(filters)
 
-        val vrf = if (query.isNotBlank()) utils.vrfEncrypt(getEncryptionKey(), query) else ""
+        val vrf = if (query.isNotBlank()) utils.vrfEncrypt(KEY_ENCRYPT, query) else ""
         var url = "$baseUrl/filter?keyword=$query"
 
         if (filters.genre.isNotBlank()) url += filters.genre
@@ -140,7 +139,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun episodeListRequest(anime: SAnime): Request {
         val id = client.newCall(GET(baseUrl + anime.url)).execute().asJsoup()
             .selectFirst("div[data-id]")!!.attr("data-id")
-        val vrf = utils.vrfEncrypt(getEncryptionKey(), id)
+        val vrf = utils.vrfEncrypt(KEY_ENCRYPT, id)
 
         val listHeaders = headers.newBuilder().apply {
             add("Accept", "application/json, text/javascript, */*; q=0.01")
@@ -196,7 +195,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun videoListRequest(episode: SEpisode): Request {
         val ids = episode.url.substringBefore("&")
-        val vrf = utils.vrfEncrypt(getEncryptionKey(), ids)
+        val vrf = utils.vrfEncrypt(KEY_ENCRYPT, ids)
         val url = "/ajax/server/list/$ids?vrf=$vrf"
         val epurl = episode.url.substringAfter("epurl=")
 
@@ -218,7 +217,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun videoListParse(response: Response): List<Video> {
         val epurl = response.request.url.fragment!!
         val document = response.parseAs<ResultResponse>().toDocument()
-        val hosterSelection = preferences.getStringSet(PREF_HOSTER_KEY, PREF_HOSTER_DEFAULT)!!
+        val hosterSelection = getHosters()
         val typeSelection = preferences.getStringSet(PREF_TYPE_TOGGLE_KEY, PREF_TYPES_TOGGLE_DEFAULT)!!
 
         return document.select("div.servers > div").parallelFlatMapBlocking { elem ->
@@ -249,7 +248,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
 
     private fun extractVideo(server: VideoData, epUrl: String): List<Video> {
-        val vrf = utils.vrfEncrypt(getEncryptionKey(), server.serverId)
+        val vrf = utils.vrfEncrypt(KEY_ENCRYPT, server.serverId)
 
         val listHeaders = headers.newBuilder().apply {
             add("Accept", "application/json, text/javascript, */*; q=0.01")
@@ -264,18 +263,14 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
         return runCatching {
             val parsed = response.parseAs<ServerResponse>()
-            val embedLink = utils.vrfDecrypt(getDecryptionKey(), parsed.result.url)
+            val embedLink = utils.vrfDecrypt(KEY_DECRYPT, parsed.result.url)
             when (server.serverName) {
-                "Vidstream", "Megaf" -> {
-                    val hosterName = when (server.serverName) {
-                        "Vidstream" -> "Vidstream"
-                        else -> "Megaf"
-                    }
-                    vidsrcExtractor.videosFromUrl(embedLink, hosterName, server.type)
+                "vidstream", "megaf" -> {
+                    vidsrcExtractor.videosFromUrl(embedLink, server.serverName, server.type)
                 }
-                "filemoon" -> filemoonExtractor.videosFromUrl(embedLink, "Filemoon - ${server.type} - ")
+                "moonf" -> filemoonExtractor.videosFromUrl(embedLink, "MoonF - ${server.type} - ")
                 "streamtape" -> streamtapeExtractor.videoFromUrl(embedLink, "StreamTape - ${server.type}")?.let(::listOf) ?: emptyList()
-                "mp4upload" -> mp4uploadExtractor.videosFromUrl(embedLink, headers, suffix = " - ${server.type}")
+                "mp4u" -> mp4uploadExtractor.videosFromUrl(embedLink, headers, suffix = " - ${server.type}")
                 else -> emptyList()
             }
         }.getOrElse { emptyList() }
@@ -313,20 +308,23 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
     }
 
-    private fun getDecryptionKey(): String {
-        var prefKey = preferences.getString(PREF_VERIFY_KEY_DECRYPT_KEY, null)
-        if (prefKey.isNullOrBlank()) {
-            prefKey = PREF_VERIFY_KEY_DECRYPT_VALUE
+    private fun getHosters(): Set<String> {
+        val hosterSelection = preferences.getStringSet(PREF_HOSTER_KEY, PREF_HOSTER_DEFAULT)!!
+        var invalidRecord = false
+        hosterSelection.forEach { str ->
+            val index = HOSTERS_NAMES.indexOf(str)
+            if (index == -1) {
+                invalidRecord = true
+            }
         }
-        return prefKey
-    }
 
-    private fun getEncryptionKey(): String {
-        var prefKey = preferences.getString(PREF_VERIFY_KEY_ENCRYPT_KEY, null)
-        if (prefKey.isNullOrBlank()) {
-            prefKey = PREF_VERIFY_KEY_ENCRYPT_VALUE
+        // found invalid record, reset to defaults
+        if (invalidRecord) {
+            preferences.edit().putStringSet(PREF_HOSTER_KEY, PREF_HOSTER_DEFAULT).apply()
+            return PREF_HOSTER_DEFAULT.toSet()
         }
-        return prefKey
+
+        return hosterSelection.toSet()
     }
 
     companion object {
@@ -356,16 +354,16 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private val HOSTERS = arrayOf(
             "Vidstream",
             "Megaf",
-            "Filemoon",
+            "MoonF",
             "StreamTape",
-            "Mp4Upload",
+            "MP4u",
         )
         private val HOSTERS_NAMES = arrayOf(
-            "Vidstream",
-            "Megaf",
-            "filemoon",
+            "vidstream",
+            "megaf",
+            "moonf",
             "streamtape",
-            "mp4upload",
+            "mp4u",
         )
         private val PREF_HOSTER_DEFAULT = HOSTERS_NAMES.toSet()
 
@@ -374,16 +372,16 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private val PREF_TYPES_TOGGLE_DEFAULT = TYPES.toSet()
 
         // https://rowdy-avocado.github.io/multi-keys/
-        private const val PREF_VERIFY_KEY_DECRYPT_KEY = "verify_key_decrypt"
-        private const val PREF_VERIFY_KEY_DECRYPT_VALUE = "ctpAbOz5u7S6OMkx"
-
-        private const val PREF_VERIFY_KEY_ENCRYPT_KEY = "verify_key_encrypt"
-        private const val PREF_VERIFY_KEY_ENCRYPT_VALUE = "p01EDKu734HJP1Tm"
+        private const val KEY_DECRYPT = "ctpAbOz5u7S6OMkx"
+        private const val KEY_ENCRYPT = "p01EDKu734HJP1Tm"
     }
 
     // ============================== Settings ==============================
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        // validate hosters preferences and if invalid reset
+        getHosters()
+
         ListPreference(screen.context).apply {
             key = PREF_DOMAIN_KEY
             title = "Preferred domain"
@@ -482,30 +480,6 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             setOnPreferenceChangeListener { _, newValue ->
                 @Suppress("UNCHECKED_CAST")
                 preferences.edit().putStringSet(key, newValue as Set<String>).commit()
-            }
-        }.also(screen::addPreference)
-
-        EditTextPreference(screen.context).apply {
-            key = PREF_VERIFY_KEY_DECRYPT_KEY
-            title = "Custom decryption key"
-            setDefaultValue("")
-
-            setOnPreferenceChangeListener { _, newValue ->
-                @Suppress("UNCHECKED_CAST")
-                val newKey = newValue as String
-                preferences.edit().putString(key, newKey).commit()
-            }
-        }.also(screen::addPreference)
-
-        EditTextPreference(screen.context).apply {
-            key = PREF_VERIFY_KEY_ENCRYPT_KEY
-            title = "Custom encryption key"
-            setDefaultValue("")
-
-            setOnPreferenceChangeListener { _, newValue ->
-                @Suppress("UNCHECKED_CAST")
-                val newKey = newValue as String
-                preferences.edit().putString(key, newKey).commit()
             }
         }.also(screen::addPreference)
     }
