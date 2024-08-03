@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.SharedPreferences
 import android.util.Log
 import android.widget.Toast
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
@@ -39,7 +40,12 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override val id: Long = 98855593379717478
 
     override val baseUrl by lazy {
-        preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!!
+        val customDomain = preferences.getString(PREF_CUSTOM_DOMAIN_KEY, null)
+        if (customDomain.isNullOrBlank()) {
+            preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!!
+        } else {
+            customDomain
+        }
     }
 
     override val lang = "en"
@@ -359,6 +365,8 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private const val PREF_DOMAIN_KEY = "preferred_domain"
         private const val PREF_DOMAIN_DEFAULT = "https://aniwave.to"
 
+        private const val PREF_CUSTOM_DOMAIN_KEY = "custom_domain"
+
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_DEFAULT = "1080"
 
@@ -504,6 +512,25 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             setOnPreferenceChangeListener { _, newValue ->
                 @Suppress("UNCHECKED_CAST")
                 preferences.edit().putStringSet(key, newValue as Set<String>).commit()
+            }
+        }.also(screen::addPreference)
+
+        EditTextPreference(screen.context).apply {
+            key = PREF_CUSTOM_DOMAIN_KEY
+            title = "Preferred domain"
+            setDefaultValue(null)
+            val currentValue = preferences.getString(PREF_CUSTOM_DOMAIN_KEY, null)
+            if (currentValue.isNullOrBlank()) {
+                summary = "Domain of your choosing. \nLeave blank to disable. Overrides any domain preferences!"
+            } else {
+                summary = "Domain: \"$currentValue\". \nLeave blank to disable. Overrides any domain preferences!"
+            }
+
+            setOnPreferenceChangeListener { _, newValue ->
+                val newDomain = newValue as String
+                summary = "Restart to apply changes. \nLeave blank to disable. Overrides any domain preferences!"
+                Toast.makeText(screen.context, "Restart Aniyomi to apply changes", Toast.LENGTH_LONG).show()
+                preferences.edit().putString(key, newDomain).commit()
             }
         }.also(screen::addPreference)
     }
