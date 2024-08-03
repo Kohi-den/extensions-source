@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.en.nineanime
 
 import android.app.Application
 import android.content.SharedPreferences
+import android.util.Log
 import android.widget.Toast
 import androidx.preference.ListPreference
 import androidx.preference.MultiSelectListPreference
@@ -89,7 +90,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val filters = AniwaveFilters.getSearchParameters(filters)
 
-        val vrf = if (query.isNotBlank()) utils.vrfEncrypt(KEY_ENCRYPT, query) else ""
+        val vrf = if (query.isNotBlank()) utils.vrfEncrypt(ENCRYPTION_KEY, query) else ""
         var url = "$baseUrl/filter?keyword=$query"
 
         if (filters.genre.isNotBlank()) url += filters.genre
@@ -139,7 +140,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun episodeListRequest(anime: SAnime): Request {
         val id = client.newCall(GET(baseUrl + anime.url)).execute().asJsoup()
             .selectFirst("div[data-id]")!!.attr("data-id")
-        val vrf = utils.vrfEncrypt(KEY_ENCRYPT, id)
+        val vrf = utils.vrfEncrypt(ENCRYPTION_KEY, id)
 
         val listHeaders = headers.newBuilder().apply {
             add("Accept", "application/json, text/javascript, */*; q=0.01")
@@ -195,7 +196,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun videoListRequest(episode: SEpisode): Request {
         val ids = episode.url.substringBefore("&")
-        val vrf = utils.vrfEncrypt(KEY_ENCRYPT, ids)
+        val vrf = utils.vrfEncrypt(ENCRYPTION_KEY, ids)
         val url = "/ajax/server/list/$ids?vrf=$vrf"
         val epurl = episode.url.substringAfter("epurl=")
 
@@ -248,7 +249,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
 
     private fun extractVideo(server: VideoData, epUrl: String): List<Video> {
-        val vrf = utils.vrfEncrypt(KEY_ENCRYPT, server.serverId)
+        val vrf = utils.vrfEncrypt(ENCRYPTION_KEY, server.serverId)
 
         val listHeaders = headers.newBuilder().apply {
             add("Accept", "application/json, text/javascript, */*; q=0.01")
@@ -263,7 +264,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
         return runCatching {
             val parsed = response.parseAs<ServerResponse>()
-            val embedLink = utils.vrfDecrypt(KEY_DECRYPT, parsed.result.url)
+            val embedLink = utils.vrfDecrypt(DECRYPTION_KEY, parsed.result.url)
             when (server.serverName) {
                 "vidstream", "megaf" -> {
                     vidsrcExtractor.videosFromUrl(embedLink, server.serverName, server.type)
@@ -371,16 +372,20 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private val TYPES = arrayOf("Sub", "Softsub", "Dub")
         private val PREF_TYPES_TOGGLE_DEFAULT = TYPES.toSet()
 
-        // https://rowdy-avocado.github.io/multi-keys/
-        private const val KEY_DECRYPT = "ctpAbOz5u7S6OMkx"
-        private const val KEY_ENCRYPT = "p01EDKu734HJP1Tm"
+        private const val DECRYPTION_KEY = "ctpAbOz5u7S6OMkx"
+        private const val ENCRYPTION_KEY = "T78s2WjTc7hSIZZR"
     }
 
     // ============================== Settings ==============================
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         // validate hosters preferences and if invalid reset
-        getHosters()
+        try {
+            getHosters()
+        } catch (e: Exception) {
+            Log.w(name, e.toString())
+        }
+
 
         ListPreference(screen.context).apply {
             key = PREF_DOMAIN_KEY
