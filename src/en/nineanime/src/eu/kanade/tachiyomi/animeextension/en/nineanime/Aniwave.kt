@@ -409,8 +409,8 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         ListPreference(screen.context).apply {
             key = PREF_DOMAIN_KEY
             title = "Preferred domain"
-            entries = arrayOf("aniwave.to", "aniwave.li", "aniwave.ws", "aniwave.vc")
-            entryValues = arrayOf("https://aniwave.to", "https://aniwave.li", "https://aniwave.ws", "https://aniwave.vc")
+            entries = arrayOf("aniwave.to", "aniwavetv.to (unofficial)")
+            entryValues = arrayOf("https://aniwave.to", "https://aniwavetv.to")
             setDefaultValue(PREF_DOMAIN_DEFAULT)
             summary = "%s"
 
