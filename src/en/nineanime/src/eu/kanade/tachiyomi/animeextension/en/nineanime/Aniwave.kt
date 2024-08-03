@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.animeextension.en.nineanime
 import android.app.Application
 import android.content.SharedPreferences
 import android.util.Log
+import android.webkit.URLUtil
 import android.widget.Toast
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
@@ -516,20 +517,26 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
         EditTextPreference(screen.context).apply {
             key = PREF_CUSTOM_DOMAIN_KEY
-            title = "Preferred domain"
+            title = "Custom domain"
             setDefaultValue(null)
             val currentValue = preferences.getString(PREF_CUSTOM_DOMAIN_KEY, null)
-            if (currentValue.isNullOrBlank()) {
-                summary = "Domain of your choosing. \nLeave blank to disable. Overrides any domain preferences!"
+            summary = if (currentValue.isNullOrBlank()) {
+                "Custom domain of your choosing"
             } else {
-                summary = "Domain: \"$currentValue\". \nLeave blank to disable. Overrides any domain preferences!"
+                "Domain: \"$currentValue\". \nLeave blank to disable. Overrides any domain preferences!"
             }
 
             setOnPreferenceChangeListener { _, newValue ->
                 val newDomain = newValue as String
-                summary = "Restart to apply changes. \nLeave blank to disable. Overrides any domain preferences!"
-                Toast.makeText(screen.context, "Restart Aniyomi to apply changes", Toast.LENGTH_LONG).show()
-                preferences.edit().putString(key, newDomain).commit()
+                if (newDomain.isBlank() || URLUtil.isValidUrl(newDomain)) {
+                    summary = "Restart to apply changes"
+                    Toast.makeText(screen.context, "Restart Aniyomi to apply changes", Toast.LENGTH_LONG).show()
+                    preferences.edit().putString(key, newDomain).apply()
+                    true
+                } else {
+                    Toast.makeText(screen.context, "Invalid url. Url example: https://aniwave.to", Toast.LENGTH_LONG).show()
+                    false
+                }
             }
         }.also(screen::addPreference)
     }
