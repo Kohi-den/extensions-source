@@ -123,48 +123,37 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // =========================== Anime Details ============================
 
-    override fun animeDetailsParse(document: Document): SAnime = SAnime.create().apply {
-        title = document.select("h1.title").text()
-        genre = document.select("div:contains(Genre) > span > a").joinToString { it.text() }
-        description = document.select("div.synopsis > div.shorting > div.content").text()
-        author = document.select("div:contains(Studio) > span > a").text()
-        status = parseStatus(document.select("div:contains(Status) > span").text())
+    override fun animeDetailsParse(document: Document): SAnime {
+        val anime = SAnime.create()
+        val newDocument = resolveSearchAnime(anime, document)
+        anime.apply {
+            title = newDocument.select("h1.title").text()
+            genre = newDocument.select("div:contains(Genre) > span > a").joinToString { it.text() }
+            description = newDocument.select("div.synopsis > div.shorting > div.content").text()
+            author = newDocument.select("div:contains(Studio) > span > a").text()
+            status = parseStatus(newDocument.select("div:contains(Status) > span").text())
 
-        val altName = "Other name(s): "
-        document.select("h1.title").attr("data-jp").let {
-            if (it.isNotBlank()) {
-                description = when {
-                    description.isNullOrBlank() -> altName + it
-                    else -> description + "\n\n$altName" + it
+            val altName = "Other name(s): "
+            newDocument.select("h1.title").attr("data-jp").let {
+                if (it.isNotBlank()) {
+                    description = when {
+                        description.isNullOrBlank() -> altName + it
+                        else -> description + "\n\n$altName" + it
+                    }
                 }
             }
         }
+        return anime
     }
 
     // ============================== Episodes ==============================
 
     override fun episodeListRequest(anime: SAnime): Request {
         Log.i(name, "episodeListRequest")
-        var document: Document? = null
-        try {
-            val response = client.newCall(GET(baseUrl + anime.url)).execute()
-            document = response.asJsoup()
-        } catch (e: Exception) {
-            Log.e(name, e.toString())
-            throw e
-        }
-        var id = ""
-        if (document.location().startsWith("$baseUrl/filter?keyword=")) { // redirected to search
-            val tip = document.selectFirst("div.tip[data-tip]")?.attr("data-tip") ?: throw Exception("data-tip not found")
-            val tipParts = tip.split("?")
-            if (tipParts.count() == 2) {
-                id = tipParts[0]
-            } else {
-                throw Exception("data-tip malformed")
-            }
-        } else {
-            id = document.selectFirst("div[data-id]")?.attr("data-id") ?: throw Exception("ID not found")
-        }
+        val response = client.newCall(GET(baseUrl + anime.url)).execute()
+        var document = response.asJsoup()
+        document = resolveSearchAnime(anime, document)
+        val id = document.selectFirst("div[data-id]")?.attr("data-id") ?: throw Exception("ID not found")
 
         val vrf = utils.vrfEncrypt(ENCRYPTION_KEY, id)
 
@@ -333,6 +322,16 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             "Completed" -> SAnime.COMPLETED
             else -> SAnime.UNKNOWN
         }
+    }
+
+    private fun resolveSearchAnime(anime: SAnime, document: Document): Document {
+        if (document.location().startsWith("$baseUrl/filter?keyword=")) { // redirected to search
+            val element = document.selectFirst(searchAnimeSelector())
+            val foundAnimePath = element?.selectFirst("a[href]")?.attr("href") ?: throw Exception("Search element not found (resolveSearch)")
+            anime.url = foundAnimePath //probably doesn't work as intended
+            return client.newCall(GET(baseUrl + foundAnimePath)).execute().asJsoup()
+        }
+        return document
     }
 
     private fun getHosters(): Set<String> {
