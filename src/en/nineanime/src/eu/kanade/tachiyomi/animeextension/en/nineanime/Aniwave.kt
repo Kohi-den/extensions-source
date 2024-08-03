@@ -138,8 +138,28 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     // ============================== Episodes ==============================
 
     override fun episodeListRequest(anime: SAnime): Request {
-        val id = client.newCall(GET(baseUrl + anime.url)).execute().asJsoup()
-            .selectFirst("div[data-id]")!!.attr("data-id")
+        Log.i(name, "episodeListRequest")
+        var document: Document? = null
+        try {
+            val response = client.newCall(GET(baseUrl + anime.url)).execute()
+            document = response.asJsoup()
+        } catch (e: Exception) {
+            Log.e(name, e.toString())
+            throw e
+        }
+        var id = ""
+        if (document.location().startsWith("$baseUrl/filter?keyword=")) { // redirected to search
+            val tip = document.selectFirst("div.tip[data-tip]")?.attr("data-tip") ?: throw Exception("data-tip not found")
+            val tipParts = tip.split("?")
+            if (tipParts.count() == 2) {
+                id = tipParts[0]
+            } else {
+                throw Exception("data-tip malformed")
+            }
+        } else {
+            id = document.selectFirst("div[data-id]")?.attr("data-id") ?: throw Exception("ID not found")
+        }
+
         val vrf = utils.vrfEncrypt(ENCRYPTION_KEY, id)
 
         val listHeaders = headers.newBuilder().apply {
@@ -385,7 +405,6 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         } catch (e: Exception) {
             Log.w(name, e.toString())
         }
-
 
         ListPreference(screen.context).apply {
             key = PREF_DOMAIN_KEY
