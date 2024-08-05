@@ -109,9 +109,12 @@ class VidsrcExtractor(private val client: OkHttpClient, private val headers: Hea
     }
 
     companion object {
-        private const val ENCRYPTION_KEY1 = "8Qy3mlM2kod80XIK"
-        private const val ENCRYPTION_KEY2 = "BgKVSrzpH2Enosgm"
-        private const val DECRYPTION_KEY = "9jXDYBZUcTcTZveM"
+        private const val ENCRYPTION_KEY1 = "bZSQ97kGOREZeGik"
+        private const val ENCRYPTION_KEY2 = "NeBk5CElH19ucfBU"
+        private const val ENCRYPTION_KEY3 = "Z7YMUOoLEjfNqPAt"
+        private const val DECRYPTION_KEY = "wnRQe3OZ1vMcD1ML"
+        private const val DECRYPTION_KEY1 = "eO74cTKZayUWH8x5"
+    }
     }
 }
 
