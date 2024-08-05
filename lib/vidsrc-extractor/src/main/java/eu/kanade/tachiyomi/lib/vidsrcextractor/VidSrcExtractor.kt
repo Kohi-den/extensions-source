@@ -56,7 +56,8 @@ class VidsrcExtractor(private val client: OkHttpClient, private val headers: Hea
         }
         val vidId = embedLink.substringAfterLast("/").substringBefore("?")
         val apiSlug = encodeID(vidId, ENCRYPTION_KEY1)
-        val h = encodeID(vidId, ENCRYPTION_KEY2)
+        val h1 = encodeID(vidId, ENCRYPTION_KEY2)
+        val h2 = encodeID(vidId, ENCRYPTION_KEY3)
 
         return buildString {
             append("https://")
@@ -99,13 +100,17 @@ class VidsrcExtractor(private val client: OkHttpClient, private val headers: Hea
         }
     }
 
-    private fun vrfDecrypt(input: String): String {
-        var vrf = Base64.decode(input.toByteArray(), Base64.URL_SAFE)
-        val rc4Key = SecretKeySpec(DECRYPTION_KEY.toByteArray(), "RC4")
-        val cipher = Cipher.getInstance("RC4")
-        cipher.init(Cipher.DECRYPT_MODE, rc4Key, cipher.parameters)
-        vrf = cipher.doFinal(vrf)
-        return URLDecoder.decode(vrf.toString(Charsets.UTF_8), "utf-8")
+    private fun vrfDecrypt(input: String, useKey2: Boolean): String {
+    var vrf = Base64.decode(input.toByteArray(), Base64.URL_SAFE)
+    val rc4Key = if (useKey2) {
+        SecretKeySpec(DECRYPTION_KEY2.toByteArray(), "RC4")
+    } else {
+        SecretKeySpec(DECRYPTION_KEY.toByteArray(), "RC4")
+    }
+    val cipher = Cipher.getInstance("RC4")
+    cipher.init(Cipher.DECRYPT_MODE, rc4Key, cipher.parameters)
+    vrf = cipher.doFinal(vrf)
+    return URLDecoder.decode(vrf.toString(Charsets.UTF_8), "utf-8")
     }
 
     companion object {
