@@ -147,7 +147,6 @@ abstract class AniListAnimeHttpSource : AnimeHttpSource() {
                 AniListMedia.Status.FINISHED -> SAnime.COMPLETED
             }
             thumbnail_url = media.coverImage.large
-            initialized = true
         }
     }
 
