@@ -14,7 +14,9 @@ class VoeExtractor(private val client: OkHttpClient) {
 
     private val json: Json by injectLazy()
 
-    private val playlistUtils by lazy { PlaylistUtils(client) }
+    private val clientDdos by lazy { client.newBuilder().addInterceptor(DdosGuardInterceptor(client)).build() }
+
+    private val playlistUtils by lazy { PlaylistUtils(clientDdos) }
 
     private val linkRegex = "(http|https)://([\\w_-]+(?:\\.[\\w_-]+)+)([\\w.,@?^=%&:/~+#-]*[\\w@?^=%&/~+#-])".toRegex()
 
@@ -24,7 +26,16 @@ class VoeExtractor(private val client: OkHttpClient) {
     data class VideoLinkDTO(val file: String)
 
     fun videosFromUrl(url: String, prefix: String = ""): List<Video> {
-        val document = client.newCall(GET(url)).execute().asJsoup()
+        var document = clientDdos.newCall(GET(url)).execute().asJsoup()
+
+        if (document.selectFirst("script")?.data()?.contains("if (typeof localStorage !== 'undefined')") == true) {
+            val originalUrl = document.selectFirst("script")?.data()
+                ?.substringAfter("window.location.href = '")
+                ?.substringBefore("';") ?: return emptyList()
+
+            document = clientDdos.newCall(GET(originalUrl)).execute().asJsoup()
+        }
+
         val script = document.selectFirst("script:containsData(const sources), script:containsData(var sources), script:containsData(wc0)")
             ?.data()
             ?: return emptyList()
@@ -43,7 +54,7 @@ class VoeExtractor(private val client: OkHttpClient) {
             else -> return emptyList()
         }
         return playlistUtils.extractFromHls(playlistUrl,
-            videoNameGen = { quality -> "${prefix}Voe: $quality" }
+            videoNameGen = { quality -> "${prefix}Voe:$quality" }
         )
     }
 }

@@ -1,19 +1,20 @@
-# Aniyomi-extensions
+## Guide
 
-The source code for the extensions
+just paste this into your anime repo 
+```
+https://raw.githubusercontent.com/almightyhak/aniyomi-anime-repo/main/index.min.json
+```
+If your interested in installing just the apks they can be found [Here](https://github.com/almightyhak/aniyomi-anime-repo)
 
 ## Support Server
 
-[Discord](https://discord.gg/vut4mmXQzU)
+Join the [Discord](https://discord.gg/vut4mmXQzU) for updates and announcements
+
 and please check the discord BEFORE making an issue 
 
-## Guide
+## Contributing
 
-just paste this into your anime repo https://raw.githubusercontent.com/almightyhak/aniyomi-anime-repo/main/index.min.json
-
-i am maintaining this but keep in mind that i'm NOT a developer so expect issues to take a while to fix
-
-If your interested in installing just the apks they can be found [Here](https://github.com/almightyhak/aniyomi-anime-repo)
+[Template](https://github.com/aniyomiorg/aniyomi-extensions/blob/master/CONTRIBUTING.md)
 
 ## Contact
 

@@ -2,7 +2,10 @@ package eu.kanade.tachiyomi.animeextension.en.nineanime
 
 import android.app.Application
 import android.content.SharedPreferences
+import android.util.Log
+import android.webkit.URLUtil
 import android.widget.Toast
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
@@ -38,7 +41,12 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override val id: Long = 98855593379717478
 
     override val baseUrl by lazy {
-        preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!!
+        val customDomain = preferences.getString(PREF_CUSTOM_DOMAIN_KEY, null)
+        if (customDomain.isNullOrBlank()) {
+            preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!!
+        } else {
+            customDomain
+        }
     }
 
     override val lang = "en"
@@ -89,7 +97,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val filters = AniwaveFilters.getSearchParameters(filters)
 
-        val vrf = if (query.isNotBlank()) utils.vrfEncrypt(query) else ""
+        val vrf = if (query.isNotBlank()) utils.vrfEncrypt(ENCRYPTION_KEY, query) else ""
         var url = "$baseUrl/filter?keyword=$query"
 
         if (filters.genre.isNotBlank()) url += filters.genre
@@ -101,7 +109,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         if (filters.language.isNotBlank()) url += filters.language
         if (filters.rating.isNotBlank()) url += filters.rating
 
-        return GET("$url&sort=${filters.sort}&page=$page&$vrf", refererHeaders)
+        return GET("$url&sort=${filters.sort}&page=$page&vrf=$vrf", refererHeaders)
     }
 
     override fun searchAnimeSelector(): String = popularAnimeSelector()
@@ -116,30 +124,39 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // =========================== Anime Details ============================
 
-    override fun animeDetailsParse(document: Document): SAnime = SAnime.create().apply {
-        title = document.select("h1.title").text()
-        genre = document.select("div:contains(Genre) > span > a").joinToString { it.text() }
-        description = document.select("div.synopsis > div.shorting > div.content").text()
-        author = document.select("div:contains(Studio) > span > a").text()
-        status = parseStatus(document.select("div:contains(Status) > span").text())
+    override fun animeDetailsParse(document: Document): SAnime {
+        val anime = SAnime.create()
+        val newDocument = resolveSearchAnime(anime, document)
+        anime.apply {
+            title = newDocument.select("h1.title").text()
+            genre = newDocument.select("div:contains(Genre) > span > a").joinToString { it.text() }
+            description = newDocument.select("div.synopsis > div.shorting > div.content").text()
+            author = newDocument.select("div:contains(Studio) > span > a").text()
+            status = parseStatus(newDocument.select("div:contains(Status) > span").text())
 
-        val altName = "Other name(s): "
-        document.select("h1.title").attr("data-jp").let {
-            if (it.isNotBlank()) {
-                description = when {
-                    description.isNullOrBlank() -> altName + it
-                    else -> description + "\n\n$altName" + it
+            val altName = "Other name(s): "
+            newDocument.select("h1.title").attr("data-jp").let {
+                if (it.isNotBlank()) {
+                    description = when {
+                        description.isNullOrBlank() -> altName + it
+                        else -> description + "\n\n$altName" + it
+                    }
                 }
             }
         }
+        return anime
     }
 
     // ============================== Episodes ==============================
 
     override fun episodeListRequest(anime: SAnime): Request {
-        val id = client.newCall(GET(baseUrl + anime.url)).execute().asJsoup()
-            .selectFirst("div[data-id]")!!.attr("data-id")
-        val vrf = utils.vrfEncrypt(id)
+        Log.i(name, "episodeListRequest")
+        val response = client.newCall(GET(baseUrl + anime.url)).execute()
+        var document = response.asJsoup()
+        document = resolveSearchAnime(anime, document)
+        val id = document.selectFirst("div[data-id]")?.attr("data-id") ?: throw Exception("ID not found")
+
+        val vrf = utils.vrfEncrypt(ENCRYPTION_KEY, id)
 
         val listHeaders = headers.newBuilder().apply {
             add("Accept", "application/json, text/javascript, */*; q=0.01")
@@ -147,7 +164,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             add("X-Requested-With", "XMLHttpRequest")
         }.build()
 
-        return GET("$baseUrl/ajax/episode/list/$id?$vrf#${anime.url}", listHeaders)
+        return GET("$baseUrl/ajax/episode/list/$id?vrf=$vrf#${anime.url}", listHeaders)
     }
 
     override fun episodeListSelector() = "div.episodes ul > li > a"
@@ -195,8 +212,8 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun videoListRequest(episode: SEpisode): Request {
         val ids = episode.url.substringBefore("&")
-        val vrf = utils.vrfEncrypt(ids)
-        val url = "/ajax/server/list/$ids?$vrf"
+        val vrf = utils.vrfEncrypt(ENCRYPTION_KEY, ids)
+        val url = "/ajax/server/list/$ids?vrf=$vrf"
         val epurl = episode.url.substringAfter("epurl=")
 
         val listHeaders = headers.newBuilder().apply {
@@ -217,7 +234,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun videoListParse(response: Response): List<Video> {
         val epurl = response.request.url.fragment!!
         val document = response.parseAs<ResultResponse>().toDocument()
-        val hosterSelection = preferences.getStringSet(PREF_HOSTER_KEY, PREF_HOSTER_DEFAULT)!!
+        val hosterSelection = getHosters()
         val typeSelection = preferences.getStringSet(PREF_TYPE_TOGGLE_KEY, PREF_TYPES_TOGGLE_DEFAULT)!!
 
         return document.select("div.servers > div").parallelFlatMapBlocking { elem ->
@@ -248,7 +265,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
 
     private fun extractVideo(server: VideoData, epUrl: String): List<Video> {
-        val vrf = utils.vrfEncrypt(server.serverId)
+        val vrf = utils.vrfEncrypt(ENCRYPTION_KEY, server.serverId)
 
         val listHeaders = headers.newBuilder().apply {
             add("Accept", "application/json, text/javascript, */*; q=0.01")
@@ -257,24 +274,19 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }.build()
 
         val response = client.newCall(
-            GET("$baseUrl/ajax/server/${server.serverId}?$vrf", listHeaders),
+            GET("$baseUrl/ajax/server/${server.serverId}?vrf=$vrf", listHeaders),
         ).execute()
         if (response.code != 200) return emptyList()
 
         return runCatching {
             val parsed = response.parseAs<ServerResponse>()
-            val embedLink = utils.vrfDecrypt(parsed.result.url)
+            val embedLink = utils.vrfDecrypt(DECRYPTION_KEY, parsed.result.url)
             when (server.serverName) {
-                "vidplay", "mycloud" -> {
-                    val hosterName = when (server.serverName) {
-                        "vidplay" -> "VidPlay"
-                        else -> "MyCloud"
-                    }
-                    vidsrcExtractor.videosFromUrl(embedLink, hosterName, server.type)
-                }
-                "filemoon" -> filemoonExtractor.videosFromUrl(embedLink, "Filemoon - ${server.type} - ")
+                "vidstream" -> vidsrcExtractor.videosFromUrl(embedLink, "Vidstream", server.type)
+                "megaf" -> vidsrcExtractor.videosFromUrl(embedLink, "MegaF", server.type)
+                "moonf" -> filemoonExtractor.videosFromUrl(embedLink, "MoonF - ${server.type} - ")
                 "streamtape" -> streamtapeExtractor.videoFromUrl(embedLink, "StreamTape - ${server.type}")?.let(::listOf) ?: emptyList()
-                "mp4upload" -> mp4uploadExtractor.videosFromUrl(embedLink, headers, suffix = " - ${server.type}")
+                "mp4u" -> mp4uploadExtractor.videosFromUrl(embedLink, headers, suffix = " - ${server.type}")
                 else -> emptyList()
             }
         }.getOrElse { emptyList() }
@@ -312,6 +324,35 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
     }
 
+    private fun resolveSearchAnime(anime: SAnime, document: Document): Document {
+        if (document.location().startsWith("$baseUrl/filter?keyword=")) { // redirected to search
+            val element = document.selectFirst(searchAnimeSelector())
+            val foundAnimePath = element?.selectFirst("a[href]")?.attr("href") ?: throw Exception("Search element not found (resolveSearch)")
+            anime.url = foundAnimePath // probably doesn't work as intended
+            return client.newCall(GET(baseUrl + foundAnimePath)).execute().asJsoup()
+        }
+        return document
+    }
+
+    private fun getHosters(): Set<String> {
+        val hosterSelection = preferences.getStringSet(PREF_HOSTER_KEY, PREF_HOSTER_DEFAULT)!!
+        var invalidRecord = false
+        hosterSelection.forEach { str ->
+            val index = HOSTERS_NAMES.indexOf(str)
+            if (index == -1) {
+                invalidRecord = true
+            }
+        }
+
+        // found invalid record, reset to defaults
+        if (invalidRecord) {
+            preferences.edit().putStringSet(PREF_HOSTER_KEY, PREF_HOSTER_DEFAULT).apply()
+            return PREF_HOSTER_DEFAULT.toSet()
+        }
+
+        return hosterSelection.toSet()
+    }
+
     companion object {
         private val SOFTSUB_REGEX by lazy { Regex("""\bsoftsub\b""", RegexOption.IGNORE_CASE) }
         private val RELEASE_REGEX by lazy { Regex("""Release: (\d+\/\d+\/\d+ \d+:\d+)""") }
@@ -323,6 +364,8 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private const val PREF_DOMAIN_KEY = "preferred_domain"
         private const val PREF_DOMAIN_DEFAULT = "https://aniwave.to"
 
+        private const val PREF_CUSTOM_DOMAIN_KEY = "custom_domain"
+
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_DEFAULT = "1080"
 
@@ -330,41 +373,51 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private const val PREF_LANG_DEFAULT = "Sub"
 
         private const val PREF_SERVER_KEY = "preferred_server"
-        private const val PREF_SERVER_DEFAULT = "vidplay"
+        private const val PREF_SERVER_DEFAULT = "Vidstream"
 
         private const val PREF_MARK_FILLERS_KEY = "mark_fillers"
         private const val PREF_MARK_FILLERS_DEFAULT = true
 
         private const val PREF_HOSTER_KEY = "hoster_selection"
         private val HOSTERS = arrayOf(
-            "VidPlay",
-            "MyCloud",
-            "Filemoon",
+            "Vidstream",
+            "Megaf",
+            "MoonF",
             "StreamTape",
-            "Mp4Upload",
+            "MP4u",
         )
         private val HOSTERS_NAMES = arrayOf(
-            "vidplay",
-            "mycloud",
-            "filemoon",
+            "vidstream",
+            "megaf",
+            "moonf",
             "streamtape",
-            "mp4upload",
+            "mp4u",
         )
         private val PREF_HOSTER_DEFAULT = HOSTERS_NAMES.toSet()
 
         private const val PREF_TYPE_TOGGLE_KEY = "type_selection"
         private val TYPES = arrayOf("Sub", "Softsub", "Dub")
         private val PREF_TYPES_TOGGLE_DEFAULT = TYPES.toSet()
+
+        private const val DECRYPTION_KEY = "ctpAbOz5u7S6OMkx"
+        private const val ENCRYPTION_KEY = "T78s2WjTc7hSIZZR"
     }
 
     // ============================== Settings ==============================
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        // validate hosters preferences and if invalid reset
+        try {
+            getHosters()
+        } catch (e: Exception) {
+            Log.w(name, e.toString())
+        }
+
         ListPreference(screen.context).apply {
             key = PREF_DOMAIN_KEY
             title = "Preferred domain"
-            entries = arrayOf("aniwave.to", "aniwave.li", "aniwave.ws", "aniwave.vc")
-            entryValues = arrayOf("https://aniwave.to", "https://aniwave.li", "https://aniwave.ws", "https://aniwave.vc")
+            entries = arrayOf("aniwave.to", "aniwavetv.to (unofficial)")
+            entryValues = arrayOf("https://aniwave.to", "https://aniwavetv.to")
             setDefaultValue(PREF_DOMAIN_DEFAULT)
             summary = "%s"
 
@@ -458,6 +511,31 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             setOnPreferenceChangeListener { _, newValue ->
                 @Suppress("UNCHECKED_CAST")
                 preferences.edit().putStringSet(key, newValue as Set<String>).commit()
+            }
+        }.also(screen::addPreference)
+
+        EditTextPreference(screen.context).apply {
+            key = PREF_CUSTOM_DOMAIN_KEY
+            title = "Custom domain"
+            setDefaultValue(null)
+            val currentValue = preferences.getString(PREF_CUSTOM_DOMAIN_KEY, null)
+            summary = if (currentValue.isNullOrBlank()) {
+                "Custom domain of your choosing"
+            } else {
+                "Domain: \"$currentValue\". \nLeave blank to disable. Overrides any domain preferences!"
+            }
+
+            setOnPreferenceChangeListener { _, newValue ->
+                val newDomain = newValue as String
+                if (newDomain.isBlank() || URLUtil.isValidUrl(newDomain)) {
+                    summary = "Restart to apply changes"
+                    Toast.makeText(screen.context, "Restart Aniyomi to apply changes", Toast.LENGTH_LONG).show()
+                    preferences.edit().putString(key, newDomain).apply()
+                    true
+                } else {
+                    Toast.makeText(screen.context, "Invalid url. Url example: https://aniwave.to", Toast.LENGTH_LONG).show()
+                    false
+                }
             }
         }.also(screen::addPreference)
     }
