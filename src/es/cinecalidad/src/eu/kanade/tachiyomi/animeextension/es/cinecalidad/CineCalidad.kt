@@ -167,8 +167,7 @@ class CineCalidad : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                     StreamWishExtractor(client, docHeaders).videosFromUrl(url, videoNameGen = { "StreamWish:$it" })
                 }
                 embedUrl.contains("doodstream") || embedUrl.contains("dood.") || embedUrl.contains("ds2play") || embedUrl.contains("doods.") -> {
-                    val url2 = url.replace("https://doodstream.com/e/", "https://dood.to/e/")
-                   DoodExtractor(client).videosFromUrl(url2, "DoodStream", false)
+                    DoodExtractor(client).videosFromUrl(url.replace("https://doodstream.com/e/", "https://dood.to/e/"), "DoodStream", false)
                 }
                 embedUrl.contains("streamlare") -> StreamlareExtractor(client).videosFromUrl(url)
                 embedUrl.contains("yourupload") || embedUrl.contains("upload") -> YourUploadExtractor(client).videoFromUrl(url, headers = headers)
