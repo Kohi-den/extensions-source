@@ -159,8 +159,7 @@ class CineCalidad : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 }
                 embedUrl.contains("uqload") -> UqloadExtractor(client).videosFromUrl(url)
                 embedUrl.contains("mp4upload") -> Mp4uploadExtractor(client).videosFromUrl(url, headers)
-                embedUrl.contains("wishembed") || embedUrl.contains("streamwish") || embedUrl.contains("strwish")
-                    || embedUrl.contains("wish") || embedUrl.contains("wishfast") -> {
+                embedUrl.contains("wishembed") || embedUrl.contains("streamwish") || embedUrl.contains("strwish") || embedUrl.contains("wish") || embedUrl.contains("wishfast") -> {
                     val docHeaders = headers.newBuilder()
                         .add("Origin", "https://streamwish.to")
                         .add("Referer", "https://streamwish.to/")
@@ -169,7 +168,7 @@ class CineCalidad : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 }
                 embedUrl.contains("doodstream") || embedUrl.contains("dood.") || embedUrl.contains("ds2play") || embedUrl.contains("doods.") -> {
                     val url2 = url.replace("https://doodstream.com/e/", "https://dood.to/e/")
-                    listOf(DoodExtractor(client).videoFromUrl(url2, "DoodStream", false)!!)
+                   DoodExtractor(client).videosFromUrl(url2, "DoodStream", false)
                 }
                 embedUrl.contains("streamlare") -> StreamlareExtractor(client).videosFromUrl(url)
                 embedUrl.contains("yourupload") || embedUrl.contains("upload") -> YourUploadExtractor(client).videoFromUrl(url, headers = headers)
@@ -177,8 +176,7 @@ class CineCalidad : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 embedUrl.contains("fastream") -> FastreamExtractor(client, headers).videosFromUrl(url, prefix = "Fastream:")
                 embedUrl.contains("upstream") -> UpstreamExtractor(client).videosFromUrl(url)
                 embedUrl.contains("streamtape") || embedUrl.contains("stp") || embedUrl.contains("stape") -> listOf(StreamTapeExtractor(client).videoFromUrl(url, quality = "StreamTape")!!)
-                embedUrl.contains("ahvsh") || embedUrl.contains("streamhide") || embedUrl.contains("guccihide") ||
-                    embedUrl.contains("streamvid") || embedUrl.contains("vidhide") -> StreamHideVidExtractor(client).videosFromUrl(url)
+                embedUrl.contains("ahvsh") || embedUrl.contains("streamhide") || embedUrl.contains("guccihide") || embedUrl.contains("streamvid") || embedUrl.contains("vidhide") -> StreamHideVidExtractor(client).videosFromUrl(url)
                 else -> emptyList()
             }
         }.getOrNull() ?: emptyList()
