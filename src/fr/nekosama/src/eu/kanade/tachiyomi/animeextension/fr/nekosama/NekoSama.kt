@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.animeextension.fr.nekosama
 import android.app.Application
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
+import com.google.firebase.crashlytics.buildtools.reloc.org.apache.http.client.HttpClient
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -17,6 +18,7 @@ import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.Serializable
+import okhttp3.HttpUrl
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
@@ -28,7 +30,14 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "Neko-Sama"
 
-    override val baseUrl by lazy { "https://" + preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!! }
+    override val baseUrl by lazy {
+        val domain = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!!
+        HttpUrl.Builder()
+            .scheme("https")
+            .host(domain)
+            .build()
+            .toString()
+    }
 
     override val lang = "fr"
 
@@ -72,17 +81,19 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             else -> "vostfr"
         }
 
-        return when {
-            query.isNotBlank() -> GET("$baseUrl/animes-search-$typeSearch.json?$query")
+        val url = when {
+            query.isNotBlank() -> "$baseUrl/animes-search-$typeSearch.json?$query"
             typeFilter.state != 0 || query.isNotBlank() -> when (page) {
-                1 -> GET("$baseUrl/${typeFilter.toUriPart()}")
-                else -> GET("$baseUrl/${typeFilter.toUriPart()}/$page")
+                1 -> "$baseUrl/${typeFilter.toUriPart()}"
+                else -> "$baseUrl/${typeFilter.toUriPart()}/page$page"
             }
             else -> when (page) {
-                1 -> GET("$baseUrl/anime/")
-                else -> GET("$baseUrl/anime/page/$page")
+                1 -> "$baseUrl/anime/"
+                else -> "$baseUrl/anime/page$page"
             }
         }
+
+        return GET(url)
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage {
@@ -95,11 +106,13 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 val animes = jsonSearch
                     .filter { it.title.orEmpty().lowercase().contains(query) }
                     .mapNotNull {
-                        SAnime.create().apply {
-                            url = it.url ?: return@mapNotNull null
+                        val anime = SAnime.create().apply {
+                            url = it.url?.substringAfterLast("/")?.substringBefore("-") ?: return@mapNotNull null
                             title = it.title ?: return@mapNotNull null
                             thumbnail_url = it.url_image ?: "$baseUrl/images/default_poster.png"
+                            setUrlWithoutDomain(url) // call setUrlWithoutDomain on the SAnime instance
                         }
+                        anime
                     }
                 AnimesPage(animes, false)
             }
@@ -131,9 +144,10 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             SAnime.create().apply {
                 val itemUrl = item.url ?: return@mapNotNull null
                 title = item.title ?: return@mapNotNull null
-                val type = itemUrl.substringAfterLast("-")
-                url = itemUrl.replace("episode", "info").substringBeforeLast("-").substringBeforeLast("-") + "-$type"
-                thumbnail_url = item.url_image ?: "$baseUrl/images/default_poster.png"
+                val animeId = itemUrl.substringAfterLast("/").substringBefore("-")
+                val titleSlug = title.replace("[^a-zA-Z0-9 -]".toRegex(), "").replace(" ", "-").lowercase()
+                url = "anime/info/$animeId-${titleSlug}_vostfr"
+                thumbnail_url = item.url_image ?: "/images/default_poster.png"
             }
         }
 
@@ -179,8 +193,9 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun episodeFromElement(element: Element) = SEpisode.create().apply {
         setUrlWithoutDomain(element.attr("href"))
         val text = element.text()
-        name = text.substringBeforeLast(" - ")
-        episode_number = text.substringAfterLast("- ").toFloatOrNull() ?: 0F
+        val episodeNumber = text.substringAfterLast("- ").toFloatOrNull() ?: 0F
+        name = "Épisode ${episodeNumber.toInt()}"
+        episode_number = episodeNumber
     }
 
     // ============================ Video Links =============================
@@ -291,8 +306,8 @@ class NekoSama : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private val PLAYERS_REGEX = Regex("video\\s*\\[\\d*]\\s*=\\s*'(.*?)'")
         private const val PREF_DOMAIN_KEY = "pref_domain_key"
         private const val PREF_DOMAIN_TITLE = "Preferred domain"
-        private const val PREF_DOMAIN_DEFAULT = "animecat.net"
         private val PREF_DOMAIN_ENTRIES = arrayOf("animecat.net", "neko-sama.fr")
+        private const val PREF_DOMAIN_DEFAULT = "animecat.net"
 
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_TITLE = "Preferred quality"

@@ -1,7 +1,7 @@
 ext {
     extName = 'NekoSama'
     extClass = '.NekoSama'
-    extVersionCode = 11
+    extVersionCode = 12
     isNsfw = true
 }
 
@@ -10,4 +10,5 @@ apply from: "$rootDir/common.gradle"
 dependencies {
     implementation(project(':lib:streamtape-extractor'))
     implementation(project(':lib:fusevideo-extractor'))
+    implementation libs.firebase.crashlytics.buildtools
 }
