@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.animeextension.fr.nekosama
 import android.app.Application
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
-import com.google.firebase.crashlytics.buildtools.reloc.org.apache.http.client.HttpClient
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
