@@ -132,8 +132,8 @@ class Hackstore : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
-        val ismovie = response.request.url.toString().contains("/peliculas/")
-        return if (ismovie) {
+        val isMovie = response.request.url.toString().contains("/peliculas/")
+        return if (isMovie) {
             listOf(
                 SEpisode.create().apply {
                     name = "PELÍCULA"
@@ -142,14 +142,14 @@ class Hackstore : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 },
             )
         } else {
-            document.select(".movie-thumbnail").map { thumbnail ->
+            document.select(".movie-thumbnail").mapIndexed { idx, thumbnail ->
                 val episodeLink = thumbnail.select("a").attr("href")
                 val seasonMatch = Regex("-(\\d+)x(\\d+)/$").find(episodeLink)
                 val seasonNumber = seasonMatch?.groups?.get(1)?.value?.toInt() ?: 0
                 val episodeNumber = seasonMatch?.groups?.get(2)?.value?.toInt() ?: 0
                 SEpisode.create().apply {
                     name = "T$seasonNumber - E$episodeNumber"
-                    episode_number = episodeNumber.toFloat()
+                    episode_number = idx + 1f
                     setUrlWithoutDomain(episodeLink)
                 }
             }
@@ -196,7 +196,7 @@ class Hackstore : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 server.contains("streamtape") || server.contains("stp") || server.contains("stape") -> {
                     listOf(streamTapeExtractor.videoFromUrl(url, quality = "$prefix StreamTape")!!)
                 }
-                server.contains("voe") -> voeExtractor.videosFromUrl(url, prefix)
+                server.contains("voe") -> voeExtractor.videosFromUrl(url, "$prefix ")
                 server.contains("filemoon") -> filemoonExtractor.videosFromUrl(url, prefix = "$prefix Filemoon:")
                 server.contains("wishembed") || server.contains("streamwish") || server.contains("strwish") || server.contains("wish") -> {
                     streamWishExtractor.videosFromUrl(url, videoNameGen = { "$prefix StreamWish:$it" })

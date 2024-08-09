@@ -1,18 +1,19 @@
 package eu.kanade.tachiyomi.lib.vidsrcextractor
 
 import android.util.Base64
-import app.cash.quickjs.QuickJs
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
+import eu.kanade.tachiyomi.lib.vidsrcextractor.MediaResponseBody.Result
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
-import okhttp3.CacheControl
+import kotlinx.serialization.json.Json
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
+import uy.kohesive.injekt.injectLazy
 import java.net.URLDecoder
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
@@ -21,54 +22,32 @@ import javax.crypto.spec.SecretKeySpec
 class VidsrcExtractor(private val client: OkHttpClient, private val headers: Headers) {
 
     private val playlistUtils by lazy { PlaylistUtils(client, headers) }
+    private val json: Json by injectLazy()
 
-    private val cacheControl = CacheControl.Builder().noStore().build()
-    private val noCacheClient = client.newBuilder()
-        .cache(null)
-        .build()
-
-    private val keys by lazy {
-        noCacheClient.newCall(
-            GET("https://raw.githubusercontent.com/KillerDogeEmpire/vidplay-keys/keys/keys.json", cache = cacheControl),
-        ).execute().parseAs<List<String>>()
-    }
-
-    fun videosFromUrl(embedLink: String, hosterName: String, type: String = "", subtitleList: List<Track> = emptyList()): List<Video> {
+    fun videosFromUrl(
+        embedLink: String,
+        hosterName: String,
+        type: String = "",
+        subtitleList: List<Track> = emptyList(),
+    ): List<Video> {
         val host = embedLink.toHttpUrl().host
-        val apiUrl = getApiUrl(embedLink, keys)
+        val apiUrl = getApiUrl(embedLink)
 
-        val apiHeaders = headers.newBuilder().apply {
-            add("Accept", "application/json, text/javascript, */*; q=0.01")
-            add("Host", host)
-            add("Referer", URLDecoder.decode(embedLink, "UTF-8"))
-            add("X-Requested-With", "XMLHttpRequest")
-        }.build()
+        val response = client.newCall(GET(apiUrl)).execute()
+        val data = response.parseAs<MediaResponseBody>()
 
-        val response = client.newCall(
-            GET(apiUrl, apiHeaders),
-        ).execute()
-
-        val data = runCatching {
-            response.parseAs<MediaResponseBody>()
-        }.getOrElse { // Keys are out of date
-            val newKeys = noCacheClient.newCall(
-                GET("https://raw.githubusercontent.com/KillerDogeEmpire/vidplay-keys/keys/keys.json", cache = cacheControl),
-            ).execute().parseAs<List<String>>()
-            val newApiUrL = getApiUrl(embedLink, newKeys)
-            client.newCall(
-                GET(newApiUrL, apiHeaders),
-            ).execute().parseAs()
-        }
+        val decrypted = vrfDecrypt(data.result)
+        val result = json.decodeFromString<Result>(decrypted)
 
         return playlistUtils.extractFromHls(
-            data.result.sources.first().file,
+            playlistUrl = result.sources.first().file,
             referer = "https://$host/",
             videoNameGen = { q -> hosterName + (if (type.isBlank()) "" else " - $type") + " - $q" },
-            subtitleList = subtitleList + data.result.tracks.toTracks(),
+            subtitleList = subtitleList + result.tracks.toTracks(),
         )
     }
 
-    private fun getApiUrl(embedLink: String, keyList: List<String>): String {
+    private fun getApiUrl(embedLink: String): String {
         val host = embedLink.toHttpUrl().host
         val params = embedLink.toHttpUrl().let { url ->
             url.queryParameterNames.map {
@@ -76,13 +55,13 @@ class VidsrcExtractor(private val client: OkHttpClient, private val headers: Hea
             }
         }
         val vidId = embedLink.substringAfterLast("/").substringBefore("?")
-        val encodedID = encodeID(vidId, keyList)
-        val apiSlug = callFromFuToken(host, encodedID, embedLink)
+        val apiSlug = encodeID(vidId, ENCRYPTION_KEY1)
+        val h = encodeID(vidId, ENCRYPTION_KEY2)
 
         return buildString {
             append("https://")
             append(host)
-            append("/")
+            append("/mediainfo/")
             append(apiSlug)
             if (params.isNotEmpty()) {
                 append("?")
@@ -91,51 +70,23 @@ class VidsrcExtractor(private val client: OkHttpClient, private val headers: Hea
                         "${it.first}=${it.second}"
                     },
                 )
+                append("&h=$h")
             }
         }
     }
 
-    private fun encodeID(videoID: String, keyList: List<String>): String {
-        val rc4Key1 = SecretKeySpec(keyList[0].toByteArray(), "RC4")
-        val rc4Key2 = SecretKeySpec(keyList[1].toByteArray(), "RC4")
-        val cipher1 = Cipher.getInstance("RC4")
-        val cipher2 = Cipher.getInstance("RC4")
-        cipher1.init(Cipher.DECRYPT_MODE, rc4Key1, cipher1.parameters)
-        cipher2.init(Cipher.DECRYPT_MODE, rc4Key2, cipher2.parameters)
-        var encoded = videoID.toByteArray()
-
-        encoded = cipher1.doFinal(encoded)
-        encoded = cipher2.doFinal(encoded)
-        encoded = Base64.encode(encoded, Base64.DEFAULT)
-        return encoded.toString(Charsets.UTF_8).replace("/", "_").trim()
+    private fun encodeID(videoID: String, key: String): String {
+        val rc4Key = SecretKeySpec(key.toByteArray(), "RC4")
+        val cipher = Cipher.getInstance("RC4")
+        cipher.init(Cipher.DECRYPT_MODE, rc4Key, cipher.parameters)
+        return Base64.encode(cipher.doFinal(videoID.toByteArray()), Base64.DEFAULT)
+            .toString(Charsets.UTF_8)
+            .replace("+", "-")
+            .replace("/", "_")
+            .trim()
     }
 
-    private fun callFromFuToken(host: String, data: String, embedLink: String): String {
-        val refererHeaders = headers.newBuilder().apply {
-            add("Referer", embedLink)
-        }.build()
-
-        val fuTokenScript = client.newCall(
-            GET("https://$host/futoken", headers = refererHeaders),
-        ).execute().body.string()
-
-        val js = buildString {
-            append("(function")
-            append(
-                fuTokenScript.substringAfter("window")
-                    .substringAfter("function")
-                    .replace("jQuery.ajax(", "")
-                    .substringBefore("+location.search"),
-            )
-            append("}(\"$data\"))")
-        }
-
-        return QuickJs.create().use {
-            it.evaluate(js)?.toString()!!
-        }
-    }
-
-    private fun List<MediaResponseBody.Result.SubTrack>.toTracks(): List<Track> {
+    private fun List<Result.SubTrack>.toTracks(): List<Track> {
         return filter {
             it.kind == "captions"
         }.mapNotNull {
@@ -147,17 +98,32 @@ class VidsrcExtractor(private val client: OkHttpClient, private val headers: Hea
             }.getOrNull()
         }
     }
+
+    private fun vrfDecrypt(input: String): String {
+        var vrf = Base64.decode(input.toByteArray(), Base64.URL_SAFE)
+        val rc4Key = SecretKeySpec(DECRYPTION_KEY.toByteArray(), "RC4")
+        val cipher = Cipher.getInstance("RC4")
+        cipher.init(Cipher.DECRYPT_MODE, rc4Key, cipher.parameters)
+        vrf = cipher.doFinal(vrf)
+        return URLDecoder.decode(vrf.toString(Charsets.UTF_8), "utf-8")
+    }
+
+    companion object {
+        private const val ENCRYPTION_KEY1 = "8Qy3mlM2kod80XIK"
+        private const val ENCRYPTION_KEY2 = "BgKVSrzpH2Enosgm"
+        private const val DECRYPTION_KEY = "9jXDYBZUcTcTZveM"
+    }
 }
 
 @Serializable
 data class MediaResponseBody(
     val status: Int,
-    val result: Result,
+    val result: String,
 ) {
     @Serializable
     data class Result(
-        val sources: ArrayList<Source>,
-        val tracks: ArrayList<SubTrack> = ArrayList(),
+        val sources: List<Source>,
+        val tracks: List<SubTrack> = emptyList(),
     ) {
         @Serializable
         data class Source(
