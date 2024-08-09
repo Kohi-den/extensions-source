@@ -40,11 +40,25 @@ jobs:
           files_separator: " "
           safe_output: false
 
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@v6  # v6.1.0
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+
         # This step is going to commit, but this will not trigger another workflow.
       - name: Bump extensions that uses a modified lib
         if: steps.modified-libs.outputs.any_changed == 'true'
         run: |
           ./.github/scripts/bump-versions.py ${{ steps.modified-libs.outputs.all_changed_files }}
+
+        # This step is going to commit, but this will not trigger another workflow.
+      - name: Bump extensions that uses a modified lib
+        if: steps.modified-libs.outputs.any_changed == 'true'
+        run: |
+          chmod +x ./.github/scripts/bump-versions.py ${{ steps.modified-libs.outputs.all_changed_files }}
 
       - name: Validate Gradle Wrapper
         uses: gradle/wrapper-validation-action@a494d935f4b56874c4a5a87d19af7afcf3a163d0 # v2

@@ -72,6 +72,7 @@ data class Episode(
     @SerialName("lang") val languages: EpisodeLanguages,
 )
 
+
 @Serializable
 data class EpisodeLanguages(
     @SerialName("vf") val vf: EpisodeLanguage,

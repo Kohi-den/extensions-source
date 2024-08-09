@@ -1,0 +1,13 @@
+ext {
+    extName = 'AniPlay'
+    extClass = '.AniPlay'
+    themePkg = 'anilist'
+    overrideVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(":lib-multisrc:anilist"))
+    implementation(project(":lib:playlist-utils"))
+}
