@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.lib.sendvidextractor.SendvidExtractor
 import eu.kanade.tachiyomi.lib.sibnetextractor.SibnetExtractor
+import eu.kanade.tachiyomi.lib.vidmolyextractor.VidMolyExtractor
 import eu.kanade.tachiyomi.lib.vkextractor.VkExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.await
@@ -101,7 +102,7 @@ class FrAnime : AnimeHttpSource() {
 
                 SEpisode.create().apply {
                     setUrlWithoutDomain(anime.url + "&ep=${index + 1}")
-                    name = episode.title
+                    name = episode.title ?: "Episode ${index + 1}"
                     episode_number = (index + 1).toFloat()
                 }
             }
@@ -123,14 +124,19 @@ class FrAnime : AnimeHttpSource() {
 
         val players = if (episodeLang == "vo") episodeData.languages.vo.players else episodeData.languages.vf.players
 
+        val sendvidExtractor by lazy { SendvidExtractor(client, headers) }
+        val sibnetExtractor by lazy { SibnetExtractor(client) }
+        val vkExtractor by lazy { VkExtractor(client, headers) }
+        val vidMolyExtractor by lazy { VidMolyExtractor(client) }
+
         val videos = players.withIndex().parallelCatchingFlatMap { (index, playerName) ->
             val apiUrl = "$videoBaseUrl/$episodeLang/$index"
             val playerUrl = client.newCall(GET(apiUrl, headers)).await().body.string()
             when (playerName) {
-                "vido" -> listOf(Video(playerUrl, "FRAnime (Vido)", playerUrl))
-                "sendvid" -> SendvidExtractor(client, headers).videosFromUrl(playerUrl)
-                "sibnet" -> SibnetExtractor(client).videosFromUrl(playerUrl)
-                "vk" -> VkExtractor(client, headers).videosFromUrl(playerUrl)
+                "sendvid" -> sendvidExtractor.videosFromUrl(playerUrl)
+                "sibnet" -> sibnetExtractor.videosFromUrl(playerUrl)
+                "vk" -> vkExtractor.videosFromUrl(playerUrl)
+                "vidmoly" -> vidMolyExtractor.videosFromUrl(playerUrl)
                 else -> emptyList()
             }
         }
