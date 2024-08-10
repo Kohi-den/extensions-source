@@ -13,9 +13,7 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.asJsoup
-import okhttp3.FormBody
 import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONObject
@@ -155,14 +153,9 @@ class Oploverz : ConfigurableAnimeSource, AnimeHttpSource() {
                 thumbnail_url = it.selectFirst("div.limit > img")!!.attr("src")
             }
         }
-        val hasNextPage = try {
-            val pagination = doc.selectFirst("div.pagination")!!
-            val totalPage = pagination.selectFirst("span:nth-child(1)")!!.text().split(" ").last()
-            val currentPage = pagination.selectFirst("span.page-numbers.current")!!.text()
-            currentPage.toInt() < totalPage.toInt()
-        } catch (_: Exception) {
-            false
-        }
+
+        val hasNextPage = doc.selectFirst("a.next.page-numbers") != null ?: doc.selectFirst("div.hpage > a.r")
+
         return AnimesPage(animes, hasNextPage)
     }
 
