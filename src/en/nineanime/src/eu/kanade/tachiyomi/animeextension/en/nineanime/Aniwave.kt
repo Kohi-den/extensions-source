@@ -282,9 +282,8 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             val parsed = response.parseAs<ServerResponse>()
             val embedLink = utils.vrfDecrypt(DECRYPTION_KEY, parsed.result.url)
             when (server.serverName) {
-                "vidstream", "megaf" -> {
-                    vidsrcExtractor.videosFromUrl(embedLink, server.serverName, server.type)
-                }
+                "vidstream" -> vidsrcExtractor.videosFromUrl(embedLink, "Vidstream", server.type)
+                "megaf" -> vidsrcExtractor.videosFromUrl(embedLink, "MegaF", server.type)
                 "moonf" -> filemoonExtractor.videosFromUrl(embedLink, "MoonF - ${server.type} - ")
                 "streamtape" -> streamtapeExtractor.videoFromUrl(embedLink, "StreamTape - ${server.type}")?.let(::listOf) ?: emptyList()
                 "mp4u" -> mp4uploadExtractor.videosFromUrl(embedLink, headers, suffix = " - ${server.type}")

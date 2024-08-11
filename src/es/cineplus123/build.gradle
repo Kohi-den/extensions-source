@@ -1,0 +1,14 @@
+ext {
+    extName = 'Cineplus123'
+    extClass = '.Cineplus123'
+    themePkg = 'dooplay'
+    baseUrl = 'https://cineplus123.org'
+    overrideVersionCode = 0
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(":lib:streamwish-extractor"))
+    implementation(project(":lib:uqload-extractor"))
+}
