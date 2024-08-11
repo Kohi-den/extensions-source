@@ -23,7 +23,6 @@ import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
-import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
@@ -130,7 +129,7 @@ class Pelisplusph(override val name: String, override val baseUrl: String) : Pel
 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
-        return document.select("[class*=server-item-]").parallelCatchingFlatMapBlocking { serverItem ->
+        return document.select("[class*=server-item-]").flatMap { serverItem ->
             val langIdx = getNumberFromString(serverItem.attr("class").substringAfter("server-item-"))
             val langItem = document.select("li[data-id=\"$langIdx\"] a").text()
             val lang = if (langItem.contains("Subtitulado")) "[SUB]" else if (langItem.contains("Latino")) "[LAT]" else "[CAST]"
@@ -166,7 +165,7 @@ class Pelisplusph(override val name: String, override val baseUrl: String) : Pel
                 }
                 embedUrl.contains("doodstream") || embedUrl.contains("dood.") || embedUrl.contains("ds2play") || embedUrl.contains("doods.") -> {
                     val url2 = url.replace("https://doodstream.com/e/", "https://dood.to/e/")
-                    listOf(DoodExtractor(client).videoFromUrl(url2, "$prefix DoodStream", false)!!)
+                    listOf(DoodExtractor(client).videoFromUrl(url2, "$prefix DoodStream")!!)
                 }
                 embedUrl.contains("streamlare") -> StreamlareExtractor(client).videosFromUrl(url, prefix = prefix)
                 embedUrl.contains("yourupload") || embedUrl.contains("upload") -> YourUploadExtractor(client).videoFromUrl(url, headers = headers, prefix = prefix)
