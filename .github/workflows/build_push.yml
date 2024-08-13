@@ -113,7 +113,7 @@ jobs:
 
       - name: Upload APKs (chunk ${{ matrix.chunk }})
         uses: actions/upload-artifact@5d5d22a31266ced268874388b861e4b58bb5c2f3 # v4
-        if: "github.repository == 'almightyhak/aniyomi-extensions'"
+        if: "github.repository == 'Kohi-den/extensions-source'"
         with:
           name: "individual-apks-${{ matrix.chunk }}"
           path: "**/*.apk"
@@ -126,7 +126,7 @@ jobs:
     name: Publish repo
     needs:
       - build_individual
-    if: "github.repository == 'almightyhak/aniyomi-extensions'"
+    if: "github.repository == 'Kohi-den/extensions-source'"
     runs-on: ubuntu-latest
     steps:
       - name: Download APK artifacts
@@ -158,7 +158,7 @@ jobs:
       - name: Checkout repo branch
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
         with:
-          repository: almightyhak/aniyomi-anime-repo
+          repository: Kohi-den/extensions
           token: ${{ secrets.BOT_PAT }}
           ref: main
           path: repo
@@ -172,6 +172,6 @@ jobs:
         with:
           message: "Update extensions repo"
           cwd: "./repo"
-          committer_name: almightyhak
-          committer_email: 134626626+almightyhak@users.noreply.github.com
+          committer_name: Kohi-den-Bot
+          committer_email: 177773202+Kohi-den-Bot@users.noreply.github.com
  
