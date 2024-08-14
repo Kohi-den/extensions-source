@@ -28,7 +28,6 @@ import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
-import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
@@ -59,6 +58,9 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
             "Upload", "BurstCloud", "Upstream", "StreamTape", "Amazon",
             "Fastream", "Filemoon", "StreamWish", "Okru", "Streamlare",
         )
+
+        private val REGEX_LINK = "https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b([-a-zA-Z0-9()@:%_\\+.~#?&//=]*)".toRegex()
+        private val REGEX_VIDEO_OPTS = "'(https?://[^']*)'".toRegex()
     }
 
     override fun popularAnimeSelector(): String = "div.Posters a.Posters-link"
@@ -105,20 +107,23 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
         val videoList = mutableListOf<Video>()
+        val data = document.selectFirst("script:containsData(video[1] = )")?.data() ?: return emptyList()
 
-        val data = document.selectFirst("script:containsData(video[1] = )")?.data()
-        val apiUrl = data?.substringAfter("video[1] = '", "")?.substringBefore("';", "")
-        val alternativeServers = document.select("ul.TbVideoNv.nav.nav-tabs li:not(:first-child)")
-        if (!apiUrl.isNullOrEmpty()) {
-            val apiResponse = client.newCall(GET(apiUrl)).execute()
+        REGEX_VIDEO_OPTS.findAll(data).map { it.groupValues[1] }.forEach { opt ->
+            val apiResponse = client.newCall(GET(opt)).execute()
             val docResponse = apiResponse.asJsoup()
+
             if (apiResponse.isSuccessful) {
-                val regIsUrl = "https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b([-a-zA-Z0-9()@:%_\\+.~#?&//=]*)".toRegex()
-                val encryptedList = docResponse.select("#PlayerDisplay div[class*=\"OptionsLangDisp\"] div[class*=\"ODDIV\"] div[class*=\"OD\"] li")
+                val encryptedList = if (docResponse.select("iframe").any()) {
+                    listOf(docResponse.select("iframe").attr("src"))
+                } else {
+                    docResponse.select("#PlayerDisplay div[class*=\"OptionsLangDisp\"] div[class*=\"ODDIV\"] div[class*=\"OD\"] li")
+                        .map { it.attr("onclick") }
+                }
+
                 encryptedList.flatMap {
                     runCatching {
-                        val url = it.attr("onclick")
-                            .substringAfter("go_to_player('")
+                        val url = it.substringAfter("go_to_player('")
                             .substringAfter("go_to_playerVast('")
                             .substringBefore("?cover_url=")
                             .substringBefore("')")
@@ -128,7 +133,7 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
                             .substringBefore("?thumb=")
                             .substringBefore("#poster=")
 
-                        val realUrl = if (!regIsUrl.containsMatchIn(url)) {
+                        val realUrl = if (!REGEX_LINK.containsMatchIn(url)) {
                             String(Base64.decode(url, Base64.DEFAULT))
                         } else if (url.contains("?data=")) {
                             val apiPageSoup = client.newCall(GET(url)).execute().asJsoup()
@@ -141,27 +146,6 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
                     }.getOrNull() ?: emptyList()
                 }.also(videoList::addAll)
             }
-        }
-
-        // verifier for old series
-        if (!apiUrl.isNullOrEmpty() && !apiUrl.contains("/video/") || alternativeServers.any()) {
-            document.select("ul.TbVideoNv.nav.nav-tabs li").parallelCatchingFlatMapBlocking { id ->
-                val serverName = id.select("a").text().lowercase()
-                val serverId = id.attr("data-id")
-                var serverUrl = data?.substringAfter("video[$serverId] = '", "")?.substringBefore("';", "")
-                if (serverUrl != null && serverUrl.contains("api.mycdn.moe")) {
-                    val urlId = serverUrl.substringAfter("id=")
-                    serverUrl = when (serverName) {
-                        "sbfast" -> { "https://sbfull.com/e/$urlId" }
-                        "plusto" -> { "https://owodeuwu.xyz/v/$urlId" }
-                        "doodstream" -> { "https://dood.to/e/$urlId" }
-                        "upload", "uqload" -> { "https://uqload.com/embed-$urlId.html" }
-                        else -> ""
-                    }
-                }
-
-                serverVideoResolver(serverUrl ?: "")
-            }.also(videoList::addAll)
         }
         return videoList
     }
@@ -206,8 +190,8 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
                     StreamWishExtractor(client, docHeaders).videosFromUrl(url, videoNameGen = { "StreamWish:$it" })
                 }
                 embedUrl.contains("doodstream") || embedUrl.contains("dood.") || embedUrl.contains("ds2play") || embedUrl.contains("doods.") -> {
-                    val url2 = url.replace("https://doodstream.com/e/", "https://dood.to/e/")
-                    listOf(DoodExtractor(client).videoFromUrl(url2, "DoodStream", false)!!)
+                    val url2 = url.replace("https://doodstream.com/e/", "https://d0000d.com/e/")
+                    listOf(DoodExtractor(client).videoFromUrl(url2, "DoodStream")!!)
                 }
                 embedUrl.contains("streamlare") -> StreamlareExtractor(client).videosFromUrl(url)
                 embedUrl.contains("yourupload") || embedUrl.contains("upload") -> YourUploadExtractor(client).videoFromUrl(url, headers = headers)
