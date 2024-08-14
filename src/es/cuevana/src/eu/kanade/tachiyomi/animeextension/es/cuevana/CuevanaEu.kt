@@ -6,7 +6,6 @@ import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animeextension.es.cuevana.models.AnimeEpisodesList
 import eu.kanade.tachiyomi.animeextension.es.cuevana.models.PopularAnimeList
-import eu.kanade.tachiyomi.animeextension.es.cuevana.models.Server
 import eu.kanade.tachiyomi.animeextension.es.cuevana.models.Videos
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
@@ -33,7 +32,6 @@ import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.text.SimpleDateFormat
-import java.util.ArrayList
 
 class CuevanaEu(override val name: String, override val baseUrl: String) : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
