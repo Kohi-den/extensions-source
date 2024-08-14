@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.id.oploverz
 
 import android.app.Application
 import android.content.SharedPreferences
+import android.util.Base64
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -12,14 +13,11 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.asJsoup
-import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
-import eu.kanade.tachiyomi.util.parallelMapNotNullBlocking
-import okhttp3.FormBody
 import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONObject
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -39,28 +37,28 @@ class Oploverz : ConfigurableAnimeSource, AnimeHttpSource() {
     // ============================== Popular ===============================
 
     override fun popularAnimeRequest(page: Int): Request =
-        GET("$baseUrl/anime-list/page/$page/?order=popular")
+        GET("$baseUrl/anime/?page=$page&status=&type=&sub=&order=popular")
 
     override fun popularAnimeParse(response: Response): AnimesPage =
-        getAnimeParse(response, "div.relat > article")
+        getAnimeParse(response, "article[itemscope=itemscope]")
 
     // =============================== Latest ===============================
 
     override fun latestUpdatesRequest(page: Int): Request =
-        GET("$baseUrl/anime-list/page/$page/?order=latest")
+        GET("$baseUrl/anime/?page=$page&status=&type=&sub=&order=latest")
 
     override fun latestUpdatesParse(response: Response): AnimesPage =
-        getAnimeParse(response, "div.relat > article")
+        getAnimeParse(response, "article[itemscope=itemscope]")
 
     // =============================== Search ===============================
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val params = OploverzFilters.getSearchParameters(filters)
-        return GET("$baseUrl/anime-list/page/$page/?title=$query${params.filter}", headers)
+        return GET("$baseUrl/page/$page/?s=$query${params.filter}", headers)
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage =
-        getAnimeParse(response, "div.relat > article")
+        getAnimeParse(response, "article[itemscope=itemscope]")
 
     // ============================== Filters ===============================
 
@@ -70,16 +68,16 @@ class Oploverz : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun animeDetailsParse(response: Response): SAnime {
         val doc = response.asJsoup()
-        val detail = doc.selectFirst("div.infox > div.spe")!!
+        val detail = doc.selectFirst("div.info-content > div.spe")!!
         return SAnime.create().apply {
             author = detail.getInfo("Studio")
-            status = parseStatus(doc.selectFirst("div.alternati > span:nth-child(2)")!!.text())
-            title = doc.selectFirst("div.title > h1.entry-title")!!.text()
+            status = parseStatus(detail.getInfo("Status"))
+            title = doc.selectFirst("h1.entry-title")!!.text()
             thumbnail_url =
-                doc.selectFirst("div.infoanime.widget_senction > div.thumb > img")!!
+                doc.selectFirst("div.thumb > img")!!
                     .attr("src")
             description =
-                doc.select("div.entry-content.entry-content-single > p")
+                doc.select("div.entry-content > p")
                     .joinToString("\n\n") { it.text() }
         }
     }
@@ -88,13 +86,13 @@ class Oploverz : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val doc = response.asJsoup()
-        return doc.select("div.lstepsiode.listeps > ul.scrolling > li").map {
-            val episode = it.selectFirst("span.eps > a")!!
+        return doc.select("div.eplister > ul > li").map {
+            val episode = it.selectFirst("a")!!
             SEpisode.create().apply {
                 setUrlWithoutDomain(episode.attr("href"))
-                episode_number = episode.text().trim().toFloatOrNull() ?: 1F
-                name = it.selectFirst("span.lchx > a")!!.text()
-                date_upload = it.selectFirst("span.date")!!.text().toDate()
+                episode_number = it.selectFirst("div.epl-num")!!.text().toFloatOrNull() ?: 1F
+                name = it.selectFirst("div.epl-title")!!.text()
+                date_upload = it.selectFirst("div.epl-date")!!.text().toDate()
             }
         }
     }
@@ -103,15 +101,25 @@ class Oploverz : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun videoListParse(response: Response): List<Video> {
         val doc = response.asJsoup()
-        val parseUrl = response.request.url.toUrl()
-        val url = "${parseUrl.protocol}://${parseUrl.host}"
-        return doc.select("#server > ul > li > div.east_player_option")
-            .parallelMapNotNullBlocking {
-                runCatching { getEmbedLinks(url, it) }.getOrNull()
+        val videoList = mutableListOf<Video>()
+
+        doc.select("select.mirror > option[value]").forEach { opt ->
+            val decoded = if (opt.attr("value").isEmpty()) {
+                doc.selectFirst("iframe")!!.attr("src")
+            } else {
+                Jsoup.parse(
+                    String(Base64.decode(opt.attr("value"), Base64.DEFAULT)),
+                ).select("iframe").attr("src")
             }
-            .parallelCatchingFlatMapBlocking {
-                getVideosFromEmbed(it.first)
+
+            when {
+                decoded.contains("blogger.com") -> {
+                    videoList.addAll(getVideosFromEmbed(decoded))
+                }
             }
+        }
+
+        return videoList.sort()
     }
 
     // ============================= Utilities ==============================
@@ -140,19 +148,14 @@ class Oploverz : ConfigurableAnimeSource, AnimeHttpSource() {
         val doc = response.asJsoup()
         val animes = doc.select(query).map {
             SAnime.create().apply {
-                setUrlWithoutDomain(it.selectFirst("div.animposx > a")!!.attr("href"))
-                title = it.selectFirst("div.title > h2")!!.text()
-                thumbnail_url = it.selectFirst("div.content-thumb > img")!!.attr("src")
+                setUrlWithoutDomain(it.selectFirst("a.tip")!!.attr("href"))
+                title = it.selectFirst("div.tt > h2")!!.text()
+                thumbnail_url = it.selectFirst("div.limit > img")!!.attr("src")
             }
         }
-        val hasNextPage = try {
-            val pagination = doc.selectFirst("div.pagination")!!
-            val totalPage = pagination.selectFirst("span:nth-child(1)")!!.text().split(" ").last()
-            val currentPage = pagination.selectFirst("span.page-numbers.current")!!.text()
-            currentPage.toInt() < totalPage.toInt()
-        } catch (_: Exception) {
-            false
-        }
+
+        val hasNextPage = doc.selectFirst("a.next.page-numbers") != null ?: doc.selectFirst("div.hpage > a.r")
+
         return AnimesPage(animes, hasNextPage)
     }
 
@@ -162,18 +165,6 @@ class Oploverz : ConfigurableAnimeSource, AnimeHttpSource() {
             "ongoing" -> SAnime.ONGOING
             else -> SAnime.UNKNOWN
         }
-    }
-
-    private fun getEmbedLinks(url: String, element: Element): Pair<String, String> {
-        val form = FormBody.Builder().apply {
-            add("action", "player_ajax")
-            add("post", element.attr("data-post"))
-            add("nume", element.attr("data-nume"))
-            add("type", element.attr("data-type"))
-        }.build()
-        return client.newCall(POST("$url/wp-admin/admin-ajax.php", body = form))
-            .execute()
-            .let { Pair(it.asJsoup().selectFirst(".playeriframe")!!.attr("src"), "") }
     }
 
     private fun getVideosFromEmbed(link: String): List<Video> {
