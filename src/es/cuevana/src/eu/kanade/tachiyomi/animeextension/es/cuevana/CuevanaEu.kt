@@ -24,10 +24,7 @@ import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
-import eu.kanade.tachiyomi.util.parallelMapBlocking
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
@@ -151,28 +148,28 @@ class CuevanaEu(override val name: String, override val baseUrl: String) : Confi
 
     private fun serverIterator(videos: Videos?): MutableList<Video> {
         val videoList = mutableListOf<Video>()
-        videos?.latino?.parallelMapBlocking {
+        videos?.latino?.forEach {
             try {
                 val body = client.newCall(GET(it.result!!)).execute().asJsoup()
                 val url = body.selectFirst("script:containsData(var message)")?.data()?.substringAfter("var url = '")?.substringBefore("'") ?: ""
                 loadExtractor(url, "[LAT]").let { videoList.addAll(it) }
             } catch (_: Exception) { }
         }
-        videos?.spanish?.map {
+        videos?.spanish?.forEach {
             try {
                 val body = client.newCall(GET(it.result!!)).execute().asJsoup()
                 val url = body.selectFirst("script:containsData(var message)")?.data()?.substringAfter("var url = '")?.substringBefore("'") ?: ""
                 loadExtractor(url, "[CAST]").let { videoList.addAll(it) }
             } catch (_: Exception) { }
         }
-        videos?.english?.map {
+        videos?.english?.forEach {
             try {
                 val body = client.newCall(GET(it.result!!)).execute().asJsoup()
                 val url = body.selectFirst("script:containsData(var message)")?.data()?.substringAfter("var url = '")?.substringBefore("'") ?: ""
                 loadExtractor(url, "[ENG]").let { videoList.addAll(it) }
             } catch (_: Exception) { }
         }
-        videos?.japanese?.map {
+        videos?.japanese?.forEach {
             val body = client.newCall(GET(it.result!!)).execute().asJsoup()
             val url = body.selectFirst("script:containsData(var message)")?.data()?.substringAfter("var url = '")?.substringBefore("'") ?: ""
             loadExtractor(url, "[JAP]").let { videoList.addAll(it) }
@@ -183,31 +180,6 @@ class CuevanaEu(override val name: String, override val baseUrl: String) : Confi
     private fun loadExtractor(url: String, prefix: String = ""): List<Video> {
         val videoList = mutableListOf<Video>()
         val embedUrl = url.lowercase()
-        if (embedUrl.contains("tomatomatela")) {
-            try {
-                val mainUrl = url.substringBefore("/embed.html#").substringAfter("https://")
-                val headers = headers.newBuilder()
-                    .set("authority", mainUrl)
-                    .set("accept", "application/json, text/javascript, */*; q=0.01")
-                    .set("accept-language", "es-MX,es-419;q=0.9,es;q=0.8,en;q=0.7")
-                    .set("sec-ch-ua", "\"Chromium\";v=\"106\", \"Google Chrome\";v=\"106\", \"Not;A=Brand\";v=\"99\"")
-                    .set("sec-ch-ua-mobile", "?0")
-                    .set("sec-ch-ua-platform", "Windows")
-                    .set("sec-fetch-dest", "empty")
-                    .set("sec-fetch-mode", "cors")
-                    .set("sec-fetch-site", "same-origin")
-                    .set("x-requested-with", "XMLHttpRequest")
-                    .build()
-                val token = url.substringAfter("/embed.html#")
-                val urlRequest = "https://$mainUrl/details.php?v=$token"
-                val response = client.newCall(GET(urlRequest, headers = headers)).execute().asJsoup()
-                val bodyText = response.select("body").text()
-                val json = json.decodeFromString<JsonObject>(bodyText)
-                val status = json["status"]!!.jsonPrimitive!!.content
-                val file = json["file"]!!.jsonPrimitive!!.content
-                if (status == "200") { videoList.add(Video(file, "$prefix Tomatomatela", file, headers = null)) }
-            } catch (_: Exception) { }
-        }
         if (embedUrl.contains("yourupload")) {
             val videos = YourUploadExtractor(client).videoFromUrl(url, headers = headers)
             videoList.addAll(videos)

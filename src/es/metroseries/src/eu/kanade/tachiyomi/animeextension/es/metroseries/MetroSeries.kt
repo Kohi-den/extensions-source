@@ -49,6 +49,10 @@ class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
     }
 
     companion object {
+        private const val PREF_LANGUAGE_KEY = "preferred_language"
+        private const val PREF_LANGUAGE_DEFAULT = "[LAT]"
+        private val LANGUAGE_LIST = arrayOf("[LAT]", "[SUB]", "[CAST]")
+
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_DEFAULT = "1080"
         private val QUALITY_LIST = arrayOf("1080", "720", "480", "360")
@@ -129,7 +133,7 @@ class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
         return episodes
     }
 
-    private fun getDetailSeason(element: org.jsoup.nodes.Element, objectNumber: String, referer: String): IntRange {
+    private fun getDetailSeason(element: Element, objectNumber: String, referer: String): IntRange {
         try {
             val post = element.attr("data-post")
             val season = element.attr("data-season")
@@ -189,6 +193,16 @@ class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
         val videoList = mutableListOf<Video>()
         val termId = document.select("#option-players").attr("data-term")
         document.select(".player-options-list li a").forEach {
+            val prefix = runCatching {
+                val lang = it.select(".option").text().lowercase()
+                when {
+                    lang.contains("latino") -> "[LAT]"
+                    lang.contains("castellano") -> "[CAST]"
+                    lang.contains("sub") -> "[SUB]"
+                    else -> ""
+                }
+            }.getOrDefault("")
+
             val ide = it.attr("data-opt")
             val formBody = FormBody.Builder()
                 .add("action", "action_player_series")
@@ -217,29 +231,29 @@ class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
                             val key = src.split("/").last()
                             src = "https://fastream.to/embed-$key.html"
                         }
-                        FastreamExtractor(client, headers).videosFromUrl(src, needsSleep = false).also(videoList::addAll)
+                        FastreamExtractor(client, headers).videosFromUrl(src, needsSleep = false, prefix = "$prefix Fastream:").also(videoList::addAll)
                     }
 
                     if (src.contains("upstream")) {
-                        UpstreamExtractor(client).videosFromUrl(src).let { videoList.addAll(it) }
+                        UpstreamExtractor(client).videosFromUrl(src, prefix = "$prefix ").let { videoList.addAll(it) }
                     }
                     if (src.contains("yourupload")) {
-                        YourUploadExtractor(client).videoFromUrl(src, headers).let { videoList.addAll(it) }
+                        YourUploadExtractor(client).videoFromUrl(src, headers, prefix = "$prefix ").let { videoList.addAll(it) }
                     }
                     if (src.contains("voe")) {
-                        VoeExtractor(client).videosFromUrl(src).also(videoList::addAll)
+                        VoeExtractor(client).videosFromUrl(src, prefix = "$prefix ").also(videoList::addAll)
                     }
                     if (src.contains("wishembed") || src.contains("streamwish") || src.contains("wish")) {
-                        StreamWishExtractor(client, headers).videosFromUrl(src) { "StreamWish:$it" }.also(videoList::addAll)
+                        StreamWishExtractor(client, headers).videosFromUrl(src) { "$prefix StreamWish:$it" }.also(videoList::addAll)
                     }
                     if (src.contains("mp4upload")) {
-                        Mp4uploadExtractor(client).videosFromUrl(src, headers).let { videoList.addAll(it) }
+                        Mp4uploadExtractor(client).videosFromUrl(src, headers, prefix = "$prefix ").let { videoList.addAll(it) }
                     }
                     if (src.contains("burst")) {
-                        BurstCloudExtractor(client).videoFromUrl(src, headers = headers).let { videoList.addAll(it) }
+                        BurstCloudExtractor(client).videoFromUrl(src, headers = headers, prefix = "$prefix ").let { videoList.addAll(it) }
                     }
                     if (src.contains("filemoon") || src.contains("moonplayer")) {
-                        FilemoonExtractor(client).videosFromUrl(src, headers = headers, prefix = "Filemoon:").let { videoList.addAll(it) }
+                        FilemoonExtractor(client).videosFromUrl(src, headers = headers, prefix = "$prefix Filemoon:").let { videoList.addAll(it) }
                     }
                 } catch (_: Exception) {}
             }
@@ -250,8 +264,10 @@ class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun List<Video>.sort(): List<Video> {
         val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
         val server = preferences.getString(PREF_SERVER_KEY, PREF_SERVER_DEFAULT)!!
+        val lang = preferences.getString(PREF_LANGUAGE_KEY, PREF_LANGUAGE_DEFAULT)!!
         return this.sortedWith(
             compareBy(
+                { it.quality.contains(lang) },
                 { it.quality.contains(server, true) },
                 { it.quality.contains(quality) },
                 { Regex("""(\d+)p""").find(it.quality)?.groupValues?.get(1)?.toIntOrNull() ?: 0 },
@@ -260,6 +276,22 @@ class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
     }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        ListPreference(screen.context).apply {
+            key = PREF_LANGUAGE_KEY
+            title = "Preferred language"
+            entries = LANGUAGE_LIST
+            entryValues = LANGUAGE_LIST
+            setDefaultValue(PREF_LANGUAGE_DEFAULT)
+            summary = "%s"
+
+            setOnPreferenceChangeListener { _, newValue ->
+                val selected = newValue as String
+                val index = findIndexOfValue(selected)
+                val entry = entryValues[index] as String
+                preferences.edit().putString(key, entry).commit()
+            }
+        }.also(screen::addPreference)
+
         ListPreference(screen.context).apply {
             key = PREF_QUALITY_KEY
             title = "Preferred quality"
