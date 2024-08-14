@@ -1,0 +1,11 @@
+ext {
+    extName = 'HomeCine'
+    extClass = '.HomeCine'
+    extVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:fastream-extractor'))
+}

@@ -83,26 +83,20 @@ class Pelisplusto(override val name: String, override val baseUrl: String) : Pel
             val episode = SEpisode.create().apply {
                 episode_number = 1F
                 name = "PELÍCULA"
-                setUrlWithoutDomain(response.request.url.toString())
+                setUrlWithoutDomain(jsoup.location())
             }
             episodes.add(episode)
         } else {
-            var jsonscript = ""
-            jsoup.select("script[type=text/javascript]").mapNotNull { script ->
-                val ssRegex = Regex("(?i)seasons")
-                val ss = if (script.data().contains(ssRegex)) script.data() else ""
-                val swaa = ss.substringAfter("seasonsJson = ").substringBefore(";")
-                jsonscript = swaa
-            }
-            val jsonParse = json.decodeFromString<JsonObject>(jsonscript)
+            val jsonStrData = jsoup.selectFirst("script:containsData(const seasonUrl =)")?.data() ?: return emptyList()
+            val jsonParse = json.decodeFromString<JsonObject>(jsonStrData.substringAfter("seasonsJson = ").substringBefore(";"))
             var index = 0
             jsonParse.entries.map {
                 it.value.jsonArray.reversed().map { element ->
                     index += 1
-                    val jsonElement = element!!.jsonObject
-                    val season = jsonElement["season"]!!.jsonPrimitive!!.content
-                    val title = jsonElement["title"]!!.jsonPrimitive!!.content
-                    val ep = jsonElement["episode"]!!.jsonPrimitive!!.content
+                    val jsonElement = element.jsonObject
+                    val season = jsonElement["season"]!!.jsonPrimitive.content
+                    val title = jsonElement["title"]!!.jsonPrimitive.content
+                    val ep = jsonElement["episode"]!!.jsonPrimitive.content
                     val episode = SEpisode.create().apply {
                         episode_number = index.toFloat()
                         name = "T$season - E$ep - $title"

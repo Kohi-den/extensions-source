@@ -30,7 +30,7 @@ class StreamingCommunity : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override val name = "StreamingCommunity"
 
-    override val baseUrl = "https://streamingcommunity.forum"
+    override val baseUrl = "https://streamingcommunity.photos"
 
     override val lang = "it"
 
@@ -254,72 +254,40 @@ class StreamingCommunity : ConfigurableAnimeSource, AnimeHttpSource() {
     // ============================ Video Links =============================
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
-        val videoList = mutableListOf<Video>()
-        val doc =
-            client
-                .newCall(
-                    GET("$baseUrl/iframe/${episode.url}", headers),
-                ).execute()
-                .asJsoup()
-        val iframeUrl =
-            doc.selectFirst("iframe[src]")?.attr("abs:src")
-                ?: error("Failed to extract iframe")
-        val iframeHeaders =
-            headers
-                .newBuilder()
-                .add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-                .add("Host", iframeUrl.toHttpUrl().host)
-                .add("Referer", "$baseUrl/")
-                .build()
+        val videoSet = mutableSetOf<Video>()
+        val doc = client.newCall(
+            GET("$baseUrl/iframe/${episode.url}", headers),
+        ).execute().asJsoup()
 
-        val iframe =
-            client
-                .newCall(
-                    GET(iframeUrl, headers = iframeHeaders),
-                ).execute()
-                .asJsoup()
+        val iframeUrl = doc.selectFirst("iframe[src]")?.attr("abs:src")
+            ?: error("Failed to extract iframe")
+
+        val iframeHeaders = headers.newBuilder()
+            .add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+            .add("Host", iframeUrl.toHttpUrl().host)
+            .add("Referer", "$baseUrl/")
+            .build()
+
+        val iframe = client.newCall(GET(iframeUrl, headers = iframeHeaders)).execute().asJsoup()
         val script = iframe.selectFirst("script:containsData(masterPlaylist)")!!.data().replace("\n", "\t")
-        var playlistUrl = PLAYLIST_URL_REGEX.find(script)!!.groupValues[1]
-        val filename = playlistUrl.substringAfterLast("/")
-        if (!filename.endsWith(".m3u8")) {
-            playlistUrl = playlistUrl.replace(filename, filename + ".m3u8")
-        }
-
-        val expires = EXPIRES_REGEX.find(script)!!.groupValues[1]
+        val playlistUrl = PLAYLIST_URL_REGEX.find(script)!!.groupValues[1]
         val token = TOKEN_REGEX.find(script)!!.groupValues[1]
+        val expires = EXPIRES_REGEX.find(script)!!.groupValues[1]
 
-        // Get subtitles
-        val masterPlUrl = "$playlistUrl?token=$token&expires=$expires&n=1"
-        val masterPl =
-            client
-                .newCall(GET(masterPlUrl))
-                .execute()
-                .body
-                .string()
-        val subList =
-            SUBTITLES_REGEX.findAll(masterPl)
-                .map {
-                    Track(it.groupValues[2], it.groupValues[1])
-                }.toList()
-        TOKEN_QUALITY_REGEX.findAll(script).forEach { match ->
-            val quality = match.groupValues[1]
+        val masterPlUrl = "$playlistUrl&token=$token&expires=$expires&b=1"
 
-            val videoUrl =
-                buildString {
-                    append(playlistUrl)
-                    append("?type=video&rendition=")
-                    append(quality)
-                    append("&token=")
-                    append(match.groupValues[2])
-                    append("&expires=$expires")
-                    append("&n=1")
-                }
-            videoList.add(Video(videoUrl, quality, videoUrl, subtitleTracks = subList))
+        val masterPl = client.newCall(GET(masterPlUrl)).execute().body.string()
+        val subList = SUBTITLES_REGEX.findAll(masterPl).map {
+            Track(it.groupValues[2], it.groupValues[1])
+        }.toList()
+        QUALITY_REGEX.findAll(masterPl).forEach { match ->
+            val quality = "${match.groupValues[1]}p"
+            val videoUrl = match.groupValues[2]
+            videoSet.add(Video(videoUrl, quality, videoUrl, subtitleTracks = subList))
         }
+        require(videoSet.isNotEmpty()) { "Failed to fetch videos" }
 
-        require(videoList.isNotEmpty()) { "Failed to fetch videos" }
-
-        return videoList.sort()
+        return videoSet.toList().sortedBy { it.quality }
     }
 
     override fun videoListRequest(episode: SEpisode): Request = throw Exception("Not used")
@@ -359,10 +327,10 @@ class StreamingCommunity : ConfigurableAnimeSource, AnimeHttpSource() {
         private val PLAYLIST_URL_REGEX = Regex("""url: ?'(.*?)'""")
         private val EXPIRES_REGEX = Regex("""'expires': ?'(\d+)'""")
         private val TOKEN_REGEX = Regex("""'token': ?'([\w-]+)'""")
-        private val TOKEN_QUALITY_REGEX = Regex("""'token(\d+p?)': ?'([\w-]+)'""")
+        private val QUALITY_REGEX = Regex("""RESOLUTION=.*?x(.*).*?\n(.*)""")
         private val SUBTITLES_REGEX = Regex("""#EXT-X-MEDIA:TYPE=SUBTITLES.*?NAME="(.*?)".*?URI="(.*?)"""")
         private const val PREF_QUALITY_KEY = "preferred_quality"
-        private const val PREF_QUALITY_DEFAULT = "720"
+        private const val PREF_QUALITY_DEFAULT = "1080"
     }
 
     // ============================== Settings ==============================
