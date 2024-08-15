@@ -14,9 +14,9 @@ class StreamWishExtractor(private val client: OkHttpClient, private val headers:
     fun videosFromUrl(url: String, prefix: String) = videosFromUrl(url) { "$prefix - $it" }
 
     fun videosFromUrl(url: String, videoNameGen: (String) -> String = { quality -> "StreamWish - $quality" }): List<Video> {
-        val doc = client.newCall(GET(url, headers)).execute()
-            .asJsoup()
-        // Sometimes the script body is packed, sometimes it isn't
+
+        val doc = client.newCall(GET(getEmbedUrl(url), headers)).execute().asJsoup()
+
         val scriptBody = doc.selectFirst("script:containsData(m3u8)")?.data()
             ?.let { script ->
                 if (script.contains("eval(function(p,a,c")) {
@@ -25,7 +25,6 @@ class StreamWishExtractor(private val client: OkHttpClient, private val headers:
                     script
                 }
             }
-
         val masterUrl = scriptBody
             ?.substringAfter("source", "")
             ?.substringAfter("file:\"", "")
@@ -34,5 +33,14 @@ class StreamWishExtractor(private val client: OkHttpClient, private val headers:
             ?: return emptyList()
 
         return playlistUtils.extractFromHls(masterUrl, url, videoNameGen = videoNameGen)
+    }
+
+    private fun getEmbedUrl(url: String): String {
+        return if (url.contains("/f/")) {
+            val videoId = url.substringAfter("/f/")
+            "https://streamwish.com/$videoId"
+        } else {
+            url
+        }
     }
 }
