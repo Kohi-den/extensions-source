@@ -176,7 +176,7 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // ============================ Video Links =============================
-    override fun videoListParse(response: Response) = AnitubeExtractor.getVideoList(response, headers)
+    override fun videoListParse(response: Response) = AnitubeExtractor.getVideoList(response, headers, client)
     override fun videoListSelector() = throw UnsupportedOperationException()
     override fun videoFromElement(element: Element) = throw UnsupportedOperationException()
     override fun videoUrlParse(document: Document) = throw UnsupportedOperationException()
