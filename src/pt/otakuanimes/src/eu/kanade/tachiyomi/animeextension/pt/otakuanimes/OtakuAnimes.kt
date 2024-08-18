@@ -49,7 +49,7 @@ class OtakuAnimes : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun popularAnimeFromElement(element: Element) = SAnime.create().apply {
         setUrlWithoutDomain(element.attr("href"))
         title = element.selectFirst("div.aniNome")!!.text().trim()
-        thumbnail_url = element.selectFirst("img")?.attr("data-lazy-src")
+        thumbnail_url = element.selectFirst("img")?.getImageUrl()
     }
 
     override fun popularAnimeNextPageSelector() = null
@@ -111,7 +111,7 @@ class OtakuAnimes : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         return SAnime.create().apply {
             setUrlWithoutDomain(doc.location())
             title = doc.selectFirst("div.animeFirstContainer h1")!!.text()
-            thumbnail_url = doc.selectFirst("div.animeCapa img")?.attr("data-lazy-src")
+            thumbnail_url = doc.selectFirst("div.animeCapa img")?.getImageUrl()
             description = doc.selectFirst("div.animeSecondContainer > p")?.text()
             genre = doc.select("ul.animeGen li").eachText()?.joinToString(", ")
         }
@@ -220,6 +220,19 @@ class OtakuAnimes : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
 
         return document
+    }
+
+    /**
+     * Tries to get the image url via various possible attributes.
+     * Taken from Tachiyomi's Madara multisrc.
+     */
+    protected open fun Element.getImageUrl(): String? {
+        return when {
+            hasAttr("data-src") -> attr("abs:data-src")
+            hasAttr("data-lazy-src") -> attr("abs:data-lazy-src")
+            hasAttr("srcset") -> attr("abs:srcset").substringBefore(" ")
+            else -> attr("abs:src")
+        }.substringBefore("?resize")
     }
 
     companion object {

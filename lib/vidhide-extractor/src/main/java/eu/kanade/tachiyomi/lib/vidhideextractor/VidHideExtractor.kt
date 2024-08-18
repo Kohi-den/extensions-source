@@ -14,49 +14,51 @@ import okhttp3.OkHttpClient
 class VidHideExtractor(private val client: OkHttpClient, private val headers: Headers) {
 
     private val playlistUtils by lazy { PlaylistUtils(client, headers) }
-
-    val json = Json {
-        isLenient = true
-        ignoreUnknownKeys = true
-    }
+    private val json = Json { isLenient = true; ignoreUnknownKeys = true }
+    private val sourceRegex = Regex("""sources:\[\{file:"(.*?)"""")
 
     fun videosFromUrl(url: String, videoNameGen: (String) -> String = { quality -> "VidHide - $quality" }): List<Video> {
-        val doc = client.newCall(GET(url, headers)).execute()
-            .asJsoup()
-
-        val scriptBody = doc.selectFirst("script:containsData(m3u8)")
-            ?.data()
-            ?: return emptyList()
-
-        val masterUrl = scriptBody
-            .substringAfter("source", "")
-            .substringAfter("file:\"", "")
-            .substringBefore("\"", "")
-            .takeIf(String::isNotBlank)
-            ?: return emptyList()
-
-        val subtitleList = try {
-            val subtitleStr = scriptBody
-                .substringAfter("tracks")
-                .substringAfter("[")
-                .substringBefore("]")
-            val parsed = json.decodeFromString<List<TrackDto>>("[$subtitleStr]")
-            parsed.filter { it.kind.equals("captions", true) }
-                .map { Track(it.file, it.label!!) }
-        } catch (e: SerializationException) {
-            emptyList()
-        }
+        val script = fetchAndExtractScript(url) ?: return emptyList()
+        val videoUrl = extractVideoUrl(script) ?: return emptyList()
+        val subtitleList = extractSubtitles(script)
 
         return playlistUtils.extractFromHls(
-            masterUrl,
-            url,
+            videoUrl,
+            referer = url,
             videoNameGen = videoNameGen,
-            subtitleList = subtitleList,
+            subtitleList = subtitleList
         )
     }
 
+    private fun fetchAndExtractScript(url: String): String? {
+        return client.newCall(GET(url, headers)).execute()
+            .asJsoup()
+            .select("script")
+            .find { it.html().contains("eval(function(p,a,c,k,e,d)") }
+            ?.html()
+            ?.let { JsUnpacker(it).unpack() }
+    }
+
+    private fun extractVideoUrl(script: String): String? {
+        return sourceRegex.find(script)?.groupValues?.get(1)
+    }
+
+    private fun extractSubtitles(script: String): List<Track> {
+        return try {
+            val subtitleStr = script
+                .substringAfter("tracks")
+                .substringAfter("[")
+                .substringBefore("]")
+            json.decodeFromString<List<TrackDto>>("[$subtitleStr]")
+                .filter { it.kind.equals("captions", true) }
+                .map { Track(it.file, it.label ?: "") }
+        } catch (e: SerializationException) {
+            emptyList()
+        }
+    }
+
     @Serializable
-    class TrackDto(
+    private data class TrackDto(
         val file: String,
         val kind: String,
         val label: String? = null,
