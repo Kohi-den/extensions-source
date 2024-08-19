@@ -12,9 +12,9 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
+import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -117,15 +117,22 @@ class AnimeID : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun episodeFromElement(element: Element) = throw UnsupportedOperationException()
 
+    // ============================ Video Links =============================
+    private val streamwishExtractor by lazy { StreamWishExtractor(client, headers) }
+    private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
+
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
         val videoList = mutableListOf<Video>()
         document.select("#partes div.container li.subtab div.parte").forEach { script ->
             val jsonString = script.attr("data")
             val jsonUnescape = unescapeJava(jsonString)!!.replace("\\", "")
-            val url = jsonUnescape.substringAfter("src=\"").substringBefore("\"").replace("\\\\", "\\")
-            if (url.contains("streamtape")) {
-                StreamTapeExtractor(client).videoFromUrl(url)?.let { videoList.add(it) }
+            val url = fetchUrls(jsonUnescape).firstOrNull()?.replace("\\\\", "\\") ?: ""
+            if (url.contains("streamtape") || url.contains("tape") || url.contains("stp")) {
+                streamtapeExtractor.videosFromUrl(url).also(videoList::addAll)
+            }
+            if (url.contains("wish") || url.contains("fviplions") || url.contains("obeywish")) {
+                streamwishExtractor.videosFromUrl(url, videoNameGen = { "StreamWish:$it" }).also(videoList::addAll)
             }
         }
         return videoList
@@ -145,6 +152,12 @@ class AnimeID : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
         processed += escaped
         return processed
+    }
+
+    private fun fetchUrls(text: String?): List<String> {
+        if (text.isNullOrEmpty()) return listOf()
+        val linkRegex = "(http|ftp|https):\\/\\/([\\w_-]+(?:(?:\\.[\\w_-]+)+))([\\w.,@?^=%&:\\/~+#-]*[\\w@?^=%&\\/~+#-])".toRegex()
+        return linkRegex.findAll(text).map { it.value.trim().removeSurrounding("\"") }.toList()
     }
 
     override fun animeDetailsParse(document: Document): SAnime {
