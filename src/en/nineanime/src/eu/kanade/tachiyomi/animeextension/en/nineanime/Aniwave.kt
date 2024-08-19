@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.animeextension.en.nineanime
 
 import android.app.Application
 import android.content.SharedPreferences
-import android.util.Log
 import android.webkit.URLUtil
 import android.widget.Toast
 import androidx.preference.EditTextPreference
@@ -97,7 +96,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val filters = AniwaveFilters.getSearchParameters(filters)
 
-        val vrf = if (query.isNotBlank()) utils.vrfEncrypt(ENCRYPTION_KEY, query) else ""
+        val vrf = if (query.isNotBlank()) utils.vrfEncrypt(query) else ""
         var url = "$baseUrl/filter?keyword=$query"
 
         if (filters.genre.isNotBlank()) url += filters.genre
@@ -150,13 +149,12 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     // ============================== Episodes ==============================
 
     override fun episodeListRequest(anime: SAnime): Request {
-        Log.i(name, "episodeListRequest")
         val response = client.newCall(GET(baseUrl + anime.url)).execute()
         var document = response.asJsoup()
         document = resolveSearchAnime(anime, document)
         val id = document.selectFirst("div[data-id]")?.attr("data-id") ?: throw Exception("ID not found")
 
-        val vrf = utils.vrfEncrypt(ENCRYPTION_KEY, id)
+        val vrf = utils.vrfEncrypt(id)
 
         val listHeaders = headers.newBuilder().apply {
             add("Accept", "application/json, text/javascript, */*; q=0.01")
@@ -212,7 +210,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun videoListRequest(episode: SEpisode): Request {
         val ids = episode.url.substringBefore("&")
-        val vrf = utils.vrfEncrypt(ENCRYPTION_KEY, ids)
+        val vrf = utils.vrfEncrypt(ids)
         val url = "/ajax/server/list/$ids?vrf=$vrf"
         val epurl = episode.url.substringAfter("epurl=")
 
@@ -265,7 +263,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
 
     private fun extractVideo(server: VideoData, epUrl: String): List<Video> {
-        val vrf = utils.vrfEncrypt(ENCRYPTION_KEY, server.serverId)
+        val vrf = utils.vrfEncrypt(server.serverId)
 
         val listHeaders = headers.newBuilder().apply {
             add("Accept", "application/json, text/javascript, */*; q=0.01")
@@ -280,7 +278,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
         return runCatching {
             val parsed = response.parseAs<ServerResponse>()
-            val embedLink = utils.vrfDecrypt(DECRYPTION_KEY, parsed.result.url)
+            val embedLink = utils.vrfDecrypt(parsed.result.url)
             when (server.serverName) {
                 "vidstream" -> vidsrcExtractor.videosFromUrl(embedLink, "Vidstream", server.type)
                 "megaf" -> vidsrcExtractor.videosFromUrl(embedLink, "MegaF", server.type)
@@ -327,7 +325,8 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private fun resolveSearchAnime(anime: SAnime, document: Document): Document {
         if (document.location().startsWith("$baseUrl/filter?keyword=")) { // redirected to search
             val element = document.selectFirst(searchAnimeSelector())
-            val foundAnimePath = element?.selectFirst("a[href]")?.attr("href") ?: throw Exception("Search element not found (resolveSearch)")
+            val foundAnimePath = element?.selectFirst("a[href]")?.attr("href")
+                ?: throw Exception("Search element not found (resolveSearch)")
             anime.url = foundAnimePath // probably doesn't work as intended
             return client.newCall(GET(baseUrl + foundAnimePath)).execute().asJsoup()
         }
@@ -398,9 +397,6 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private const val PREF_TYPE_TOGGLE_KEY = "type_selection"
         private val TYPES = arrayOf("Sub", "Softsub", "Dub")
         private val PREF_TYPES_TOGGLE_DEFAULT = TYPES.toSet()
-
-        private const val DECRYPTION_KEY = "ctpAbOz5u7S6OMkx"
-        private const val ENCRYPTION_KEY = "T78s2WjTc7hSIZZR"
     }
 
     // ============================== Settings ==============================
@@ -410,7 +406,7 @@ class Aniwave : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         try {
             getHosters()
         } catch (e: Exception) {
-            Log.w(name, e.toString())
+            Toast.makeText(screen.context, e.toString(), Toast.LENGTH_LONG).show()
         }
 
         ListPreference(screen.context).apply {
