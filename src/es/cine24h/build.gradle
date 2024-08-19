@@ -1,0 +1,14 @@
+ext {
+    extName = 'Cine24h'
+    extClass = '.Cine24h'
+    extVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:fastream-extractor'))
+    implementation(project(':lib:dood-extractor'))
+    implementation(project(':lib:filemoon-extractor'))
+    implementation(project(':lib:voe-extractor'))
+}

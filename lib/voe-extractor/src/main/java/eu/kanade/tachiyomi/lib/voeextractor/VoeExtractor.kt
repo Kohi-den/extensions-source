@@ -22,6 +22,8 @@ class VoeExtractor(private val client: OkHttpClient) {
 
     private val base64Regex = Regex("'.*'")
 
+    private val scriptBase64Regex = "(let|var)\\s+\\w+\\s*=\\s*'(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)';".toRegex()
+
     @Serializable
     data class VideoLinkDTO(val file: String)
 
@@ -36,8 +38,9 @@ class VoeExtractor(private val client: OkHttpClient) {
             document = clientDdos.newCall(GET(originalUrl)).execute().asJsoup()
         }
 
-        val script = document.selectFirst("script:containsData(const sources), script:containsData(var sources), script:containsData(wc0)")
-            ?.data()
+        val alternativeScript = document.select("script").find { scriptBase64Regex.containsMatchIn(it.data()) }?.data()
+        val script = document.selectFirst("script:containsData(const sources), script:containsData(var sources), script:containsData(wc0)")?.data()
+            ?: alternativeScript
             ?: return emptyList()
         val playlistUrl = when {
             // Layout 1
@@ -46,10 +49,11 @@ class VoeExtractor(private val client: OkHttpClient) {
                 if (linkRegex.matches(link)) link else String(Base64.decode(link, Base64.DEFAULT))
             }
             // Layout 2
-            script.contains("wc0") -> {
+            script.contains("wc0") || alternativeScript != null -> {
                 val base64 = base64Regex.find(script)!!.value
                 val decoded = Base64.decode(base64, Base64.DEFAULT).let(::String)
-                json.decodeFromString<VideoLinkDTO>(decoded).file
+
+                json.decodeFromString<VideoLinkDTO>(if (alternativeScript != null) decoded.reversed() else decoded).file
             }
             else -> return emptyList()
         }
