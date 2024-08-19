@@ -5,6 +5,8 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.cryptoaes.CryptoAES.decryptWithSalt
 import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.network.GET
+import eu.kanade.tachiyomi.util.parseAs
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -27,6 +29,7 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
 
         // matches "[language]https://...,"
         private val REGEX_SUBS by lazy { Regex("""\[(.*?)\](.*?)"?\,""") }
+        private const val KEY_SOURCE = "https://rowdy-avocado.github.io/multi-keys/"
     }
 
     fun videoFromUrl(url: String, referer: String, prefix: String = "Chillx - "): List<Video> {
@@ -39,7 +42,7 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
 
         val master = REGEX_MASTER_JS.find(body)?.groupValues?.get(1) ?: return emptyList()
         val aesJson = json.decodeFromString<CryptoInfo>(master)
-        val key = getKey(body)
+        val key = fetchKey()
         val decryptedScript = decryptWithSalt(aesJson.ciphertext, aesJson.salt, key)
             .replace("\\n", "\n")
             .replace("\\", "")
@@ -83,6 +86,11 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
         )
     }
 
+    @OptIn(ExperimentalSerializationApi::class)
+    private fun fetchKey(): String {
+        return client.newCall(GET(KEY_SOURCE)).execute().parseAs<KeysData>().keys.get(0)
+    }
+
     private fun getKey(body: String): String {
         val (encrypted, pass, offset, index) = REGEX_EVAL_KEY.find(body)!!.groupValues.drop(1)
         val decrypted = decryptScript(encrypted, pass, offset.toInt(), index.toInt())
@@ -113,5 +121,11 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
         val kind: String,
         val label: String = "",
         val file: String,
+    )
+
+    @Serializable
+    data class KeysData(
+        @SerialName("chillx")
+        val keys: List<String>
     )
 }
