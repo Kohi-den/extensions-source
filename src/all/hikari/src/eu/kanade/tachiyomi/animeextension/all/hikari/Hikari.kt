@@ -296,8 +296,39 @@ class Hikari : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
                 Pair(iframeSrc, name)
             }.filter { it.first.isNotEmpty() }
         }
-        val embedUrls = subEmbedUrls + dubEmbedUrls
 
+        val sdEmbedUrls = html.select(".servers-sub.\\&.dub div.item.server-item").flatMap { item ->
+            val name = item.text().trim() + " (Sub + Dub)"
+            val onClick = item.selectFirst("a")?.attr("onclick")
+            if (onClick == null) {
+                Log.e("Hikari", "onClick attribute is null for item: $item")
+                return@flatMap emptyList<Pair<String, String>>()
+            }
+
+            val match = embedRegex.find(onClick)?.groupValues
+            if (match == null) {
+                Log.e("Hikari", "No match found for onClick: $onClick")
+                return@flatMap emptyList<Pair<String, String>>()
+            }
+
+            val url = "$baseUrl/ajax/embed/${match[1]}/${match[2]}/${match[3]}"
+            val iframeList = client.newCall(
+                GET(url, headers),
+            ).execute().parseAs<List<String>>()
+
+            iframeList.map {
+                val iframeSrc = Jsoup.parseBodyFragment(it).selectFirst("iframe")?.attr("src")
+                if (iframeSrc == null) {
+                    Log.e("Hikari", "iframe src is null for URL: $url")
+                    return@map Pair("", "")
+                }
+                Pair(iframeSrc, name)
+            }.filter { it.first.isNotEmpty() }
+        }
+
+        val embedUrls = sdEmbedUrls.ifEmpty {
+            subEmbedUrls + dubEmbedUrls
+        }
         return embedUrls.parallelCatchingFlatMapBlocking {
             getVideosFromEmbed(it.first, it.second)
         }
