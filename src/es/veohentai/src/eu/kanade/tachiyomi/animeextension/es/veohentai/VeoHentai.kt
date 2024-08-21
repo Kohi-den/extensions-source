@@ -108,7 +108,15 @@ open class VeoHentai : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
-        val link = document.selectFirst("iframe[webkitallowfullscreen]")?.attr("abs:src") ?: return emptyList()
+        val frame = document.selectFirst("iframe[webkitallowfullscreen]")
+        val src = frame?.attr("abs:src")?.takeIf { !it.startsWith("about") }
+        val dataLitespeedSrc = frame?.attr("data-litespeed-src")?.takeIf { !it.startsWith("about") }
+        val link = when {
+            src != null -> src
+            dataLitespeedSrc != null -> dataLitespeedSrc
+            else -> return emptyList()
+        }
+
         val docPlayer = client.newCall(GET(link)).execute().asJsoup()
         val dataId = docPlayer.selectFirst("[data-id]")?.attr("data-id") ?: return emptyList()
         val host = docPlayer.location().toHttpUrl().host
