@@ -38,7 +38,7 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     override fun headersBuilder() = super.headersBuilder()
-        .add("Referer", baseUrl)
+        .add("Referer", "$baseUrl/")
         .add("Accept-Language", ACCEPT_LANGUAGE)
 
     // ============================== Popular ===============================
@@ -78,7 +78,11 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun latestUpdatesNextPageSelector() = popularAnimeNextPageSelector()
 
     // =============================== Search ===============================
-    override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
+    override suspend fun getSearchAnime(
+        page: Int,
+        query: String,
+        filters: AnimeFilterList,
+    ): AnimesPage {
         return if (query.startsWith(PREFIX_SEARCH)) {
             val path = query.removePrefix(PREFIX_SEARCH)
             client.newCall(GET("$baseUrl/$path"))
@@ -97,6 +101,7 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
         return AnimesPage(listOf(details), false)
     }
+
     override fun getFilterList(): AnimeFilterList = AnitubeFilters.FILTER_LIST
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
@@ -108,7 +113,14 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             val char = params.initialChar
             when {
                 season.isNotBlank() -> "$baseUrl/temporada/$season/$year"
-                genre.isNotBlank() -> "$baseUrl/genero/$genre/page/$page/${char.replace("todos", "")}"
+                genre.isNotBlank() ->
+                    "$baseUrl/genero/$genre/page/$page/${
+                        char.replace(
+                            "todos",
+                            "",
+                        )
+                    }"
+
                 else -> "$baseUrl/anime/page/$page/letra/$char"
             }
         } else {
@@ -176,7 +188,9 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // ============================ Video Links =============================
-    override fun videoListParse(response: Response) = AnitubeExtractor.getVideoList(response, headers, client)
+    private val extractor by lazy { AnitubeExtractor(headers, client) }
+
+    override fun videoListParse(response: Response) = extractor.getVideoList(response)
     override fun videoListSelector() = throw UnsupportedOperationException()
     override fun videoFromElement(element: Element) = throw UnsupportedOperationException()
     override fun videoUrlParse(document: Document) = throw UnsupportedOperationException()

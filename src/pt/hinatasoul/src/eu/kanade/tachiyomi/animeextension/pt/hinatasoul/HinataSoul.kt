@@ -162,7 +162,7 @@ class HinataSoul : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // ============================ Video Links =============================
-    private val extractor by lazy { HinataSoulExtractor(headers) }
+    private val extractor by lazy { HinataSoulExtractor(headers, client) }
 
     override fun videoListParse(response: Response) = extractor.getVideoList(response)
 

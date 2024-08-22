@@ -1,7 +1,7 @@
 ext {
     extName = 'Hinata Soul'
     extClass = '.HinataSoul'
-    extVersionCode = 5
+    extVersionCode = 6
 }
 
 apply from: "$rootDir/common.gradle"
