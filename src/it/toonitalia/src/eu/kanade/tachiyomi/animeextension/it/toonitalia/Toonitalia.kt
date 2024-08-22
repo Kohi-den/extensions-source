@@ -277,11 +277,18 @@ class Toonitalia : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // ============================= Utilities ==============================
-    private fun bypassUprot(url: String): String? =
-        client.newCall(GET(url, headers)).execute()
-            .asJsoup()
-            .selectFirst("a:has(button.button.is-info)")
-            ?.attr("href")
+    private fun bypassUprot(url: String): String {
+        val page = client.newCall(GET(url, headers)).execute().body.string()
+        Regex("""<a[^>]+href="([^"]+)".*Continue""").findAll(page)
+            .map { it.groupValues[1] }
+            .toList()
+            .forEach { link ->
+                if (link.contains("https://maxstream.video") || link.contains("https://uprot.net") || link.contains("https://streamtape") || link.contains("https://voe") && link != url) {
+                    return link
+                }
+            }
+        return "something went wrong"
+    }
 
     companion object {
         private const val PREF_QUALITY_KEY = "preferred_quality"
