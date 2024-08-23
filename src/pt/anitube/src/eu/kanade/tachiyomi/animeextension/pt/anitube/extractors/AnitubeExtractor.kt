@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.pt.anitube.extractors
 
+import android.content.SharedPreferences
 import android.util.Log
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
@@ -9,35 +10,83 @@ import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Response
-import java.util.Calendar
-import java.util.Date
 
-class AnitubeExtractor(private val headers: Headers, private val client: OkHttpClient) {
+class AnitubeExtractor(
+    private val headers: Headers,
+    private val client: OkHttpClient,
+    private val preferences: SharedPreferences,
+) {
 
-    private var authCodeCache: String = ""
-    private var authCodeDate: Date = Calendar.getInstance().getTime()
+    private fun getAdsUrl(
+        serverUrl: String,
+        thumbUrl: String,
+        link: String,
+        linkHeaders: Headers,
+    ): String {
+        val videoName = serverUrl.split('/').last()
 
-    private fun getAuthCode(serverUrl: String, thumbUrl: String): String {
-        val duration = Calendar.getInstance().getTime().time - authCodeDate.time
+        val docLink = client.newCall(GET(link, headers = linkHeaders)).execute().asJsoup()
 
-        // check the authCode in cache for 1 hour
-        if (authCodeCache.isNotBlank() && duration < 60 * 60 * 1000) {
-            Log.d("AnitubeExtractor", "Using authCode from cache")
-            return authCodeCache
+        val refresh = docLink.selectFirst("meta[http-equiv=refresh]")?.attr("content")
+
+        if (!refresh.isNullOrBlank()) {
+            val newLink = refresh.substringAfter("=")
+            val newHeaders = linkHeaders.newBuilder().set("Referer", link).build()
+            Log.d("AnitubeExtractor", "Following link redirection to $newLink")
+
+            return getAdsUrl(serverUrl, thumbUrl, newLink, newHeaders)
+        }
+
+        Log.d("AnitubeExtractor", "Fetching ADS URL")
+
+        val newHeaders = linkHeaders.newBuilder().set("Referer", link).build()
+
+        try {
+            val adsUrl =
+                client.newCall(
+                    GET(
+                        "$SITE_URL/playerricas.php?name=apphd/$videoName&img=$thumbUrl&url=$serverUrl",
+                        headers = newHeaders,
+                    ),
+                )
+                    .execute()
+                    .body.string()
+                    .substringAfter("ADS_URL")
+                    .substringAfter('"')
+                    .substringBefore('"')
+
+            if (adsUrl.startsWith("http")) {
+                Log.d("AnitubeExtractor", "ADS URL: $adsUrl")
+                return adsUrl
+            }
+        } catch (e: Exception) {
+        }
+
+        // Try default url
+        Log.e("AnitubeExtractor", "Failed to get the ADS URL, trying the default")
+        return "https://www.popads.net/js/adblock.js"
+    }
+
+    private fun getAuthCode(serverUrl: String, thumbUrl: String, link: String): String {
+        var authCode = preferences.getString(PREF_AUTHCODE_KEY, "")!!
+
+        if (authCode.isNotBlank()) {
+            Log.d("AnitubeExtractor", "AuthCode found in preferences")
+
+            val isSuccessful = client.newCall(GET("${serverUrl}$authCode", headers = headers))
+                .execute().isSuccessful
+
+            if (isSuccessful) {
+                Log.d("AnitubeExtractor", "AuthCode is OK")
+                return authCode
+            }
+            Log.d("AnitubeExtractor", "AuthCode is invalid")
         }
 
         Log.d("AnitubeExtractor", "Fetching new authCode")
-        val videoName = serverUrl.split('/').last()
 
-        val adsUrl =
-            client.newCall(GET("$SITE_URL/playerricas.php?name=apphd/$videoName&img=$thumbUrl&url=$serverUrl"))
-                .execute()
-                .body.string()
-                .substringAfter("ADS_URL")
-                .substringAfter('"')
-                .substringBefore('"')
+        val adsUrl = getAdsUrl(serverUrl, thumbUrl, link, headers)
 
-        Log.d("AnitubeExtractor", "ADS URL: $adsUrl")
         val adsContent = client.newCall(GET(adsUrl)).execute().body.string()
 
         val body = FormBody.Builder()
@@ -66,11 +115,15 @@ class AnitubeExtractor(private val headers: Headers, private val client: OkHttpC
                 .substringBefore('"')
 
         if (publicidade.isBlank()) {
-            Log.e("AnitubeExtractor", "Failed to fetch \"publicidade\" code")
-            return ""
+            Log.e(
+                "AnitubeExtractor",
+                "Failed to fetch \"publicidade\" code, the current response: $publicidade",
+            )
+
+            throw Exception("Por favor, abra o vídeo uma vez no navegador para liberar o IP")
         }
 
-        authCodeCache =
+        authCode =
             client.newCall(
                 GET(
                     "$ADS_URL/?token=$publicidade",
@@ -83,13 +136,17 @@ class AnitubeExtractor(private val headers: Headers, private val client: OkHttpC
                 .substringAfter('"')
                 .substringBefore('"')
 
-        if (authCodeCache.isBlank()) {
-            Log.e("AnitubeExtractor", "Failed to fetch auth code")
-        } else {
+        if (authCode.startsWith("?")) {
             Log.d("AnitubeExtractor", "Auth code fetched successfully")
+            preferences.edit().putString(PREF_AUTHCODE_KEY, authCode).commit()
+        } else {
+            Log.e(
+                "AnitubeExtractor",
+                "Failed to fetch auth code, the current response: $authCode",
+            )
         }
 
-        return authCodeCache
+        return authCode
     }
 
     fun getVideoList(response: Response): List<Video> {
@@ -110,7 +167,9 @@ class AnitubeExtractor(private val headers: Headers, private val client: OkHttpC
             }
         } + listOf("appfullhd")
 
-        val authCode = getAuthCode(serverUrl, thumbUrl)
+        val firstLink = doc.selectFirst("div.video_container > a, div.playerContainer > a")!!.attr("href")
+
+        val authCode = getAuthCode(serverUrl, thumbUrl, firstLink)
 
         return qualities.mapIndexed { index, quality ->
             val path = paths[index]
@@ -120,7 +179,8 @@ class AnitubeExtractor(private val headers: Headers, private val client: OkHttpC
     }
 
     companion object {
-        val ADS_URL = "https://ads.anitube.vip"
-        val SITE_URL = "https://www.anitube.vip"
+        private const val PREF_AUTHCODE_KEY = "authcode"
+        private const val ADS_URL = "https://ads.anitube.vip"
+        private const val SITE_URL = "https://www.anitube.vip"
     }
 }
