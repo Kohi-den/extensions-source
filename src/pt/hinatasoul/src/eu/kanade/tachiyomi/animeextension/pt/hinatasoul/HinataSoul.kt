@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.animeextension.pt.hinatasoul
 
 import android.app.Application
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animeextension.pt.hinatasoul.extractors.HinataSoulExtractor
@@ -162,7 +163,7 @@ class HinataSoul : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // ============================ Video Links =============================
-    private val extractor by lazy { HinataSoulExtractor(headers, client) }
+    private val extractor by lazy { HinataSoulExtractor(headers, client, preferences) }
 
     override fun videoListParse(response: Response) = extractor.getVideoList(response)
 
@@ -184,6 +185,21 @@ class HinataSoul : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 val index = findIndexOfValue(selected)
                 val entry = entryValues[index] as String
                 preferences.edit().putString(key, entry).commit()
+            }
+        }.also(screen::addPreference)
+
+        // Auth Code
+        EditTextPreference(screen.context).apply {
+            key = PREF_AUTHCODE_KEY
+            title = "Auth Code"
+            setDefaultValue(PREF_AUTHCODE_DEFAULT)
+            summary = PREF_AUTHCODE_SUMMARY
+
+            setOnPreferenceChangeListener { _, newValue ->
+                runCatching {
+                    val value = (newValue as String).trim().ifBlank { PREF_AUTHCODE_DEFAULT }
+                    preferences.edit().putString(key, value).commit()
+                }.getOrDefault(false)
             }
         }.also(screen::addPreference)
     }
@@ -241,6 +257,9 @@ class HinataSoul : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
         const val PREFIX_SEARCH = "slug:"
 
+        private const val PREF_AUTHCODE_KEY = "authcode"
+        private const val PREF_AUTHCODE_SUMMARY = "Código de Autenticação"
+        private const val PREF_AUTHCODE_DEFAULT = ""
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_TITLE = "Qualidade preferida"
         private const val PREF_QUALITY_DEFAULT = "FULLHD"

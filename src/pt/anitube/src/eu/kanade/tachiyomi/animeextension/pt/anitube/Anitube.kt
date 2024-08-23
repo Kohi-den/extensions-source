@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.animeextension.pt.anitube
 
 import android.app.Application
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animeextension.pt.anitube.extractors.AnitubeExtractor
@@ -188,7 +189,7 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // ============================ Video Links =============================
-    private val extractor by lazy { AnitubeExtractor(headers, client) }
+    private val extractor by lazy { AnitubeExtractor(headers, client, preferences) }
 
     override fun videoListParse(response: Response) = extractor.getVideoList(response)
     override fun videoListSelector() = throw UnsupportedOperationException()
@@ -210,7 +211,22 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 val entry = entryValues[index] as String
                 preferences.edit().putString(key, entry).commit()
             }
-        }.let(screen::addPreference)
+        }.also(screen::addPreference)
+
+        // Auth Code
+        EditTextPreference(screen.context).apply {
+            key = PREF_AUTHCODE_KEY
+            title = "Auth Code"
+            setDefaultValue(PREF_AUTHCODE_DEFAULT)
+            summary = PREF_AUTHCODE_SUMMARY
+
+            setOnPreferenceChangeListener { _, newValue ->
+                runCatching {
+                    val value = (newValue as String).trim().ifBlank { PREF_AUTHCODE_DEFAULT }
+                    preferences.edit().putString(key, value).commit()
+                }.getOrDefault(false)
+            }
+        }.also(screen::addPreference)
     }
 
     // ============================= Utilities ==============================
@@ -264,6 +280,9 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
         private const val ACCEPT_LANGUAGE = "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
 
+        private const val PREF_AUTHCODE_KEY = "authcode"
+        private const val PREF_AUTHCODE_SUMMARY = "Código de Autenticação"
+        private const val PREF_AUTHCODE_DEFAULT = ""
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_TITLE = "Qualidade preferida"
         private const val PREF_QUALITY_DEFAULT = "HD"
