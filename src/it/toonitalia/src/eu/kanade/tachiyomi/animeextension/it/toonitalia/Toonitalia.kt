@@ -29,7 +29,7 @@ class Toonitalia : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "Toonitalia"
 
-    override val baseUrl = "https://toonitalia.green"
+    override val baseUrl = "https://toonitalia.xyz"
 
     override val lang = "it"
 
@@ -189,6 +189,7 @@ class Toonitalia : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     private val voeExtractor by lazy { VoeExtractor(client) }
+    private val StreamWishExtractor by lazy { StreamWishExtractor(client) }
     private val streamZExtractor by lazy { StreamZExtractor(client) }
     private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
     private val maxStreamExtractor by lazy { MaxStreamExtractor(client, headers) }
@@ -196,6 +197,7 @@ class Toonitalia : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private fun extractVideos(url: String): List<Video> =
         when {
             "https://voe.sx" in url -> voeExtractor.videosFromUrl(url)
+            "https://StreamWish" in url -> StreamWishExtractor.videosFromUrl(url)
             "https://streamtape" in url -> streamTapeExtractor.videoFromUrl(url)?.let(::listOf)
             "https://maxstream" in url -> maxStreamExtractor.videosFromUrl(url)
             "https://streamz" in url || "streamz.cc" in url -> {
@@ -283,7 +285,7 @@ class Toonitalia : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             .map { it.groupValues[1] }
             .toList()
             .forEach { link ->
-                if (link.contains("https://maxstream.video") || link.contains("https://uprot.net") || link.contains("https://streamtape") || link.contains("https://voe") && link != url) {
+                if (link.contains("https://maxstream.video") || link.contains("https://uprot.net") || link.contains("https://streamtape") || link.contains("https://voe") || link.contains("https://streamwish") && link != url) {
                     return link
                 }
             }
