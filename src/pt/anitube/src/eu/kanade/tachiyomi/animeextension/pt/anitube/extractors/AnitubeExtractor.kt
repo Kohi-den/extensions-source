@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.util.asJsoup
 import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.Response
 
 class AnitubeExtractor(
@@ -16,6 +17,8 @@ class AnitubeExtractor(
     private val client: OkHttpClient,
     private val preferences: SharedPreferences,
 ) {
+
+    private val tag by lazy { javaClass.simpleName }
 
     private fun getAdsUrl(
         serverUrl: String,
@@ -25,45 +28,53 @@ class AnitubeExtractor(
     ): String {
         val videoName = serverUrl.split('/').last()
 
-        val docLink = client.newCall(GET(link, headers = linkHeaders)).execute().asJsoup()
+        Log.d(tag, "Accessing the link $link")
+        val response = client.newCall(GET(link, headers = linkHeaders)).execute()
+        val docLink = response.asJsoup()
 
         val refresh = docLink.selectFirst("meta[http-equiv=refresh]")?.attr("content")
 
         if (!refresh.isNullOrBlank()) {
             val newLink = refresh.substringAfter("=")
             val newHeaders = linkHeaders.newBuilder().set("Referer", link).build()
-            Log.d("AnitubeExtractor", "Following link redirection to $newLink")
+            Log.d(tag, "Following link redirection to $newLink")
 
             return getAdsUrl(serverUrl, thumbUrl, newLink, newHeaders)
         }
 
-        Log.d("AnitubeExtractor", "Fetching ADS URL")
+        val referer: String = docLink.location() ?: link
 
-        val newHeaders = linkHeaders.newBuilder().set("Referer", link).build()
+        Log.d(tag, "Final URL: $referer")
+        Log.d(tag, "Fetching ADS URL")
+
+        val newHeaders = linkHeaders.newBuilder().set("Referer", referer).build()
 
         try {
+            val now = System.currentTimeMillis()
             val adsUrl =
                 client.newCall(
                     GET(
-                        "$SITE_URL/playerricas.php?name=apphd/$videoName&img=$thumbUrl&url=$serverUrl",
+                        "$SITE_URL/playerricas.php?name=apphd/$videoName&img=$thumbUrl&pais=pais=BR&time=$now&url=$serverUrl",
                         headers = newHeaders,
                     ),
                 )
                     .execute()
                     .body.string()
-                    .substringAfter("ADS_URL")
-                    .substringAfter('"')
-                    .substringBefore('"')
+                    .let {
+                        Regex("""ADS_URL\s*=\s*['"]([^'"]+)['"]""")
+                            .find(it)?.groups?.get(1)?.value
+                            ?: ""
+                    }
 
             if (adsUrl.startsWith("http")) {
-                Log.d("AnitubeExtractor", "ADS URL: $adsUrl")
+                Log.d(tag, "ADS URL: $adsUrl")
                 return adsUrl
             }
         } catch (e: Exception) {
         }
 
         // Try default url
-        Log.e("AnitubeExtractor", "Failed to get the ADS URL, trying the default")
+        Log.e(tag, "Failed to get the ADS URL, trying the default")
         return "https://www.popads.net/js/adblock.js"
     }
 
@@ -71,19 +82,24 @@ class AnitubeExtractor(
         var authCode = preferences.getString(PREF_AUTHCODE_KEY, "")!!
 
         if (authCode.isNotBlank()) {
-            Log.d("AnitubeExtractor", "AuthCode found in preferences")
+            Log.d(tag, "AuthCode found in preferences")
 
-            val isSuccessful = client.newCall(GET("${serverUrl}$authCode", headers = headers))
-                .execute().isSuccessful
+            val request = Request.Builder()
+                .head()
+                .url("${serverUrl}$authCode")
+                .headers(headers)
+                .build()
 
-            if (isSuccessful) {
-                Log.d("AnitubeExtractor", "AuthCode is OK")
+            val response = client.newCall(request).execute()
+
+            if (response.isSuccessful || response.code == 500) {
+                Log.d(tag, "AuthCode is OK")
                 return authCode
             }
-            Log.d("AnitubeExtractor", "AuthCode is invalid")
+            Log.d(tag, "AuthCode is invalid")
         }
 
-        Log.d("AnitubeExtractor", "Fetching new authCode")
+        Log.d(tag, "Fetching new authCode")
 
         val adsUrl = getAdsUrl(serverUrl, thumbUrl, link, headers)
 
@@ -116,7 +132,7 @@ class AnitubeExtractor(
 
         if (publicidade.isBlank()) {
             Log.e(
-                "AnitubeExtractor",
+                tag,
                 "Failed to fetch \"publicidade\" code, the current response: $publicidade",
             )
 
@@ -137,11 +153,11 @@ class AnitubeExtractor(
                 .substringBefore('"')
 
         if (authCode.startsWith("?")) {
-            Log.d("AnitubeExtractor", "Auth code fetched successfully")
+            Log.d(tag, "Auth code fetched successfully")
             preferences.edit().putString(PREF_AUTHCODE_KEY, authCode).commit()
         } else {
             Log.e(
-                "AnitubeExtractor",
+                tag,
                 "Failed to fetch auth code, the current response: $authCode",
             )
         }
@@ -167,7 +183,8 @@ class AnitubeExtractor(
             }
         } + listOf("appfullhd")
 
-        val firstLink = doc.selectFirst("div.video_container > a, div.playerContainer > a")!!.attr("href")
+        val firstLink =
+            doc.selectFirst("div.video_container > a, div.playerContainer > a")!!.attr("href")
 
         val authCode = getAuthCode(serverUrl, thumbUrl, firstLink)
 
