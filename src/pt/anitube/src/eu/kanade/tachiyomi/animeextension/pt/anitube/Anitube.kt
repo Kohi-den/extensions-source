@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
+import eu.kanade.tachiyomi.animeextension.pt.anitube.extractors.AnitubeDownloadExtractor
 import eu.kanade.tachiyomi.animeextension.pt.anitube.extractors.AnitubeExtractor
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -15,6 +16,7 @@ import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.util.asJsoup
+import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
@@ -189,9 +191,29 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // ============================ Video Links =============================
-    private val extractor by lazy { AnitubeExtractor(headers, client, preferences) }
+    private val anitubeExtractor by lazy { AnitubeExtractor(headers, client, preferences) }
+    private val downloadExtractor by lazy { AnitubeDownloadExtractor(headers, client) }
 
-    override fun videoListParse(response: Response) = extractor.getVideoList(response)
+    override fun videoListParse(response: Response): List<Video> {
+        val document = response.asJsoup()
+
+        val links = mutableListOf(document.location())
+
+        document.selectFirst("div.abaItemDown > a")?.attr("href")?.let {
+            links.add(it)
+        }
+
+        val epName = document.selectFirst("meta[itemprop=name]")!!.attr("content")
+
+        return links.parallelCatchingFlatMapBlocking {
+            when {
+                it.contains("/download/") -> downloadExtractor.videosFromUrl(it, epName)
+                it.contains("file4go.net") -> downloadExtractor.videosFromUrl(it, epName)
+                else -> anitubeExtractor.getVideoList(document)
+            }
+        }
+    }
+
     override fun videoListSelector() = throw UnsupportedOperationException()
     override fun videoFromElement(element: Element) = throw UnsupportedOperationException()
     override fun videoUrlParse(document: Document) = throw UnsupportedOperationException()
@@ -264,8 +286,11 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun List<Video>.sort(): List<Video> {
         val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
         return sortedWith(
-            compareByDescending { it.quality.equals(quality) },
-        )
+            compareBy<Video>(
+                { it.quality.startsWith(quality) },
+                { PREF_QUALITY_ENTRIES.indexOf(it.quality.substringBefore(" ")) },
+            ).thenByDescending { it.quality },
+        ).reversed()
     }
 
     private fun String.toDate(): Long {

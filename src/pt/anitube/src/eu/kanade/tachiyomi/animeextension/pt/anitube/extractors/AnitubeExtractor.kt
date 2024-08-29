@@ -6,11 +6,14 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.asJsoup
+import eu.kanade.tachiyomi.util.parallelMapNotNullBlocking
 import okhttp3.FormBody
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
+import org.jsoup.nodes.Document
+import java.net.ProtocolException
 
 class AnitubeExtractor(
     private val headers: Headers,
@@ -20,6 +23,32 @@ class AnitubeExtractor(
 
     private val tag by lazy { javaClass.simpleName }
 
+    private data class VideoExists(
+        val exists: Boolean,
+        val code: Int,
+    )
+
+    private fun checkVideoExists(url: String): VideoExists {
+        try {
+            val request = Request.Builder()
+                .head()
+                .url(url)
+                .headers(headers)
+                .build()
+
+            val response = client.newCall(request).execute()
+
+            return VideoExists(response.isSuccessful, response.code)
+        } catch (e: ProtocolException) {
+            // There are a bug in the response that sometimes that the content is without headers
+            if (e.message?.contains("Unexpected status line") == true) {
+                return VideoExists(true, 200)
+            }
+        }
+
+        return VideoExists(false, 404)
+    }
+
     private fun getAdsUrl(
         serverUrl: String,
         thumbUrl: String,
@@ -28,15 +57,21 @@ class AnitubeExtractor(
     ): String {
         val videoName = serverUrl.split('/').last()
 
-        Log.d(tag, "Accessing the link $link")
-        val response = client.newCall(GET(link, headers = linkHeaders)).execute()
+        val finalLink =
+            if (link.startsWith("//")) {
+                "https:$link"
+            } else {
+                link
+            }
+        Log.d(tag, "Accessing the link $finalLink")
+        val response = client.newCall(GET(finalLink, headers = linkHeaders)).execute()
         val docLink = response.asJsoup()
 
         val refresh = docLink.selectFirst("meta[http-equiv=refresh]")?.attr("content")
 
         if (!refresh.isNullOrBlank()) {
             val newLink = refresh.substringAfter("=")
-            val newHeaders = linkHeaders.newBuilder().set("Referer", link).build()
+            val newHeaders = linkHeaders.newBuilder().set("Referer", finalLink).build()
             Log.d(tag, "Following link redirection to $newLink")
 
             return getAdsUrl(serverUrl, thumbUrl, newLink, newHeaders)
@@ -47,30 +82,32 @@ class AnitubeExtractor(
         Log.d(tag, "Final URL: $referer")
         Log.d(tag, "Fetching ADS URL")
 
-        val newHeaders = linkHeaders.newBuilder().set("Referer", referer).build()
+        val newHeaders =
+            linkHeaders.newBuilder().set("Referer", "https://${referer.toHttpUrl().host}/").build()
 
         try {
             val now = System.currentTimeMillis()
-            val adsUrl =
-                client.newCall(
-                    GET(
-                        "$SITE_URL/playerricas.php?name=apphd/$videoName&img=$thumbUrl&pais=pais=BR&time=$now&url=$serverUrl",
-                        headers = newHeaders,
-                    ),
-                )
-                    .execute()
-                    .body.string()
-                    .let {
-                        Regex("""ADS_URL\s*=\s*['"]([^'"]+)['"]""")
-                            .find(it)?.groups?.get(1)?.value
-                            ?: ""
-                    }
+            val body = client.newCall(
+                GET(
+                    "$SITE_URL?name=apphd/$videoName&img=$thumbUrl&pais=pais=BR&time=$now&url=$serverUrl",
+                    headers = newHeaders,
+                ),
+            )
+                .execute()
+                .body.string()
+
+            val adsUrl = body.let {
+                Regex("""ADS_URL\s*=\s*['"]([^'"]+)['"]""")
+                    .find(it)?.groups?.get(1)?.value
+                    ?: ""
+            }
 
             if (adsUrl.startsWith("http")) {
                 Log.d(tag, "ADS URL: $adsUrl")
                 return adsUrl
             }
         } catch (e: Exception) {
+            Log.e(tag, e.toString())
         }
 
         // Try default url
@@ -84,15 +121,9 @@ class AnitubeExtractor(
         if (authCode.isNotBlank()) {
             Log.d(tag, "AuthCode found in preferences")
 
-            val request = Request.Builder()
-                .head()
-                .url("${serverUrl}$authCode")
-                .headers(headers)
-                .build()
+            val response = checkVideoExists("${serverUrl}$authCode")
 
-            val response = client.newCall(request).execute()
-
-            if (response.isSuccessful || response.code == 500) {
+            if (response.exists || response.code == 500) {
                 Log.d(tag, "AuthCode is OK")
                 return authCode
             }
@@ -112,7 +143,7 @@ class AnitubeExtractor(
             .build()
 
         val newHeaders = headers.newBuilder()
-            .set("Referer", SITE_URL)
+            .set("Referer", "https://${SITE_URL.toHttpUrl().host}/")
             .add("Accept", "*/*")
             .add("Cache-Control", "no-cache")
             .add("Pragma", "no-cache")
@@ -165,8 +196,7 @@ class AnitubeExtractor(
         return authCode
     }
 
-    fun getVideoList(response: Response): List<Video> {
-        val doc = response.asJsoup()
+    fun getVideoList(doc: Document): List<Video> {
         val hasFHD = doc.selectFirst("div.abaItem:contains(FULLHD)") != null
         val serverUrl = doc.selectFirst("meta[itemprop=contentURL]")!!
             .attr("content")
@@ -188,16 +218,27 @@ class AnitubeExtractor(
 
         val authCode = getAuthCode(serverUrl, thumbUrl, firstLink)
 
-        return qualities.mapIndexed { index, quality ->
-            val path = paths[index]
-            val url = serverUrl.replace(type, path) + authCode
-            Video(url, quality, url, headers = headers)
-        }.reversed()
+        return qualities
+            .mapIndexed { index, quality ->
+                object {
+                    var path = paths[index]
+                    var url = serverUrl.replace(type, path) + authCode
+                    var quality = "$quality - Anitube"
+                }
+            }
+            .parallelMapNotNullBlocking {
+                if (!checkVideoExists(it.url).exists) {
+                    Log.d(tag, "Video not exists: ${it.url.substringBefore("?")}")
+                    return@parallelMapNotNullBlocking null
+                }
+                Video(it.url, it.quality, it.url, headers = headers)
+            }
+            .reversed()
     }
 
     companion object {
         private const val PREF_AUTHCODE_KEY = "authcode"
         private const val ADS_URL = "https://ads.anitube.vip"
-        private const val SITE_URL = "https://www.anitube.vip"
+        private const val SITE_URL = "https://www.anitube.vip/playerricas.php"
     }
 }

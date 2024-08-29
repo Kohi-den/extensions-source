@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
+import eu.kanade.tachiyomi.animeextension.pt.hinatasoul.extractors.HinataSoulDownloadExtractor
 import eu.kanade.tachiyomi.animeextension.pt.hinatasoul.extractors.HinataSoulExtractor
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -15,6 +16,7 @@ import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.util.asJsoup
+import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -67,7 +69,11 @@ class HinataSoul : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun latestUpdatesNextPageSelector() = null
 
     // =============================== Search ===============================
-    override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
+    override suspend fun getSearchAnime(
+        page: Int,
+        query: String,
+        filters: AnimeFilterList,
+    ): AnimesPage {
         return if (query.startsWith(PREFIX_SEARCH)) {
             val slug = query.removePrefix(PREFIX_SEARCH)
             client.newCall(GET("$baseUrl/animes/$slug"))
@@ -156,16 +162,47 @@ class HinataSoul : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val title = element.attr("title")
         setUrlWithoutDomain(element.attr("href"))
         name = title
-        episode_number = title.substringBeforeLast(" - FINAL").substringAfterLast(" ").toFloatOrNull() ?: 0F
+        episode_number =
+            title.substringBeforeLast(" - FINAL").substringAfterLast(" ").toFloatOrNull() ?: 0F
         date_upload = element.selectFirst("div.lancaster_episodio_info_data")!!
             .text()
             .toDate()
     }
 
     // ============================ Video Links =============================
-    private val extractor by lazy { HinataSoulExtractor(headers, client, preferences) }
+    private val hinataExtractor by lazy { HinataSoulExtractor(headers, client, preferences) }
+    private val downloadExtractor by lazy { HinataSoulDownloadExtractor(headers, client) }
 
-    override fun videoListParse(response: Response) = extractor.getVideoList(response)
+    override fun videoListParse(response: Response): List<Video> {
+        val document = response.asJsoup()
+
+        val links = mutableListOf(document.location())
+
+        val downloadsLinks = document.select("div.reportaBox .reportContent > a")
+
+        downloadsLinks.forEach {
+            it.attr("href")?.let {
+                links.add(it)
+            }
+        }
+
+        val epName = document.selectFirst("meta[itemprop=name]")!!.attr("content")
+
+        return links.parallelCatchingFlatMapBlocking { url ->
+            when {
+                url.contains("file4go.net") -> {
+                    val quality =
+                        downloadsLinks.first { it.attr("href") == url }
+                            .textNodes().first().toString()
+                            .trim().replace(" ", "")
+
+                    downloadExtractor.videosFromUrl(url, epName, quality)
+                }
+
+                else -> hinataExtractor.getVideoList(document)
+            }
+        }
+    }
 
     override fun videoListSelector() = throw UnsupportedOperationException()
     override fun videoFromElement(element: Element) = throw UnsupportedOperationException()
@@ -246,7 +283,10 @@ class HinataSoul : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun List<Video>.sort(): List<Video> {
         val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
         return sortedWith(
-            compareBy { it.quality.contains(quality) },
+            compareBy<Video>(
+                { it.quality.startsWith(quality) },
+                { PREF_QUALITY_VALUES.indexOf(it.quality.substringBefore(" ")) },
+            ).thenByDescending { it.quality },
         ).reversed()
     }
 
