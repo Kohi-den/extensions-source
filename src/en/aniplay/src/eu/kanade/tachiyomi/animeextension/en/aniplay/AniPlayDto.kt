@@ -12,7 +12,7 @@ data class EpisodeListResponse(
     @Serializable
     data class Episode(
         val id: String,
-        val number: Int,
+        val number: Float,
         val title: String,
         val hasDub: Boolean,
         val isFiller: Boolean,

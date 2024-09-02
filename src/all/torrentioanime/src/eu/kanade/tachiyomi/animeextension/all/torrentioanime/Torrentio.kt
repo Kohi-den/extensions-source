@@ -29,9 +29,11 @@ import kotlinx.serialization.json.Json
 import okhttp3.FormBody
 import okhttp3.Request
 import okhttp3.Response
+import org.json.JSONObject
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -358,7 +360,9 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
 
     // ============================== Episodes ==============================
     override fun episodeListRequest(anime: SAnime): Request {
-        return GET("https://anime-kitsu.strem.fun/meta/series/anilist%3A${anime.url}.json")
+        val res = URL("https://api.ani.zip/mappings?anilist_id=${anime.url}").readText()
+        val kitsuId = JSONObject(res).getJSONObject("mappings").getInt("kitsu_id").toString()
+        return GET("https://anime-kitsu.strem.fun/meta/series/kitsu%3A$kitsuId.json")
     }
 
     override fun episodeListParse(response: Response): List<SEpisode> {

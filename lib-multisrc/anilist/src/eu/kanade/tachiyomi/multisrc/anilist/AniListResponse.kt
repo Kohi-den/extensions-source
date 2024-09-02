@@ -47,6 +47,9 @@ internal data class AniListMedia(
     enum class Status {
         RELEASING,
         FINISHED,
+        NOT_YET_RELEASED,
+        CANCELLED,
+        HIATUS,
     }
 
     @Serializable

@@ -61,7 +61,7 @@ class AnimesGames : ParsedAnimeHttpSource() {
     override fun latestUpdatesFromElement(element: Element) = SAnime.create().apply {
         setUrlWithoutDomain(element.attr("href"))
         title = element.selectFirst("div.tituloEP")!!.text()
-        thumbnail_url = element.selectFirst("img")?.attr("data-lazy-src")
+        thumbnail_url = element.selectFirst("img")?.getImageUrl()
     }
 
     override fun latestUpdatesNextPageSelector() = "ol.pagination > a:contains(>)"
@@ -144,7 +144,7 @@ class AnimesGames : ParsedAnimeHttpSource() {
     override fun searchAnimeFromElement(element: Element) = SAnime.create().apply {
         setUrlWithoutDomain(element.attr("href"))
         title = element.selectFirst("div.tituloAnime")!!.text()
-        thumbnail_url = element.selectFirst("img")!!.attr("src")
+        thumbnail_url = element.selectFirst("img")!!.getImageUrl()
     }
 
     override fun searchAnimeNextPageSelector(): String? {
@@ -159,7 +159,7 @@ class AnimesGames : ParsedAnimeHttpSource() {
         title = content.selectFirst("section > h1")!!.text()
             .removePrefix("Assistir ")
             .removeSuffix("Temporada Online")
-        thumbnail_url = content.selectFirst("img")?.attr("data-lazy-src")
+        thumbnail_url = content.selectFirst("img")?.getImageUrl()
         description = content.select("section.sinopseEp p").eachText().joinToString("\n")
 
         val infos = content.selectFirst("div.info > ol")!!
@@ -271,6 +271,19 @@ class AnimesGames : ParsedAnimeHttpSource() {
     private fun String.toDate(): Long {
         return runCatching { DATE_FORMATTER.parse(trim())?.time }
             .getOrNull() ?: 0L
+    }
+
+    /**
+     * Tries to get the image url via various possible attributes.
+     * Taken from Tachiyomi's Madara multisrc.
+     */
+    protected open fun Element.getImageUrl(): String? {
+        return when {
+            hasAttr("data-src") -> attr("abs:data-src")
+            hasAttr("data-lazy-src") -> attr("abs:data-lazy-src")
+            hasAttr("srcset") -> attr("abs:srcset").substringBefore(" ")
+            else -> attr("abs:src")
+        }.substringBefore("?resize")
     }
 
     companion object {
