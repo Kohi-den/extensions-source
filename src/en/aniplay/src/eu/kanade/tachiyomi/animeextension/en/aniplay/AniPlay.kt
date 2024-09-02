@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.en.aniplay
 
 import android.app.Application
 import android.util.Base64
+import android.util.Log
 import android.widget.Toast
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
@@ -17,6 +18,7 @@ import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.parallelFlatMapBlocking
 import eu.kanade.tachiyomi.util.parseAs
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -25,6 +27,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -83,26 +86,26 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
         providers.forEach { provider ->
             provider.episodes.forEach { episode ->
-                if (!episodes.containsKey(episode.number)) {
-                    episodes[episode.number] = episode
+                val episodeNumber = episode.number.toString().toIntOrNull() ?: episode.number.toInt()
+                if (!episodes.containsKey(episodeNumber)) {
+                    episodes[episodeNumber] = episode
                 }
-                val existingEpisodeExtras = episodeExtras.getOrElse(episode.number) { emptyList() }
+                val existingEpisodeExtras = episodeExtras.getOrElse(episodeNumber) { emptyList() }
                 val episodeExtra = EpisodeExtra(
                     source = provider.providerId,
                     episodeId = episode.id,
                     hasDub = episode.hasDub,
                 )
-                episodeExtras[episode.number] = existingEpisodeExtras + listOf(episodeExtra)
+                episodeExtras[episodeNumber] = existingEpisodeExtras + listOf(episodeExtra)
             }
         }
 
         return episodes.map { episodeMap ->
             val episode = episodeMap.value
-            val episodeNumber = episode.number
+            val episodeNumber = episodeMap.key
             val episodeExtra = episodeExtras.getValue(episodeNumber)
             val episodeExtraString = json.encodeToString(episodeExtra)
-                .let { Base64.encode(it.toByteArray(), Base64.DEFAULT) }
-                .toString(Charsets.UTF_8)
+                .let { Base64.encodeToString(it.toByteArray(), Base64.DEFAULT) }
 
             val url = baseUrl.toHttpUrl().newBuilder()
                 .addPathSegment("anime")
@@ -112,7 +115,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 .addQueryParameter("extras", episodeExtraString)
                 .build()
 
-            val name = parseEpisodeName(episodeNumber, episode.title)
+            val name = parseEpisodeName(episodeNumber.toString(), episode.title)
             val uploadDate = parseDate(episode.createdAt)
             val dub = when {
                 episodeExtra.any { it.hasDub } -> ", Dub"
@@ -142,45 +145,57 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         val episodeNum = episodeUrl.queryParameter("ep") ?: return emptyList()
         val extras = episodeUrl.queryParameter("extras")
             ?.let {
-                Base64.decode(it, Base64.DEFAULT).toString(Charsets.UTF_8)
+                try {
+                    Base64.decode(it, Base64.DEFAULT).toString(Charsets.UTF_8)
+                } catch (e: IllegalArgumentException) {
+                    Log.e("AniPlay", "Error decoding base64", e)
+                    return emptyList()
+                }
             }
-            ?.let { json.decodeFromString<List<EpisodeExtra>>(it) }
+            ?.let {
+                try {
+                    json.decodeFromString<List<EpisodeExtra>>(it)
+                } catch (e: SerializationException) {
+                    Log.e("AniPlay", "Error parsing JSON", e)
+                    emptyList()
+                }
+            }
             ?: emptyList()
 
         val episodeDataList = extras.parallelFlatMapBlocking { extra ->
-            val languages = mutableListOf("sub")
-            if (extra.hasDub) {
-                languages.add("dub")
+            val languages = mutableListOf("sub").apply {
+                if (extra.hasDub) add("dub")
             }
             val url = "$baseUrl/api/anime/source/$animeId"
 
             languages.map { language ->
-                val requestBody = json
-                    .encodeToString(
-                        VideoSourceRequest(
-                            source = extra.source,
-                            episodeId = extra.episodeId,
-                            episodeNum = episodeNum,
-                            subType = language,
-                        ),
+                val requestBody = json.encodeToString(
+                    VideoSourceRequest(
+                        source = extra.source,
+                        episodeId = extra.episodeId,
+                        episodeNum = episodeNum,
+                        subType = language,
+                    ),
+                ).toRequestBody("application/json".toMediaType())
+
+                try {
+                    val response = client.newCall(POST(url = url, body = requestBody)).execute().parseAs<VideoSourceResponse>()
+
+                    EpisodeData(
+                        source = extra.source,
+                        language = language,
+                        response = response,
                     )
-                    .toRequestBody("application/json".toMediaType())
-
-                val response = client
-                    .newCall(POST(url = url, body = requestBody))
-                    .execute()
-                    .parseAs<VideoSourceResponse>()
-
-                EpisodeData(
-                    source = extra.source,
-                    language = language,
-                    response = response,
-                )
-            }
+                } catch (e: IOException) {
+                    null // Return null to be filtered out
+                } catch (e: Exception) {
+                    null // Return null to be filtered out
+                }
+            }.filterNotNull() // Filter out null values due to errors
         }
 
         val videos = episodeDataList.flatMap { episodeData ->
-            val defaultSource = episodeData.response.sources?.first {
+            val defaultSource = episodeData.response.sources?.firstOrNull {
                 it.quality in listOf("default", "auto")
             } ?: return@flatMap emptyList()
 
@@ -316,14 +331,13 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     /* =================================== AniPlay Utilities =================================== */
-
-    private fun parseEpisodeName(number: Int, name: String): String {
-        return when {
-            listOf("EP ", "EPISODE ").any(name::startsWith) -> "Episode $number"
-            else -> "Episode $number: $name"
+    private fun parseEpisodeName(number: String, title: String?): String {
+        return if (title.isNullOrBlank()) {
+            "Episode $number"
+        } else {
+            "Episode $number: $title"
         }
     }
-
     private fun getServerName(value: String): String {
         val index = PREF_SERVER_ENTRY_VALUES.indexOf(value)
         return PREF_SERVER_ENTRIES[index]

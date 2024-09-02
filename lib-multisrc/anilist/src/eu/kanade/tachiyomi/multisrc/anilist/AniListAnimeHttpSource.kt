@@ -8,6 +8,10 @@ import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import okhttp3.FormBody
 import okhttp3.Request
 import okhttp3.Response
@@ -32,7 +36,7 @@ abstract class AniListAnimeHttpSource : AnimeHttpSource() {
             query = ANIME_LIST_QUERY,
             variables = AnimeListVariables(
                 page = page,
-                sort = AnimeListVariables.MediaSort.POPULARITY_DESC,
+                sort = AnimeListVariables.MediaSort.TRENDING_DESC,
             ),
         )
     }
@@ -58,19 +62,57 @@ abstract class AniListAnimeHttpSource : AnimeHttpSource() {
 
     /* ===================================== Search Anime ===================================== */
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        return buildAnimeListRequest(
-            query = ANIME_LIST_QUERY,
-            variables = AnimeListVariables(
-                page = page,
-                sort = AnimeListVariables.MediaSort.SEARCH_MATCH,
-                search = query.ifBlank { null },
-            ),
-        )
+        val params = AniListFilters.getSearchParameters(filters)
+
+        val variablesObject = buildJsonObject {
+            put("page", page)
+            put("perPage", 30)
+            put("isAdult", false)
+            put("type", "ANIME")
+            put("sort", params.sort)
+            if (query.isNotBlank()) put("search", query)
+
+            if (params.genres.isNotEmpty()) {
+                putJsonArray("genres") {
+                    params.genres.forEach { add(it) }
+                }
+            }
+
+            if (params.format.isNotEmpty()) {
+                putJsonArray("format") {
+                    params.format.forEach { add(it) }
+                }
+            }
+
+            if (params.season.isBlank() && params.year.isNotBlank()) {
+                put("year", "${params.year}%")
+            }
+
+            if (params.season.isNotBlank() && params.year.isBlank()) {
+                throw Exception("Year cannot be blank if season is set")
+            }
+
+            if (params.season.isNotBlank() && params.year.isNotBlank()) {
+                put("season", params.season)
+                put("seasonYear", params.year)
+            }
+
+            if (params.status.isNotBlank()) {
+                put("status", params.status)
+            }
+        }
+        val variables = json.encodeToString(variablesObject)
+
+        return buildRequest(query = SORT_QUERY, variables = variables)
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage {
         return parseAnimeListResponse(response)
     }
+
+    // ============================== Filters ===============================
+
+    override fun getFilterList(): AnimeFilterList = AniListFilters.FILTER_LIST
 
     /* ===================================== Anime Details ===================================== */
     override fun animeDetailsRequest(anime: SAnime): Request {
@@ -145,6 +187,9 @@ abstract class AniListAnimeHttpSource : AnimeHttpSource() {
             status = when (media.status) {
                 AniListMedia.Status.RELEASING -> SAnime.ONGOING
                 AniListMedia.Status.FINISHED -> SAnime.COMPLETED
+                AniListMedia.Status.NOT_YET_RELEASED -> SAnime.LICENSED
+                AniListMedia.Status.CANCELLED -> SAnime.CANCELLED
+                AniListMedia.Status.HIATUS -> SAnime.ON_HIATUS
             }
             thumbnail_url = media.coverImage.large
         }

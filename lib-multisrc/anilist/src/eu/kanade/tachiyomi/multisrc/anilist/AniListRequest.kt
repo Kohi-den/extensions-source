@@ -55,16 +55,76 @@ internal const val ANIME_DETAILS_QUERY = """
       }
     }
 """
+private fun String.toQuery() = this.trimIndent().replace("%", "$")
+internal val SORT_QUERY = """
+    query (
+        ${"$"}page: Int,
+        ${"$"}perPage: Int,
+        ${"$"}isAdult: Boolean,
+        ${"$"}type: MediaType,
+        ${"$"}sort: [MediaSort],
+        ${"$"}status: MediaStatus,
+        ${"$"}search: String,
+        ${"$"}genres: [String],
+        ${"$"}year: String,
+        ${"$"}seasonYear: Int,
+        ${"$"}season: MediaSeason,
+        ${"$"}format: [MediaFormat]
+    ) {
+        Page (page: ${"$"}page, perPage: ${"$"}perPage) {
+            pageInfo {
+                hasNextPage
+            }
+            media (
+                isAdult: ${"$"}isAdult,
+                type: ${"$"}type,
+                sort: ${"$"}sort,
+                status: ${"$"}status,
+                search: ${"$"}search,
+                genre_in: ${"$"}genres,
+                startDate_like: ${"$"}year,
+                seasonYear: ${"$"}seasonYear,
+                season: ${"$"}season,
+                format_in: ${"$"}format
+            ) {
+                id
+                title {
+                    romaji
+                    english
+                    native
+                }
+                coverImage {
+                    extraLarge
+                    large
+                    medium
+                }
+                status
+                genres
+                studios {
+                    nodes {
+                        name
+                    }
+                }
+            }
+        }
+    }
+""".toQuery()
 
 @Serializable
 internal data class AnimeListVariables(
     val page: Int,
     val sort: MediaSort,
     val search: String? = null,
+    val genre: String? = null,
+    val year: String? = null,
+    val status: String? = null,
+    val format: String? = null,
+    val season: String? = null,
+    val seasonYear: String? = null,
+    val isAdult: Boolean = false,
 ) {
     enum class MediaSort {
-        POPULARITY_DESC,
-        SEARCH_MATCH,
+        TRENDING_DESC,
         START_DATE_DESC,
     }
 }
