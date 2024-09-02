@@ -1,0 +1,8 @@
+ext {
+    extName = 'VeoHentai'
+    extClass = '.VeoHentai'
+    extVersionCode = 1
+    isNsfw = true
+}
+
+apply from: "$rootDir/common.gradle"
