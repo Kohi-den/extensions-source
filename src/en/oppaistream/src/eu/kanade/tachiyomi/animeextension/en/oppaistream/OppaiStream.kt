@@ -29,6 +29,7 @@ import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
+import java.net.URLEncoder.encode
 
 class OppaiStream : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
@@ -124,11 +125,7 @@ class OppaiStream : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     override fun searchAnimeFromElement(element: Element) = SAnime.create().apply {
         thumbnail_url = element.selectFirst("img.cover-img-in")?.attr("abs:src")
         title = element.selectFirst(".title-ep")!!.text().replace(TITLE_CLEANUP_REGEX, "")
-        setUrlWithoutDomain(
-            element.attr("href").replace(Regex("(?<=\\?e=)(.*?)(?=&f=)")) {
-                java.net.URLEncoder.encode(it.groupValues[1], "UTF-8")
-            },
-        )
+        setUrlWithoutDomain(element.attr("exur").fixLink())
     }
 
     // =========================== Anime Details ============================
@@ -159,35 +156,13 @@ class OppaiStream : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     // ============================== Episodes ==============================
     override fun episodeListParse(response: Response): List<SEpisode> {
         val doc = response.asJsoup()
-        return buildList {
-            doc.select(episodeListSelector())
-                .map(::episodeFromElement)
-                .let(::addAll)
-
-            add(
-                SEpisode.create().apply {
-                    setUrlWithoutDomain(
-                        doc.location().replace(Regex("(?<=\\?e=)(.*?)(?=&f=)")) {
-                            java.net.URLEncoder.encode(it.groupValues[1], "UTF-8")
-                        },
-                    )
-                    val num = doc.selectFirst("div.episode-info > h1")!!.text().substringAfter(" Ep ")
-                    name = "Episode $num"
-                    episode_number = num.toFloatOrNull() ?: 1F
-                    scanlator = doc.selectFirst("div.episode-info a.red")?.text()
-                },
-            )
-        }.sortedByDescending { it.episode_number }
+        return doc.select("div.more-same-eps .in-main-gr > a").map(::episodeFromElement).reversed()
     }
 
     override fun episodeListSelector() = "div.more-same-eps > div > div > a"
 
     override fun episodeFromElement(element: Element) = SEpisode.create().apply {
-        setUrlWithoutDomain(
-            element.attr("href").replace(Regex("(?<=\\?e=)(.*?)(?=&f=)")) {
-                java.net.URLEncoder.encode(it.groupValues[1], "UTF-8")
-            },
-        )
+        setUrlWithoutDomain(element.attr("exur").fixLink())
         val num = element.selectFirst("font.ep")?.text() ?: "1"
         name = "Episode $num"
         episode_number = num.toFloatOrNull() ?: 1F
@@ -198,7 +173,7 @@ class OppaiStream : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     override fun videoListParse(response: Response): List<Video> {
         val doc = response.asJsoup()
         val script = doc.selectFirst("script:containsData(var availableres)")!!.data()
-        val subtitles = doc.select("track[kind=captions]").map {
+        val subtitles = doc.select("track[kind=captions], track[kind=subtitles]").map {
             Track(it.attr("src"), it.attr("label"))
         }
 
@@ -226,9 +201,7 @@ class OppaiStream : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
         ).reversed()
     }
 
-    override fun videoUrlParse(document: Document): String {
-        throw UnsupportedOperationException()
-    }
+    override fun videoUrlParse(document: Document) = throw UnsupportedOperationException()
 
     // ============================== Settings ==============================
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
@@ -321,6 +294,9 @@ class OppaiStream : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
         return Pair(coverURL, studiosList)
     }
+
+    private fun String.fixLink(): String =
+        this.replace(Regex("(?<=\\?e=)(.*?)(?=&f=)")) { encode(it.groupValues[1], "UTF-8") }
 
     companion object {
         private const val SEARCH_PATH = "actions/search.php"
