@@ -1,7 +1,7 @@
 ext {
     extName = 'AllAnime'
     extClass = '.AllAnime'
-    extVersionCode = 31
+    extVersionCode = 32
 }
 
 apply from: "$rootDir/common.gradle"
@@ -12,5 +12,7 @@ dependencies {
     implementation(project(':lib:dood-extractor'))
     implementation(project(':lib:okru-extractor'))
     implementation(project(':lib:gogostream-extractor'))
+    implementation(project(':lib:filemoon-extractor'))
+    implementation(project(':lib:streamwish-extractor'))
     implementation "dev.datlag.jsunpacker:jsunpacker:1.0.1"
 }

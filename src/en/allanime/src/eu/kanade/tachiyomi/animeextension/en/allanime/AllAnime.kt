@@ -14,10 +14,12 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
+import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
 import eu.kanade.tachiyomi.lib.gogostreamextractor.GogoStreamExtractor
 import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
 import eu.kanade.tachiyomi.lib.streamlareextractor.StreamlareExtractor
+import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.await
@@ -271,6 +273,8 @@ class AllAnime : ConfigurableAnimeSource, AnimeHttpSource() {
     private val okruExtractor by lazy { OkruExtractor(client) }
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
     private val streamlareExtractor by lazy { StreamlareExtractor(client) }
+    private val filemoonExtractor by lazy { FilemoonExtractor(client) }
+    private val streamwishExtractor by lazy { StreamWishExtractor(client, headers) }
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
         val response = client.newCall(videoListRequest(episode)).await()
@@ -284,11 +288,13 @@ class AllAnime : ConfigurableAnimeSource, AnimeHttpSource() {
 
         // list of alternative hosters
         val mappings = listOf(
-            "vidstreaming" to listOf("vidstreaming", "https://gogo", "playgo1.cc", "playtaku"),
+            "vidstreaming" to listOf("vidstreaming", "https://gogo", "playgo1.cc", "playtaku", "vidcloud"),
             "doodstream" to listOf("dood"),
-            "okru" to listOf("ok.ru"),
+            "okru" to listOf("ok.ru", "okru"),
             "mp4upload" to listOf("mp4upload.com"),
             "streamlare" to listOf("streamlare.com"),
+            "filemoon" to listOf("filemoon", "moonplayer"),
+            "streamwish" to listOf("wish"),
         )
 
         videoJson.data.episode.sourceUrls.forEach { video ->
@@ -356,6 +362,12 @@ class AllAnime : ConfigurableAnimeSource, AnimeHttpSource() {
                     sName == "streamlare" -> {
                         streamlareExtractor.videosFromUrl(server.sourceUrl)
                     }
+                    sName == "filemoon" -> {
+                        filemoonExtractor.videosFromUrl(server.sourceUrl, prefix = "Filemoon:")
+                    }
+                    sName == "streamwish" -> {
+                        streamwishExtractor.videosFromUrl(server.sourceUrl, videoNameGen = { "StreamWish:$it" })
+                    }
                     else -> emptyList()
                 }.let { it.map { v -> Pair(v, server.priority) } }
             },
@@ -367,15 +379,13 @@ class AllAnime : ConfigurableAnimeSource, AnimeHttpSource() {
     // ============================= Utilities ==============================
 
     private fun String.decryptSource(): String {
-        return if (this.startsWith("-")) {
-            this.substringAfterLast('-').chunked(2)
-                .map { it.toInt(16).toByte() }
-                .toByteArray().map {
-                    (it.toInt() xor 56).toChar()
-                }.joinToString("")
-        } else {
-            this
-        }
+        if (!this.startsWith("-")) return this
+
+        return this.substringAfterLast('-').chunked(2)
+            .map { it.toInt(16).toByte() }
+            .toByteArray().map {
+                (it.toInt() xor 56).toChar()
+            }.joinToString("")
     }
 
     private fun prioritySort(pList: List<Pair<Video, Float>>): List<Video> {
@@ -466,6 +476,8 @@ class AllAnime : ConfigurableAnimeSource, AnimeHttpSource() {
             "mp4upload",
             "streamlare",
             "doodstream",
+            "filemoon",
+            "streamwish",
         )
 
         private const val PREF_SITE_DOMAIN_KEY = "preferred_site_domain"
