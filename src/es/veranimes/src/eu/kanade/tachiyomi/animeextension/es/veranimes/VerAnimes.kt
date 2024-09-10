@@ -6,7 +6,6 @@ import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animeextension.es.veranimes.extractors.VidGuardExtractor
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
-import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -64,10 +63,14 @@ class VerAnimes : ConfigurableAnimeSource, AnimeHttpSource() {
         val document = response.asJsoup()
         val animeDetails = SAnime.create().apply {
             title = document.selectFirst(".ti h1")?.text()?.trim() ?: ""
-            status = SAnime.UNKNOWN
             description = document.selectFirst(".r .tx p")?.text()
             genre = document.select(".gn li a").joinToString { it.text() }
             thumbnail_url = document.selectFirst(".info figure img")?.attr("abs:data-src")
+            status = when {
+                document.select(".em").any() -> SAnime.ONGOING
+                document.select(".fi").any() -> SAnime.COMPLETED
+                else -> SAnime.UNKNOWN
+            }
             document.select(".info .u:not(.sp) > li").map { it.text() }.map { textContent ->
                 when {
                     "Estudio" in textContent -> author = textContent.substringAfter("Estudio(s):").trim()
@@ -99,12 +102,11 @@ class VerAnimes : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun latestUpdatesRequest(page: Int) = GET("$baseUrl/animes?estado=en-emision&orden=desc&pag=$page", headers)
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        val filterList = if (filters.isEmpty()) getFilterList() else filters
-        val genreFilter = filterList.find { it is GenreFilter } as GenreFilter
+        val params = VerAnimesFilters.getSearchParameters(filters)
 
         return when {
             query.isNotBlank() -> GET("$baseUrl/animes?buscar=$query&pag=$page", headers)
-            genreFilter.state != 0 -> GET("$baseUrl/animes?genero=${genreFilter.toUriPart()}&orden=desc&pag=$page", headers)
+            params.filter.isNotBlank() -> GET("$baseUrl/animes${params.getQuery()}&pag=$page", headers)
             else -> popularAnimeRequest(page)
         }
     }
@@ -188,62 +190,7 @@ class VerAnimes : ConfigurableAnimeSource, AnimeHttpSource() {
         ).reversed()
     }
 
-    override fun getFilterList(): AnimeFilterList = AnimeFilterList(
-        AnimeFilter.Header("La busqueda por texto ignora el filtro"),
-        GenreFilter(),
-    )
-
-    private class GenreFilter : UriPartFilter(
-        "Género",
-        arrayOf(
-            Pair("<Seleccionar>", ""),
-            Pair("Acción", "accion"),
-            Pair("Artes Marciales", "artes-marciales"),
-            Pair("Aventuras", "aventuras"),
-            Pair("Carreras", "carreras"),
-            Pair("Ciencia Ficción", "ciencia-ficcion"),
-            Pair("Comedia", "comedia"),
-            Pair("Demencia", "demencia"),
-            Pair("Demonios", "demonios"),
-            Pair("Deportes", "deportes"),
-            Pair("Drama", "drama"),
-            Pair("Ecchi", "ecchi"),
-            Pair("Escolares", "escolares"),
-            Pair("Espacial", "espacial"),
-            Pair("Fantasía", "fantasia"),
-            Pair("Harem", "harem"),
-            Pair("Historico", "historico"),
-            Pair("Infantil", "infantil"),
-            Pair("Josei", "josei"),
-            Pair("Juegos", "juegos"),
-            Pair("Magia", "magia"),
-            Pair("Mecha", "mecha"),
-            Pair("Militar", "militar"),
-            Pair("Misterio", "misterio"),
-            Pair("Música", "musica"),
-            Pair("Parodia", "parodia"),
-            Pair("Policía", "policia"),
-            Pair("Psicológico", "psicologico"),
-            Pair("Recuentos de la vida", "recuentos-de-la-vida"),
-            Pair("Romance", "romance"),
-            Pair("Samurai", "samurai"),
-            Pair("Seinen", "seinen"),
-            Pair("Shoujo", "shoujo"),
-            Pair("Shounen", "shounen"),
-            Pair("Sobrenatural", "sobrenatural"),
-            Pair("Superpoderes", "superpoderes"),
-            Pair("Suspenso", "suspenso"),
-            Pair("Terror", "terror"),
-            Pair("Vampiros", "vampiros"),
-            Pair("Yaoi", "yaoi"),
-            Pair("Yuri", "yuri"),
-        ),
-    )
-
-    private open class UriPartFilter(displayName: String, val vals: Array<Pair<String, String>>) :
-        AnimeFilter.Select<String>(displayName, vals.map { it.first }.toTypedArray()) {
-        fun toUriPart() = vals[state].second
-    }
+    override fun getFilterList(): AnimeFilterList = VerAnimesFilters.FILTER_LIST
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         ListPreference(screen.context).apply {
