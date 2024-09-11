@@ -20,6 +20,7 @@ import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
 import eu.kanade.tachiyomi.lib.streamhidevidextractor.StreamHideVidExtractor
 import eu.kanade.tachiyomi.lib.streamlareextractor.StreamlareExtractor
+import eu.kanade.tachiyomi.lib.streamsilkextractor.StreamSilkExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
 import eu.kanade.tachiyomi.lib.upstreamextractor.UpstreamExtractor
@@ -28,7 +29,6 @@ import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
@@ -115,15 +115,15 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
 
             if (apiResponse.isSuccessful) {
                 val encryptedList = if (docResponse.select("iframe").any()) {
-                    listOf(docResponse.select("iframe").attr("src"))
+                    listOf("" to docResponse.select("iframe").attr("src"))
                 } else {
                     docResponse.select("#PlayerDisplay div[class*=\"OptionsLangDisp\"] div[class*=\"ODDIV\"] div[class*=\"OD\"] li")
-                        .map { it.attr("onclick") }
+                        .map { it.attr("data-lang").getLang() to it.attr("onclick") }
                 }
 
                 encryptedList.flatMap {
                     runCatching {
-                        val url = it.substringAfter("go_to_player('")
+                        val url = it.second.substringAfter("go_to_player('")
                             .substringAfter("go_to_playerVast('")
                             .substringBefore("?cover_url=")
                             .substringBefore("')")
@@ -142,7 +142,7 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
                             url
                         }
 
-                        serverVideoResolver(realUrl)
+                        serverVideoResolver(realUrl, it.first)
                     }.getOrNull() ?: emptyList()
                 }.also(videoList::addAll)
             }
@@ -150,20 +150,30 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
         return videoList
     }
 
-    private fun serverVideoResolver(url: String): List<Video> {
-        val embedUrl = url.lowercase()
+    /*--------------------------------Video extractors------------------------------------*/
+    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val okruExtractor by lazy { OkruExtractor(client) }
+    private val filemoonExtractor by lazy { FilemoonExtractor(client) }
+    private val uqloadExtractor by lazy { UqloadExtractor(client) }
+    private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
+    private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
+    private val doodExtractor by lazy { DoodExtractor(client) }
+    private val streamlareExtractor by lazy { StreamlareExtractor(client) }
+    private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
+    private val burstCloudExtractor by lazy { BurstCloudExtractor(client) }
+    private val fastreamExtractor by lazy { FastreamExtractor(client, headers) }
+    private val upstreamExtractor by lazy { UpstreamExtractor(client) }
+    private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
+    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client) }
+    private val streamSilkExtractor by lazy { StreamSilkExtractor(client) }
+
+    fun serverVideoResolver(url: String, prefix: String = ""): List<Video> {
         return runCatching {
             when {
-                embedUrl.contains("voe") -> VoeExtractor(client).videosFromUrl(url)
-                embedUrl.contains("ok.ru") || embedUrl.contains("okru") -> OkruExtractor(client).videosFromUrl(url)
-                embedUrl.contains("filemoon") || embedUrl.contains("moonplayer") -> {
-                    val vidHeaders = headers.newBuilder()
-                        .add("Origin", "https://${url.toHttpUrl().host}")
-                        .add("Referer", "https://${url.toHttpUrl().host}/")
-                        .build()
-                    FilemoonExtractor(client).videosFromUrl(url, prefix = "Filemoon:", headers = vidHeaders)
-                }
-                !embedUrl.contains("disable") && (embedUrl.contains("amazon") || embedUrl.contains("amz")) -> {
+                arrayOf("voe").any(url) -> voeExtractor.videosFromUrl(url, "$prefix ")
+                arrayOf("ok.ru", "okru").any(url) -> okruExtractor.videosFromUrl(url, prefix)
+                arrayOf("filemoon", "moonplayer").any(url) -> filemoonExtractor.videosFromUrl(url, prefix = "$prefix Filemoon:")
+                !url.contains("disable") && (arrayOf("amazon", "amz").any(url)) -> {
                     val body = client.newCall(GET(url)).execute().asJsoup()
                     return if (body.select("script:containsData(var shareId)").toString().isNotBlank()) {
                         val shareId = body.selectFirst("script:containsData(var shareId)")!!.data()
@@ -175,32 +185,28 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
                             client.newCall(GET("https://www.amazon.com/drive/v1/nodes/$epId/children?resourceVersion=V2&ContentType=JSON&limit=200&sort=%5B%22kind+DESC%22%2C+%22modifiedDate+DESC%22%5D&asset=ALL&tempLink=true&shareId=$shareId"))
                                 .execute().asJsoup()
                         val videoUrl = amazonApi.toString().substringAfter("\"FOLDER\":").substringAfter("tempLink\":\"").substringBefore("\"")
-                        listOf(Video(videoUrl, "Amazon", videoUrl))
+                        listOf(Video(videoUrl, "$prefix Amazon", videoUrl))
                     } else {
                         emptyList()
                     }
                 }
-                embedUrl.contains("uqload") -> UqloadExtractor(client).videosFromUrl(url)
-                embedUrl.contains("mp4upload") -> Mp4uploadExtractor(client).videosFromUrl(url, headers)
-                embedUrl.contains("wishembed") || embedUrl.contains("streamwish") || embedUrl.contains("strwish") || embedUrl.contains("wish") -> {
-                    val docHeaders = headers.newBuilder()
-                        .add("Origin", "https://streamwish.to")
-                        .add("Referer", "https://streamwish.to/")
-                        .build()
-                    StreamWishExtractor(client, docHeaders).videosFromUrl(url, videoNameGen = { "StreamWish:$it" })
+                arrayOf("uqload").any(url) -> uqloadExtractor.videosFromUrl(url, prefix)
+                arrayOf("mp4upload").any(url) -> mp4uploadExtractor.videosFromUrl(url, headers, prefix = "$prefix ")
+                arrayOf("wishembed", "streamwish", "strwish", "wish").any(url) -> {
+                    streamWishExtractor.videosFromUrl(url, videoNameGen = { "$prefix StreamWish:$it" })
                 }
-                embedUrl.contains("doodstream") || embedUrl.contains("dood.") || embedUrl.contains("ds2play") || embedUrl.contains("doods.") -> {
+                arrayOf("doodstream", "dood.", "ds2play", "doods.").any(url) -> {
                     val url2 = url.replace("https://doodstream.com/e/", "https://d0000d.com/e/")
-                    listOf(DoodExtractor(client).videoFromUrl(url2, "DoodStream")!!)
+                    doodExtractor.videosFromUrl(url2, "$prefix DoodStream")
                 }
-                embedUrl.contains("streamlare") -> StreamlareExtractor(client).videosFromUrl(url)
-                embedUrl.contains("yourupload") || embedUrl.contains("upload") -> YourUploadExtractor(client).videoFromUrl(url, headers = headers)
-                embedUrl.contains("burstcloud") || embedUrl.contains("burst") -> BurstCloudExtractor(client).videoFromUrl(url, headers = headers)
-                embedUrl.contains("fastream") -> FastreamExtractor(client, headers).videosFromUrl(url, prefix = "Fastream:")
-                embedUrl.contains("upstream") -> UpstreamExtractor(client).videosFromUrl(url)
-                embedUrl.contains("streamtape") || embedUrl.contains("stp") || embedUrl.contains("stape") -> listOf(StreamTapeExtractor(client).videoFromUrl(url, quality = "StreamTape")!!)
-                embedUrl.contains("ahvsh") || embedUrl.contains("streamhide") || embedUrl.contains("guccihide") ||
-                    embedUrl.contains("streamvid") || embedUrl.contains("vidhide") -> StreamHideVidExtractor(client).videosFromUrl(url)
+                arrayOf("streamlare").any(url) -> streamlareExtractor.videosFromUrl(url, prefix)
+                arrayOf("yourupload", "upload").any(url) -> yourUploadExtractor.videoFromUrl(url, headers = headers, prefix = "$prefix ")
+                arrayOf("burstcloud", "burst").any(url) -> burstCloudExtractor.videoFromUrl(url, headers = headers, prefix = "$prefix ")
+                arrayOf("fastream").any(url) -> fastreamExtractor.videosFromUrl(url, prefix = "$prefix Fastream:")
+                arrayOf("upstream").any(url) -> upstreamExtractor.videosFromUrl(url, prefix = "$prefix ")
+                arrayOf("streamsilk").any(url) -> streamSilkExtractor.videosFromUrl(url, videoNameGen = { "$prefix StreamSilk:$it" })
+                arrayOf("streamtape", "stp", "stape").any(url) -> streamTapeExtractor.videosFromUrl(url, quality = "$prefix StreamTape")
+                arrayOf("ahvsh", "streamhide", "guccihide", "streamvid", "vidhide").any(url) -> streamHideVidExtractor.videosFromUrl(url, prefix = "$prefix ")
                 else -> emptyList()
             }
         }.getOrNull() ?: emptyList()
@@ -305,6 +311,17 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
         AnimeFilter.Select<String>(displayName, vals.map { it.first }.toTypedArray()) {
         fun toUriPart() = vals[state].second
     }
+
+    fun String.getLang(): String {
+        return when {
+            arrayOf("0", "lat").any(this) -> "[LAT]"
+            arrayOf("1", "cast").any(this) -> "[CAST]"
+            arrayOf("2", "eng", "sub").any(this) -> "[SUB]"
+            else -> ""
+        }
+    }
+
+    private fun Array<String>.any(url: String): Boolean = this.any { url.contains(it, ignoreCase = true) }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         ListPreference(screen.context).apply {
