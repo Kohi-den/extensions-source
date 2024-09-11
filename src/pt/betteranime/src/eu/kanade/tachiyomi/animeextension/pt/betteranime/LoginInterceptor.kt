@@ -32,8 +32,8 @@ internal class LoginInterceptor(
         val formBody = FormBody.Builder()
             .add("_token", token)
             .add("g-recaptcha-response", recaptchaToken)
-            .add("email", String(Base64.decode("aGVmaWczNTY0NUBuYW1ld29rLmNvbQ==", Base64.DEFAULT)))
-            .add("password", String(Base64.decode("SE1HNFdoVEI0QnRJWTlIdg==", Base64.DEFAULT)))
+            .add("email", String(Base64.decode("YmV0dGVyYW5pbWVhY2NvdW50QHN0YXJtYWlsLm5ldA==", Base64.DEFAULT)))
+            .add("password", String(Base64.decode("QCNGJDA3SjhpIV4xNElqYk4hOEUjMkQ0Z2FOJF5A", Base64.DEFAULT)))
             .build()
 
         val loginRes = chain.proceed(POST("$baseUrl/login", headers, formBody))
