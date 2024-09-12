@@ -86,8 +86,9 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
         val params = AnimeFenixFilters.getSearchParameters(filters)
 
         return when {
+            query.isNotBlank() -> GET("$baseUrl/animes?q=$query&page=$page", headers)
             params.filter.isNotBlank() -> GET("$baseUrl/animes${params.getQuery()}&page=$page", headers)
-            else -> GET("$baseUrl/animes?order=likes&page=$page ")
+            else -> GET("$baseUrl/animes?order=likes&page=$page")
         }
     }
 
