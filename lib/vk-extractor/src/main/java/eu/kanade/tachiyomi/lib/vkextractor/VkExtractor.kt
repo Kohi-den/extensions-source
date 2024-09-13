@@ -20,14 +20,15 @@ class VkExtractor(private val client: OkHttpClient, private val headers: Headers
             .build()
     }
 
-    fun videosFromUrl(url: String, prefix: String = ""): List<Video> {
-        val data = client.newCall(GET(url, documentHeaders)).execute()
-            .body.string()
+    fun videosFromUrl(url: String, prefix: String) = videosFromUrl(url) { "${prefix}Vk:$it" }
+
+    fun videosFromUrl(url: String, videoNameGen: (String) -> String = { quality -> "Vk:$quality" }): List<Video> {
+        val data = client.newCall(GET(url, documentHeaders)).execute().body.string()
 
         return REGEX_VIDEO.findAll(data).map {
             val quality = it.groupValues[1]
             val videoUrl = it.groupValues[2].replace("\\/", "/")
-            Video(videoUrl, "${prefix}vk.com - ${quality}p", videoUrl, videoHeaders)
+            Video(videoUrl, videoNameGen("${quality}p"), videoUrl, videoHeaders)
         }.toList()
     }
 
