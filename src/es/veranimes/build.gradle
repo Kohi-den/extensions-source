@@ -12,4 +12,5 @@ dependencies {
     implementation(project(':lib:streamhidevid-extractor'))
     implementation(project(':lib:voe-extractor'))
     implementation(project(':lib:yourupload-extractor'))
+    implementation(project(':lib:vidguard-extractor'))
 }

@@ -25,6 +25,7 @@ import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
 import eu.kanade.tachiyomi.lib.upstreamextractor.UpstreamExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
+import eu.kanade.tachiyomi.lib.vidguardextractor.VidGuardExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
@@ -57,6 +58,7 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
             "YourUpload", "BurstCloud", "Voe", "Mp4Upload", "Doodstream",
             "Upload", "BurstCloud", "Upstream", "StreamTape", "Amazon",
             "Fastream", "Filemoon", "StreamWish", "Okru", "Streamlare",
+            "VidGuard",
         )
 
         private val REGEX_LINK = "https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b([-a-zA-Z0-9()@:%_\\+.~#?&//=]*)".toRegex()
@@ -166,6 +168,7 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
     private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
     private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client) }
     private val streamSilkExtractor by lazy { StreamSilkExtractor(client) }
+    private val vidGuardExtractor by lazy { VidGuardExtractor(client) }
 
     fun serverVideoResolver(url: String, prefix: String = ""): List<Video> {
         return runCatching {
@@ -207,6 +210,7 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
                 arrayOf("streamsilk").any(url) -> streamSilkExtractor.videosFromUrl(url, videoNameGen = { "$prefix StreamSilk:$it" })
                 arrayOf("streamtape", "stp", "stape").any(url) -> streamTapeExtractor.videosFromUrl(url, quality = "$prefix StreamTape")
                 arrayOf("ahvsh", "streamhide", "guccihide", "streamvid", "vidhide").any(url) -> streamHideVidExtractor.videosFromUrl(url, prefix = "$prefix ")
+                arrayOf("vembed", "guard", "listeamed", "bembed", "vgfplay").any(url) -> vidGuardExtractor.videosFromUrl(url, prefix = "$prefix ")
                 else -> emptyList()
             }
         }.getOrNull() ?: emptyList()

@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.SharedPreferences
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
-import eu.kanade.tachiyomi.animeextension.es.veranimes.extractors.VidGuardExtractor
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -15,6 +14,7 @@ import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
 import eu.kanade.tachiyomi.lib.streamhidevidextractor.StreamHideVidExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.vidguardextractor.VidGuardExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
@@ -56,6 +56,7 @@ class VerAnimes : ConfigurableAnimeSource, AnimeHttpSource() {
             "YourUpload",
             "FileLions",
             "StreamHideVid",
+            "VidGuard",
         )
     }
 
@@ -157,23 +158,23 @@ class VerAnimes : ConfigurableAnimeSource, AnimeHttpSource() {
         }
     }
 
+    /*--------------------------------Video extractors------------------------------------*/
+    private val okruExtractor by lazy { OkruExtractor(client) }
+    private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
+    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
+    private val vidGuardExtractor by lazy { VidGuardExtractor(client) }
+
     private fun serverVideoResolver(url: String): List<Video> {
-        val embedUrl = url.lowercase()
         return when {
-            embedUrl.contains("ok.ru") || embedUrl.contains("okru") -> OkruExtractor(client).videosFromUrl(url)
-            embedUrl.contains("filelions") || embedUrl.contains("lion") -> StreamWishExtractor(client, headers).videosFromUrl(url, videoNameGen = { "FileLions:$it" })
-            embedUrl.contains("wishembed") || embedUrl.contains("streamwish") || embedUrl.contains("strwish") || embedUrl.contains("wish") -> {
-                val docHeaders = headers.newBuilder()
-                    .add("Origin", "https://streamwish.to")
-                    .add("Referer", "https://streamwish.to/")
-                    .build()
-                StreamWishExtractor(client, docHeaders).videosFromUrl(url, videoNameGen = { "StreamWish:$it" })
-            }
-            embedUrl.contains("vidhide") || embedUrl.contains("streamhide") ||
-                embedUrl.contains("guccihide") || embedUrl.contains("streamvid") -> StreamHideVidExtractor(client).videosFromUrl(url)
-            embedUrl.contains("voe") -> VoeExtractor(client).videosFromUrl(url)
-            embedUrl.contains("yourupload") || embedUrl.contains("upload") -> YourUploadExtractor(client).videoFromUrl(url, headers = headers)
-            embedUrl.contains("vidguard") || embedUrl.contains("vgfplay") || embedUrl.contains("listeamed") -> VidGuardExtractor(client).videosFromUrl(url)
+            arrayOf("ok.ru", "okru").any(url) -> okruExtractor.videosFromUrl(url)
+            arrayOf("filelions", "lion", "fviplions").any(url) -> streamWishExtractor.videosFromUrl(url, videoNameGen = { "FileLions:$it" })
+            arrayOf("wishembed", "streamwish", "strwish", "wish").any(url) -> streamWishExtractor.videosFromUrl(url, videoNameGen = { "StreamWish:$it" })
+            arrayOf("vidhide", "streamhide", "guccihide", "streamvid").any(url) -> streamHideVidExtractor.videosFromUrl(url)
+            arrayOf("voe").any(url) -> voeExtractor.videosFromUrl(url)
+            arrayOf("yourupload", "upload").any(url) -> yourUploadExtractor.videoFromUrl(url, headers = headers)
+            arrayOf("vembed", "guard", "listeamed", "bembed", "vgfplay").any(url) -> vidGuardExtractor.videosFromUrl(url)
             else -> emptyList()
         }
     }
@@ -191,6 +192,8 @@ class VerAnimes : ConfigurableAnimeSource, AnimeHttpSource() {
     }
 
     override fun getFilterList(): AnimeFilterList = VerAnimesFilters.FILTER_LIST
+
+    private fun Array<String>.any(url: String): Boolean = this.any { url.contains(it, ignoreCase = true) }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         ListPreference(screen.context).apply {

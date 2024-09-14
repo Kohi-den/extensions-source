@@ -21,7 +21,7 @@ class VidGuardExtractor(private val client: OkHttpClient) {
 
     private val json: Json by injectLazy()
 
-    fun videosFromUrl(url: String, prefix: String) = videosFromUrl(url) { "$prefix $it" }
+    fun videosFromUrl(url: String, prefix: String) = videosFromUrl(url) { "${prefix}VidGuard:$it" }
 
     fun videosFromUrl(url: String, videoNameGen: (String) -> String = { quality -> "VidGuard:$quality" }): List<Video> {
         val res = client.newCall(GET(url)).execute().asJsoup()

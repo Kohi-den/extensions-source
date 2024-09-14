@@ -29,7 +29,7 @@ class StreamSilkExtractor(private val client: OkHttpClient, private val headers:
 
     private val playlistUtils by lazy { PlaylistUtils(client, videoHeaders) }
 
-    fun videosFromUrl(url: String, prefix: String) = videosFromUrl(url) { "$prefix $it" }
+    fun videosFromUrl(url: String, prefix: String) = videosFromUrl(url) { "${prefix}StreamSilk:$it" }
 
     fun videosFromUrl(url: String, videoNameGen: (String) -> String = { quality -> "StreamSilk:$quality" }): List<Video> {
         val document = client.newCall(GET(url)).execute().asJsoup()

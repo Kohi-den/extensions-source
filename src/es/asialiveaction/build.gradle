@@ -11,4 +11,5 @@ dependencies {
     implementation(project(':lib:okru-extractor'))
     implementation(project(':lib:streamwish-extractor'))
     implementation(project(':lib:vk-extractor'))
+    implementation(project(':lib:vidguard-extractor'))
 }

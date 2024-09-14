@@ -24,5 +24,6 @@ dependencies {
     implementation(project(':lib:upstream-extractor'))
     implementation(project(':lib:streamhidevid-extractor'))
     implementation(project(':lib:streamsilk-extractor'))
+    implementation(project(':lib:vidguard-extractor'))
     implementation "dev.datlag.jsunpacker:jsunpacker:1.0.1"
 }
