@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
-import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -84,38 +83,12 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun latestUpdatesParse(response: Response) = popularAnimeParse(response)
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        val yearFilter = filters.find { it is YearFilter } as YearFilter
-        val stateFilter = filters.find { it is StateFilter } as StateFilter
-        val typeFilter = filters.find { it is TypeFilter } as TypeFilter
-        val orderByFilter = filters.find { it is OrderByFilter } as OrderByFilter
-
-        val genreFilter = (filters.find { it is TagFilter } as TagFilter).state.filter { it.state }
-
-        var filterUrl = "$baseUrl/animes?"
-        if (query.isNotBlank()) {
-            filterUrl += "&q=$query"
-        } // search by name
-        if (genreFilter.isNotEmpty()) {
-            genreFilter.forEach {
-                filterUrl += "&genero[]=${it.name}"
-            }
-        } // search by genre
-        if (yearFilter.state.isNotBlank()) {
-            filterUrl += "&year[]=${yearFilter.state}"
-        } // search by year
-        if (stateFilter.state != 0) {
-            filterUrl += "&estado[]=${stateFilter.toUriPart()}"
-        } // search by state
-        if (typeFilter.state != 0) {
-            filterUrl += "&type[]=${typeFilter.toUriPart()}"
-        } // search by type
-        filterUrl += "&order=${orderByFilter.toUriPart()}"
-        filterUrl += "&page=$page" // add page
+        val params = AnimeFenixFilters.getSearchParameters(filters)
 
         return when {
-            genreFilter.isEmpty() || yearFilter.state.isNotBlank() ||
-                stateFilter.state != 0 || typeFilter.state != 0 || query.isNotBlank() -> GET(filterUrl, headers)
-            else -> GET("$baseUrl/animes?order=likes&page=$page ")
+            query.isNotBlank() -> GET("$baseUrl/animes?q=$query&page=$page", headers)
+            params.filter.isNotBlank() -> GET("$baseUrl/animes${params.getQuery()}&page=$page", headers)
+            else -> GET("$baseUrl/animes?order=likes&page=$page")
         }
     }
 
@@ -273,110 +246,7 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
         }
     }
 
-    override fun getFilterList(): AnimeFilterList = AnimeFilterList(
-        TagFilter("Generos", checkboxesFrom(genreList)),
-        StateFilter(),
-        TypeFilter(),
-        OrderByFilter(),
-        YearFilter(),
-    )
-
-    private val genreList = arrayOf(
-        Pair("Acción", "acción"),
-        Pair("Aventura", "aventura"),
-        Pair("Angeles", "angeles"),
-        Pair("Artes Marciales", "artes-marciales"),
-        Pair("Ciencia Ficcion", "ciencia-ficcion"),
-        Pair("Comedia", "comedia"),
-        Pair("Cyberpunk", "cyberpunk"),
-        Pair("Demonios", "demonios"),
-        Pair("Deportes", "deportes"),
-        Pair("Dragones", "dragones"),
-        Pair("Drama", "drama"),
-        Pair("Ecchi", "ecchi"),
-        Pair("Escolares", "escolares"),
-        Pair("Fantasía", "fantasía"),
-        Pair("Gore", "gore"),
-        Pair("Harem", "harem"),
-        Pair("Historico", "historico"),
-        Pair("Horror", "horror"),
-        Pair("Infantil", "infantil"),
-        Pair("Isekai", "isekai"),
-        Pair("Josei", "josei"),
-        Pair("Juegos", "juegos"),
-        Pair("Magia", "magia"),
-        Pair("Mecha", "mecha"),
-        Pair("Militar", "militar"),
-        Pair("Misterio", "misterio"),
-        Pair("Música", "música"),
-        Pair("Ninjas", "ninjas"),
-        Pair("Parodias", "parodias"),
-        Pair("Policia", "policia"),
-        Pair("Psicológico", "psicológico"),
-        Pair("Recuerdos de la vida", "recuerdos-de-la-vida"),
-        Pair("Romance", "romance"),
-        Pair("Samurai", "samurai"),
-        Pair("Sci-Fi", "sci-fi"),
-        Pair("Seinen", "seinen"),
-        Pair("Shoujo", "shoujo"),
-        Pair("Shonen", "shonen"),
-        Pair("Slice of life", "slice-of-life"),
-        Pair("Sobrenatural", "sobrenatural"),
-        Pair("Space", "space"),
-        Pair("Spokon", "spokon"),
-        Pair("SteamPunk", "steampunk"),
-        Pair("SuperPoder", "superpoder"),
-        Pair("Vampiros", "vampiros"),
-        Pair("Yaoi", "yaoi"),
-        Pair("Yuri", "yuri"),
-    )
-
-    private fun checkboxesFrom(tagArray: Array<Pair<String, String>>): List<TagCheckBox> = tagArray.map { TagCheckBox(it.second) }
-
-    class TagCheckBox(tag: String) : AnimeFilter.CheckBox(tag, false)
-
-    class TagFilter(name: String, checkBoxes: List<TagCheckBox>) : AnimeFilter.Group<TagCheckBox>(name, checkBoxes)
-
-    private class YearFilter : AnimeFilter.Text("Año")
-
-    private class StateFilter : UriPartFilter(
-        "Estado",
-        arrayOf(
-            Pair("<Seleccionar>", ""),
-            Pair("Emision", "1"),
-            Pair("Finalizado", "2"),
-            Pair("Proximamente", "3"),
-            Pair("En Cuarentena", "4"),
-        ),
-    )
-
-    private class TypeFilter : UriPartFilter(
-        "Tipo",
-        arrayOf(
-            Pair("<Seleccionar>", ""),
-            Pair("TV", "tv"),
-            Pair("Pelicula", "movie"),
-            Pair("Especial", "special"),
-            Pair("OVA", "ova"),
-        ),
-    )
-
-    private class OrderByFilter : UriPartFilter(
-        "Ordenar Por",
-        arrayOf(
-            Pair("Por defecto", "default"),
-            Pair("Recientemente Actualizados", "updated"),
-            Pair("Recientemente Agregados", "added"),
-            Pair("Nombre A-Z", "title"),
-            Pair("Calificación", "likes"),
-            Pair("Más vistos", "visits"),
-        ),
-    )
-
-    private open class UriPartFilter(displayName: String, val vals: Array<Pair<String, String>>) :
-        AnimeFilter.Select<String>(displayName, vals.map { it.first }.toTypedArray()) {
-        fun toUriPart() = vals[state].second
-    }
+    override fun getFilterList(): AnimeFilterList = AnimeFenixFilters.FILTER_LIST
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         ListPreference(screen.context).apply {

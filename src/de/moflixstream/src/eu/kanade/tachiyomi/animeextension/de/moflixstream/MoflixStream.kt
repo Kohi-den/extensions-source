@@ -13,7 +13,6 @@ import eu.kanade.tachiyomi.animeextension.de.moflixstream.dto.SearchDto
 import eu.kanade.tachiyomi.animeextension.de.moflixstream.dto.SeasonPaginationDto
 import eu.kanade.tachiyomi.animeextension.de.moflixstream.dto.VideoResponseDto
 import eu.kanade.tachiyomi.animeextension.de.moflixstream.extractors.UnpackerExtractor
-import eu.kanade.tachiyomi.animeextension.de.moflixstream.extractors.VidGuardExtractor
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -24,6 +23,7 @@ import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamvidextractor.StreamVidExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.vidguardextractor.VidGuardExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.json.Json

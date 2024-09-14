@@ -4,19 +4,20 @@ import android.app.Application
 import android.content.SharedPreferences
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
-import eu.kanade.tachiyomi.animeextension.es.tioanimeh.extractors.VidGuardExtractor
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
-import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
+import eu.kanade.tachiyomi.lib.mixdropextractor.MixDropExtractor
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
+import eu.kanade.tachiyomi.lib.vidguardextractor.VidGuardExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
+import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
@@ -54,21 +55,21 @@ open class TioanimeH(override val name: String, override val baseUrl: String) : 
     override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/directorio?p=$page")
 
     override fun popularAnimeFromElement(element: Element): SAnime {
-        val anime = SAnime.create()
-        anime.url = element.select("article a").attr("href")
-        anime.title = element.select("article a h3").text()
-        anime.thumbnail_url = baseUrl + element.select("article a div figure img").attr("src")
-        return anime
+        return SAnime.create().apply {
+            url = element.select("article a").attr("href")
+            title = element.select("article a h3").text()
+            thumbnail_url = baseUrl + element.select("article a div figure img").attr("src")
+        }
     }
 
-    override fun popularAnimeNextPageSelector(): String = "nav ul.pagination.d-inline-flex li.page-item a.page-link"
+    override fun popularAnimeNextPageSelector(): String = ".pagination .active ~ li:not(.disabled)"
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
         val epInfoScript = document.selectFirst("script:containsData(var episodes = )")!!.data()
 
         if (epInfoScript.substringAfter("episodes = [").substringBefore("];").isEmpty()) {
-            return listOf<SEpisode>()
+            return emptyList()
         }
 
         val epNumList = epInfoScript.substringAfter("episodes = [").substringBefore("];").split(",")
@@ -84,27 +85,36 @@ open class TioanimeH(override val name: String, override val baseUrl: String) : 
     }
 
     override fun episodeListSelector() = throw UnsupportedOperationException()
+
     override fun episodeFromElement(element: Element) = throw UnsupportedOperationException()
+
+    /*--------------------------------Video extractors------------------------------------*/
+    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val vidGuardExtractor by lazy { VidGuardExtractor(client) }
+    private val okruExtractor by lazy { OkruExtractor(client) }
+    private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
+    private val mixDropExtractor by lazy { MixDropExtractor(client) }
 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
-        val videoList = mutableListOf<Video>()
-        val serverList = document.selectFirst("script:containsData(var videos =)")!!.data().substringAfter("var videos = [[").substringBefore("]];")
-            .replace("\"", "").split("],[")
 
-        serverList.forEach {
+        val serverList = document.selectFirst("script:containsData(var videos =)")
+            ?.data()?.substringAfter("var videos = [[")?.substringBefore("]];")
+            ?.replace("\"", "")?.split("],[") ?: return emptyList()
+
+        return serverList.parallelCatchingFlatMapBlocking {
             val servers = it.split(",")
             val serverName = servers[0]
             val serverUrl = servers[1].replace("\\/", "/")
             when (serverName.lowercase()) {
-                "voe" -> VoeExtractor(client).videosFromUrl(serverUrl).let(videoList::addAll)
-                "vidguard" -> VidGuardExtractor(client).videosFromUrl(serverUrl).let(videoList::addAll)
-                "okru" -> OkruExtractor(client).videosFromUrl(serverUrl).let(videoList::addAll)
-                "yourupload" -> YourUploadExtractor(client).videoFromUrl(serverUrl, headers = headers).let(videoList::addAll)
+                "voe" -> voeExtractor.videosFromUrl(serverUrl)
+                "vidguard" -> vidGuardExtractor.videosFromUrl(serverUrl)
+                "okru" -> okruExtractor.videosFromUrl(serverUrl)
+                "yourupload" -> yourUploadExtractor.videoFromUrl(serverUrl, headers = headers)
+                "mixdrop" -> mixDropExtractor.videosFromUrl(serverUrl)
+                else -> emptyList()
             }
         }
-
-        return videoList
     }
 
     override fun videoListSelector() = throw UnsupportedOperationException()
@@ -126,32 +136,29 @@ open class TioanimeH(override val name: String, override val baseUrl: String) : 
     }
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        val filterList = if (filters.isEmpty()) getFilterList() else filters
-        val genreFilter = if (filterList.isNotEmpty())filterList.find { it is GenreFilter } as GenreFilter else { GenreFilter().apply { state = 0 } }
+        val params = TioAnimeHFilters.getSearchParameters(filters, TioAnimeHFilters.TioAnimeHFiltersData.ORIGEN.HENTAI)
 
         return when {
             query.isNotBlank() -> GET("$baseUrl/directorio?q=$query&p=$page", headers)
-            genreFilter.state != 0 -> GET("$baseUrl/directorio?genero=${genreFilter.toUriPart()}&p=$page")
-            else -> GET("$baseUrl/directorio?p=$page ")
+            params.filter.isNotBlank() -> GET("$baseUrl/directorio${params.getQuery()}&p=$page")
+            else -> popularAnimeRequest(page)
         }
     }
 
-    override fun searchAnimeFromElement(element: Element): SAnime {
-        return popularAnimeFromElement(element)
-    }
+    override fun searchAnimeFromElement(element: Element): SAnime = popularAnimeFromElement(element)
 
     override fun searchAnimeNextPageSelector(): String = popularAnimeNextPageSelector()
 
     override fun searchAnimeSelector(): String = popularAnimeSelector()
 
     override fun animeDetailsParse(document: Document): SAnime {
-        val anime = SAnime.create()
-        anime.title = document.select("h1.title").text()
-        anime.description = document.selectFirst("p.sinopsis")!!.ownText()
-        anime.genre = document.select("p.genres span.btn.btn-sm.btn-primary.rounded-pill a").joinToString { it.text() }
-        anime.thumbnail_url = document.select(".thumb img").attr("abs:src")
-        anime.status = parseStatus(document.select("a.btn.btn-success.btn-block.status").text())
-        return anime
+        return SAnime.create().apply {
+            title = document.select("h1.title").text()
+            description = document.selectFirst("p.sinopsis")!!.ownText()
+            genre = document.select("p.genres span.btn.btn-sm.btn-primary.rounded-pill a").joinToString { it.text() }
+            thumbnail_url = document.select(".thumb img").attr("abs:src")
+            status = parseStatus(document.select("a.btn.btn-success.btn-block.status").text())
+        }
     }
 
     private fun parseStatus(statusString: String): Int {
@@ -165,59 +172,21 @@ open class TioanimeH(override val name: String, override val baseUrl: String) : 
     override fun latestUpdatesNextPageSelector() = popularAnimeNextPageSelector()
 
     override fun latestUpdatesFromElement(element: Element): SAnime {
-        val anime = SAnime.create()
-        anime.title = element.select("article a h3").text()
-        anime.thumbnail_url = baseUrl + element.select("article a div figure img").attr("src")
-
-        val slug = if (baseUrl.contains("hentai")) "/hentai/" else "/anime/"
-        val fixUrl = element.select("article a").attr("href").split("-").toTypedArray()
-        val realUrl = fixUrl.copyOf(fixUrl.size - 1).joinToString("-").replace("/ver/", slug)
-        anime.setUrlWithoutDomain(realUrl)
-        return anime
+        return SAnime.create().apply {
+            title = element.select("article a h3").text()
+            thumbnail_url = baseUrl + element.select("article a div figure img").attr("src")
+            val slug = if (baseUrl.contains("hentai")) "/hentai/" else "/anime/"
+            val fixUrl = element.select("article a").attr("href").split("-").toTypedArray()
+            val realUrl = fixUrl.copyOf(fixUrl.size - 1).joinToString("-").replace("/ver/", slug)
+            setUrlWithoutDomain(realUrl)
+        }
     }
 
     override fun latestUpdatesRequest(page: Int) = GET(baseUrl)
 
     override fun latestUpdatesSelector() = ".episodes li"
 
-    override fun getFilterList(): AnimeFilterList = AnimeFilterList(
-        AnimeFilter.Header("La busqueda por texto ignora el filtro"),
-        GenreFilter(),
-    )
-
-    class GenreFilter : UriPartFilter(
-        "Generos",
-        arrayOf(
-            Pair("<selecionar>", ""),
-            Pair("Ahegao", "ahegao"),
-            Pair("Anal", "anal"),
-            Pair("Casadas", "casadas"),
-            Pair("Ecchi", "ecchi"),
-            Pair("Escolares", "escolares"),
-            Pair("Enfermeras", "enfermeras"),
-            Pair("Futanari", "futanari"),
-            Pair("Harem", "Harem"),
-            Pair("Gore", "gore"),
-            Pair("Hardcore", "hardcore"),
-            Pair("Incesto", "incesto"),
-            Pair("Juegos Sexuales", "juegos-sexuales"),
-            Pair("Milfs", "milf"),
-            Pair("Orgia", "orgia"),
-            Pair("Romance", "romance"),
-            Pair("Shota", "shota"),
-            Pair("Succubus", "succubus"),
-            Pair("Tetonas", "tetonas"),
-            Pair("Violacion", "violacion"),
-            Pair("Virgenes(como tu)", "virgenes"),
-            Pair("Yaoi", "Yaoi"),
-            Pair("Yuri", "yuri"),
-        ),
-    )
-
-    open class UriPartFilter(displayName: String, val vals: Array<Pair<String, String>>) :
-        AnimeFilter.Select<String>(displayName, vals.map { it.first }.toTypedArray()) {
-        fun toUriPart() = vals[state].second
-    }
+    override fun getFilterList(): AnimeFilterList = TioAnimeHFilters.getFilterList(TioAnimeHFilters.TioAnimeHFiltersData.ORIGEN.HENTAI)
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         ListPreference(screen.context).apply {
