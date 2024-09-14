@@ -62,6 +62,10 @@ data class EpisodeDto(
     @SerialName("n_episodio")
     val episodeNumber: String,
     val anime: AnimeDataDto? = null,
+    @SerialName("se_pgad")
+    val sePgad: Int? = null,
+    @SerialName("data_registro")
+    val dataRegistro: String? = null,
 )
 
 @Serializable
