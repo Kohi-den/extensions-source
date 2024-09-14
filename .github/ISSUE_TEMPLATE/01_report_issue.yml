@@ -1,5 +1,5 @@
-name: 🐞 Issue report
-description: Report a source issue in Aniyomi
+name: 🐞 Bug report
+description: Report a bug
 labels: [Bug]
 body:
 
@@ -57,11 +57,22 @@ body:
       required: true
 
   - type: input
-    id: aniyomi-version
+   id: which-app
+   attributes:
+    label: Which app are you using?
+    description: |
+      Self explanatory
+    placeholer: |
+     Example: Aniyomi, Kuukiyomi, Animiru, Animetail
+    validations:
+     required: true
+
+  - type: input
+    id: app-version
     attributes:
-      label: Aniyomi version
+      label: App version
       description: |
-        You can find your Aniyomi version in **More → About**.
+        You can find your app version in **More → About**.
       placeholder: |
         Example: "0.15.2.4" or "Preview r7473"
     validations:
@@ -95,13 +106,9 @@ body:
           required: true
         - label: I have written a short but informative title.
           required: true
-        - label: I have updated the app to version **[0.15.2.4](https://github.com/aniyomiorg/aniyomi/releases/latest)**.
-          required: true
         - label: I have updated all installed extensions.
           required: true
         - label: I have tried the [troubleshooting guide](https://aniyomi.org/docs/guides/troubleshooting/).
-          required: true
-        - label: If this is an issue with the app itself, I should be opening an issue in the [app repository](https://github.com/aniyomiorg/aniyomi/issues/new/choose).
           required: true
         - label: I will fill out all of the requested information in this form.
           required: true
