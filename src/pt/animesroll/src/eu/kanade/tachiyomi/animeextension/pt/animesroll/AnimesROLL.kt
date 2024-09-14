@@ -21,6 +21,8 @@ import kotlinx.serialization.json.Json
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class AnimesROLL : AnimeHttpSource() {
 
@@ -117,14 +119,19 @@ class AnimesROLL : AnimeHttpSource() {
             }.let(::listOf)
         } else {
             val anime = doc.parseAs<AnimeDataDto>()
-            val urlStart = "https://cdn-01.gamabunta.xyz/hls/animes/${anime.slug}"
 
             return fetchEpisodesRecursively(anime.id).map { episode ->
+                val urlStart = if (episode.sePgad == 1) {
+                    "https://cdn-zenitsu-2-gamabunta.b-cdn.net/cf/hls/animes/${anime.slug}"
+                } else {
+                    "https://cdn-02.gamabunta.xyz/hls/animes/${anime.slug}"
+                }
                 SEpisode.create().apply {
                     val epNum = episode.episodeNumber
                     name = "Episódio #$epNum"
                     episode_number = epNum.toFloat()
                     url = "$urlStart/$epNum.mp4/media-1/stream.m3u8"
+                    date_upload = episode.dataRegistro?.toDate() ?: 0L
                 }
             }
         }
@@ -174,6 +181,11 @@ class AnimesROLL : AnimeHttpSource() {
         return if (isNotEmpty() && this != "0") block(this) else ""
     }
 
+    private fun String.toDate(): Long {
+        return runCatching { DATE_FORMATTER.parse(trim())?.time }
+            .getOrNull() ?: 0L
+    }
+
     fun AnimeDataDto.toSAnime() = SAnime.create().apply {
         val ismovie = slug == ""
         url = if (ismovie) "/f/$id" else "/anime/$slug"
@@ -188,6 +200,9 @@ class AnimesROLL : AnimeHttpSource() {
     }
 
     companion object {
+        private val DATE_FORMATTER by lazy {
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ENGLISH)
+        }
         private const val OLD_API_URL = "https://apiv2-prd.anroll.net"
         private const val NEW_API_URL = "https://apiv3-prd.anroll.net"
 
