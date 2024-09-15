@@ -17,7 +17,6 @@ import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelFlatMap
 import eu.kanade.tachiyomi.util.parseAs
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -35,12 +34,11 @@ import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import kotlin.math.ceil
 
-@ExperimentalSerializationApi
 class AnimeOwl : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "AnimeOwl"
 
-    override val baseUrl = "https://animeowl.us"
+    override val baseUrl = "https://animeowl.live"
 
     override val lang = "en"
 
@@ -109,6 +107,7 @@ class AnimeOwl : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         genre = document.select("div.genre > a").joinToString { it.text() }
         author = document.select("div.type > a").text()
         status = parseStatus(document.select("div.status > span").text())
+        thumbnail_url = document.selectFirst(".cover-img-container > img")?.attr("abs:src")
         description = buildString {
             document.select("div.anime-desc.desc-content").text()
                 .takeIf { it.isNotBlank() }
@@ -127,32 +126,33 @@ class AnimeOwl : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // ============================== Episodes ==============================
     override fun episodeListParse(response: Response): List<SEpisode> {
-        val animeId = response.asJsoup().select("div#unq-anime-id").attr("animeId")
-        val episodes = client.newCall(
-            GET("$baseUrl/api/anime/$animeId/episodes"),
-        ).execute()
-            .parseAs<EpisodeResponse>()
+        val document = response.asJsoup()
+        val sub = document.select("#anime-cover-sub-content .episode-node").mapIndexed { idx, it ->
+            EpisodeResponse.Episode(
+                id = it.text().toDouble(),
+                episodeIndex = idx.toString(),
+                name = it.text(),
+                lang = "Sub",
+                href = it.attr("abs:href"),
+            )
+        }
+        val dub = document.select("#anime-cover-dub-content .episode-node").mapIndexed { idx, it ->
+            EpisodeResponse.Episode(
+                id = it.text().toDouble(),
+                episodeIndex = idx.toString(),
+                name = it.text(),
+                lang = "Dub",
+                href = it.attr("abs:href"),
+            )
+        }
 
-        return listOf(
-            episodes.sub.map { it.copy(lang = "Sub") },
-            episodes.dub.map { it.copy(lang = "Dub") },
-        ).flatten()
-            .groupBy { it.name }
-            .map { (epNum, epList) ->
-                SEpisode.create().apply {
-                    url = LinkData(
-                        epList.map { ep ->
-                            Link(
-                                ep.buildUrl(episodes.subSlug, episodes.dubSlug),
-                                ep.lang!!,
-                            )
-                        },
-                    ).toJsonString()
-                    episode_number = epNum.toFloatOrNull() ?: 0F
-                    name = "Episode $epNum"
-                }
+        return listOf(sub, dub).flatten().groupBy { it.name }.map { (epNum, epList) ->
+            SEpisode.create().apply {
+                url = LinkData(epList.map { ep -> Link(ep.href!!, ep.lang!!) }).toJsonString()
+                episode_number = epNum.toFloatOrNull() ?: 0F
+                name = "Episode $epNum"
             }
-            .sortedByDescending { it.episode_number }
+        }.sortedByDescending { it.episode_number }
     }
 
     override fun episodeListSelector(): String = throw UnsupportedOperationException()
@@ -160,9 +160,9 @@ class AnimeOwl : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun episodeFromElement(element: Element): SEpisode = throw UnsupportedOperationException()
 
     // ============================ Video Links =============================
-    override suspend fun getVideoList(episode: SEpisode): List<Video> =
-        json.decodeFromString<LinkData>(episode.url)
-            .links.parallelFlatMap { owlServersExtractor.extractOwlVideo(it) }.sort()
+    override suspend fun getVideoList(episode: SEpisode): List<Video> {
+        return json.decodeFromString<LinkData>(episode.url).links.parallelFlatMap { owlServersExtractor.extractOwlVideo(it) }.sort()
+    }
 
     override fun videoFromElement(element: Element): Video = throw UnsupportedOperationException()
 
@@ -228,15 +228,7 @@ class AnimeOwl : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         )
     }
 
-    private fun LinkData.toJsonString(): String {
-        return json.encodeToString(this)
-    }
-
-    private fun EpisodeResponse.Episode.buildUrl(subSlug: String, dubSlug: String): String =
-        when (lang) {
-            "dub" -> dubSlug
-            else -> subSlug
-        }.let { "$baseUrl/watch/$it/$episodeIndex" }
+    private fun LinkData.toJsonString(): String = json.encodeToString(this)
 
     private fun parseStatus(statusString: String): Int =
         when (statusString) {

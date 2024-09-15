@@ -36,18 +36,18 @@ class OwlExtractor(private val client: OkHttpClient, private val baseUrl: String
             }
             .let(Deobfuscator::deobfuscateScript)
             ?: throw Exception("Unable to get clean JS")
-        val jwt = JWT_REGEX.find(epJS)?.groupValues?.get(1) ?: throw Exception("Unable to get jwt")
+
+        val jwt = findFirstJwt(epJS) ?: throw Exception("Unable to get jwt")
 
         val videoList = mutableListOf<Video>()
         val servers = client.newCall(GET("$baseUrl$dataSrc")).execute()
             .parseAs<OwlServers>()
-
         coroutineScope {
             val lufDeferred = async {
                 servers.luffy?.let { luffy ->
                     noRedirectClient.newCall(GET("${luffy}$jwt")).execute()
                         .use { it.headers["Location"] }
-                        ?.let { videoList.add(Video(it, "Luffy - ${link.lang} - 1080p", it)) }
+                        ?.let { videoList.add(Video(it, "${link.lang} Luffy:1080p", it)) }
                 }
             }
             val kaiDeferred = async {
@@ -70,18 +70,20 @@ class OwlExtractor(private val client: OkHttpClient, private val baseUrl: String
         return videoList
     }
 
-    private fun getHLS(url: String, server: String, lang: String): List<Video> =
-        client.newCall(GET(url)).execute()
-            .parseAs<Stream>()
-            .url
-            .let {
-                playlistUtils.extractFromHls(
-                    it,
-                    videoNameGen = { qty -> "$server - $lang - $qty" },
-                )
+    private fun getHLS(url: String, server: String, lang: String): List<Video> {
+        return client.newCall(GET(url)).execute().let {
+            if (it.isSuccessful) {
+                it.parseAs<Stream>().url.let {
+                    playlistUtils.extractFromHls(it, videoNameGen = { qty -> "$lang $server:$qty" })
+                }
+            } else {
+                emptyList()
             }
+        }
+    }
 
-    companion object {
-        private val JWT_REGEX by lazy { "const\\s+(?:[A-Za-z0-9_]*)\\s*=\\s*'([^']+)'".toRegex() }
+    private fun findFirstJwt(text: String): String? {
+        val jwtPattern = Regex("['\"]([A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+)['\"]")
+        return jwtPattern.find(text)?.groupValues?.get(1)
     }
 }
