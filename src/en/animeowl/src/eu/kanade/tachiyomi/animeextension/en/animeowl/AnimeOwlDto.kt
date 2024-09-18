@@ -31,11 +31,12 @@ data class EpisodeResponse(
 ) {
     @Serializable
     data class Episode(
-        val id: Int,
+        val id: Double? = null,
         val name: String,
         val lang: String? = null,
         @SerialName("episode_index")
         val episodeIndex: String,
+        val href: String? = null,
     )
 }
 
