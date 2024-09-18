@@ -13,7 +13,6 @@ import kotlinx.serialization.json.Json
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import uy.kohesive.injekt.injectLazy
-import java.net.URI
 
 class ChillxExtractor(private val client: OkHttpClient, private val headers: Headers) {
     private val json: Json by injectLazy()
@@ -73,14 +72,6 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
         return regex.replace(input) {
             it.groupValues[1].toInt(16).toChar().toString()
         }
-    }
-
-    private fun String.getHost(): String {
-        return fixTitle(URI(this).host.substringBeforeLast(".").substringAfterLast("."))
-    }
-
-    private fun fixTitle(title: String): String {
-        return title.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
 
     @Serializable
