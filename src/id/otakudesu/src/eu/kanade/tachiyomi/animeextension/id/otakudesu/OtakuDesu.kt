@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
+import eu.kanade.tachiyomi.lib.streamhidevidextractor.StreamHideVidExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
@@ -222,6 +223,7 @@ class OtakuDesu : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     private val filelionsExtractor by lazy { StreamWishExtractor(client, headers) }
     private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
+    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client) }
 
     private fun getVideosFromEmbed(quality: String, link: String): List<Video> {
         return when {
@@ -250,6 +252,9 @@ class OtakuDesu : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                     val videoUrl = script.substringAfter("src: \"").substringBefore('"')
                     listOf(Video(videoUrl, "Mp4upload - $quality", videoUrl, headers))
                 }
+            }
+            "vidhide" in link -> {
+                streamHideVidExtractor.videosFromUrl(link)
             }
             else -> emptyList()
         }
