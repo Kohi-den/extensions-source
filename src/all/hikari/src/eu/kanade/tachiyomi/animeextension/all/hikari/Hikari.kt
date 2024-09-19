@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
+import eu.kanade.tachiyomi.lib.chillxextractor.ChillxExtractor
 import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
 import eu.kanade.tachiyomi.lib.vidhideextractor.VidHideExtractor
 import eu.kanade.tachiyomi.network.GET
@@ -218,6 +219,7 @@ class Hikari : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     private val filemoonExtractor by lazy { FilemoonExtractor(client) }
     private val vidHideExtractor by lazy { VidHideExtractor(client, headers) }
+    private val chillxExtractor by lazy { ChillxExtractor(client, headers) }
     private val embedRegex = Regex("""getEmbed\(\s*(\d+)\s*,\s*(\d+)\s*,\s*'(\d+)'""")
 
     override fun videoListRequest(episode: SEpisode): Request {
@@ -336,10 +338,8 @@ class Hikari : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     private fun getVideosFromEmbed(embedUrl: String, name: String): List<Video> = when {
         name.contains("vidhide", true) -> vidHideExtractor.videosFromUrl(embedUrl, videoNameGen = { s -> "$name - $s" })
-        embedUrl.contains("filemoon", true) -> {
-            filemoonExtractor.videosFromUrl(embedUrl, prefix = "$name - ", headers = headers)
-        }
-        else -> emptyList()
+        embedUrl.contains("filemoon", true) -> filemoonExtractor.videosFromUrl(embedUrl, prefix = "$name - ", headers = headers)
+        else -> chillxExtractor.videoFromUrl(embedUrl, referer = baseUrl, prefix = "$name - ")
     }
 
     override fun videoListSelector() = ".server-item:has(a[onclick~=getEmbed])"
