@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.en.aniplay
 
 import android.app.Application
-import android.net.Uri
 import android.util.Base64
 import android.util.Log
 import android.widget.Toast
@@ -15,6 +14,7 @@ import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.multisrc.anilist.AniListAnimeHttpSource
+import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.parallelFlatMapBlocking
 import eu.kanade.tachiyomi.util.parseAs
@@ -73,27 +73,14 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         val httpUrl = anime.url.toHttpUrl()
         val animeId = httpUrl.pathSegments[2]
 
-        val requestBody = "[\"${animeId}\",true,false]"
-            .toRequestBody("text/plain;charset=UTF-8".toMediaType())
-
-        val headersWithAction =
-            headers.newBuilder()
-                // next.js stuff I guess
-                .add("Next-Action", HEADER_NEXT_ACTION_EPISODE_LIST_VALUE)
-                .build()
-
-        return POST(url = "$baseUrl/anime/info/$animeId", headersWithAction, requestBody)
+        return GET("$baseUrl/api/anime/episode/$animeId")
     }
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val isMarkFiller = preferences.getBoolean(PREF_MARK_FILLER_EPISODE_KEY, PREF_MARK_FILLER_EPISODE_DEFAULT)
         val episodeListUrl = response.request.url
-        val animeId = episodeListUrl.pathSegments[2]
-
-        val responseString = response.body.string()
-        val episodesArrayString = responseString.split("1:").last()
-
-        val providers = episodesArrayString.parseAs<List<EpisodeListResponse>>()
+        val animeId = episodeListUrl.pathSegments[3]
+        val providers = response.parseAs<List<EpisodeListResponse>>()
         val episodes = mutableMapOf<Int, EpisodeListResponse.Episode>()
         val episodeExtras = mutableMapOf<Int, List<EpisodeExtra>>()
 
@@ -107,7 +94,6 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 val episodeExtra = EpisodeExtra(
                     source = provider.providerId,
                     episodeId = episode.id,
-                    episodeNum = episode.number,
                     hasDub = episode.hasDub,
                 )
                 episodeExtras[episodeNumber] = existingEpisodeExtras + listOf(episodeExtra)
@@ -156,7 +142,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
         val episodeUrl = episode.url.toHttpUrl()
         val animeId = episodeUrl.queryParameter("id") ?: return emptyList()
-        // val episodeNum = episodeUrl.queryParameter("ep") ?: return emptyList()
+        val episodeNum = episodeUrl.queryParameter("ep") ?: return emptyList()
         val extras = episodeUrl.queryParameter("extras")
             ?.let {
                 try {
@@ -176,55 +162,33 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
             }
             ?: emptyList()
 
-        val headersWithAction =
-            headers.newBuilder()
-                // next.js stuff I guess
-                .add("Next-Action", HEADER_NEXT_ACTION_SOURCES_LIST_VALUE)
-                .build()
-
         val episodeDataList = extras.parallelFlatMapBlocking { extra ->
             val languages = mutableListOf("sub").apply {
                 if (extra.hasDub) add("dub")
             }
+            val url = "$baseUrl/api/anime/source/$animeId"
+
             languages.map { language ->
-                val epNum = if (extra.episodeNum == extra.episodeNum.toInt().toFloat()) {
-                    extra.episodeNum.toInt().toString() // If it has no fractional part, convert it to an integer
-                } else {
-                    extra.episodeNum.toString() // If it has a fractional part, leave it as a float
-                }
+                val requestBody = json.encodeToString(
+                    VideoSourceRequest(
+                        source = extra.source,
+                        episodeId = extra.episodeId,
+                        episodeNum = episodeNum,
+                        subType = language,
+                    ),
+                ).toRequestBody("application/json".toMediaType())
 
-                val requestBody = "[\"$animeId\",\"${extra.source}\",\"${extra.episodeId}\",\"$epNum\",\"$language\"]"
-                    .toRequestBody("application/json".toMediaType())
-
-                val params = mapOf(
-                    "id" to animeId,
-                    "host" to extra.source,
-                    "ep" to epNum,
-                    "type" to language,
-                )
-                val builder = Uri.parse("$baseUrl/anime/watch").buildUpon()
-                params.map { (k, v) -> builder.appendQueryParameter(k, v); }
-                val url = builder.build().toString()
-                Log.i("AniPlay", "Url: $url")
                 try {
-                    val request = POST(url, headersWithAction, requestBody)
-                    val response = client.newCall(request).execute()
-
-                    val responseString = response.body.string()
-                    val sourcesString = responseString.split("1:").last()
-                    if (sourcesString.startsWith("null")) return@map null
-                    val data = sourcesString.parseAs<VideoSourceResponse>()
+                    val response = client.newCall(POST(url = url, body = requestBody)).execute().parseAs<VideoSourceResponse>()
 
                     EpisodeData(
                         source = extra.source,
                         language = language,
-                        response = data,
+                        response = response,
                     )
                 } catch (e: IOException) {
-                    Log.w("AniPlay", "VideoList $url IOException", e)
                     null // Return null to be filtered out
                 } catch (e: Exception) {
-                    Log.w("AniPlay", "VideoList $url Exception", e)
                     null // Return null to be filtered out
                 }
             }.filterNotNull() // Filter out null values due to errors
@@ -419,10 +383,6 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
         private const val PREF_MARK_FILLER_EPISODE_KEY = "mark_filler_episode"
         private const val PREF_MARK_FILLER_EPISODE_DEFAULT = true
-
-        // These values has probably something to do with Next.js server and hydration
-        private const val HEADER_NEXT_ACTION_EPISODE_LIST_VALUE = "f3422af67c84852f5e63d50e1f51718f1c0225c4"
-        private const val HEADER_NEXT_ACTION_SOURCES_LIST_VALUE = "5dbcd21c7c276c4d15f8de29d9ef27aef5ea4a5e"
 
         private val DATE_FORMATTER = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
     }

@@ -75,7 +75,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
                         currentPage
                         hasNextPage
                     }
-                    media(type: ANIME, sort: ${"$"}sort, search: ${"$"}search, status_in:[RELEASING,FINISHED,NOT_YET_RELEASED]) {
+                    media(type: ANIME, sort: ${"$"}sort, search: ${"$"}search, status_in:[RELEASING,FINISHED]) {
                         id
                         title {
                             romaji
