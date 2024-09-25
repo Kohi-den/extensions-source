@@ -2,7 +2,7 @@ package eu.kanade.tachiyomi.lib.chillxextractor
 
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
-import eu.kanade.tachiyomi.lib.cryptoaes.CryptoAES.decryptWithSalt
+import eu.kanade.tachiyomi.lib.cryptoaes.CryptoAES
 import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.parseAs
@@ -19,11 +19,11 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
     private val playlistUtils by lazy { PlaylistUtils(client, headers) }
 
     companion object {
-        private val REGEX_MASTER_JS by lazy { Regex("""\s*=\s*'([^']+)""") }
-        private val REGEX_SOURCES by lazy { Regex("""sources:\s*\[\{"file":"([^"]+)""") }
-        private val REGEX_FILE by lazy { Regex("""file: ?"([^"]+)"""") }
-        private val REGEX_SOURCE by lazy { Regex("""source = ?"([^"]+)"""") }
-        private val REGEX_SUBS by lazy { Regex("""\[(.*?)\](https?://[^\s,]+)""") }
+        private val REGEX_MASTER_JS = Regex("""\s*=\s*'([^']+)""")
+        private val REGEX_SOURCES = Regex("""sources:\s*\[\{"file":"([^"]+)""")
+        private val REGEX_FILE = Regex("""file: ?"([^"]+)"""")
+        private val REGEX_SOURCE = Regex("""source = ?"([^"]+)"""")
+        private val REGEX_SUBS = Regex("""\[(.*?)\](https?://[^\s,]+)""")
         private const val KEY_SOURCE = "https://raw.githubusercontent.com/Rowdy-Avocado/multi-keys/keys/index.html"
     }
 
@@ -38,7 +38,7 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
         val master = REGEX_MASTER_JS.find(body)?.groupValues?.get(1) ?: return emptyList()
         val aesJson = json.decodeFromString<CryptoInfo>(master)
         val key = fetchKey() ?: throw ErrorLoadingException("Unable to get key")
-        val decryptedScript = decryptWithSalt(aesJson.ciphertext, aesJson.salt, key)
+        val decryptedScript = CryptoAES.decryptWithSalt(aesJson.ciphertext, aesJson.salt, key)
             .replace("\\n", "\n")
             .replace("\\", "")
 
@@ -76,16 +76,14 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
 
     @Serializable
     data class CryptoInfo(
-        @SerialName("ct")
-        val ciphertext: String,
-        @SerialName("s")
-        val salt: String,
+        @SerialName("ct") val ciphertext: String,
+        @SerialName("s") val salt: String,
     )
 
     @Serializable
     data class KeysData(
-        @SerialName("chillx")
-        val keys: List<String>
+        @SerialName("chillx") val keys: List<String>
     )
 }
+
 class ErrorLoadingException(message: String) : Exception(message)

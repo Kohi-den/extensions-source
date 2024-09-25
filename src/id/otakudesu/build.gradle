@@ -1,7 +1,7 @@
 ext {
     extName = 'OtakuDesu'
     extClass = '.OtakuDesu'
-    extVersionCode = 26
+    extVersionCode = 27
 }
 
 apply from: "$rootDir/common.gradle"
@@ -9,4 +9,5 @@ apply from: "$rootDir/common.gradle"
 dependencies {
     implementation(project(":lib:yourupload-extractor"))
     implementation(project(":lib:streamwish-extractor"))
+    implementation(project(":lib:streamhidevid-extractor"))
 }

@@ -14,7 +14,6 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
-import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
@@ -87,13 +86,13 @@ class FilmPalast : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 element.attr("abs:data-player-url")
             }
             when {
-                url.contains("https://voe.sx") && hosterSelection.contains("voe") ->
+                url.contains("voe") && hosterSelection.contains("voe") ->
                     VoeExtractor(client).videosFromUrl(url)
 
-                url.contains("https://upstream.to") && hosterSelection.contains("up") ->
+                url.contains("upstream") && hosterSelection.contains("up") ->
                     UpstreamExtractor(client).videoFromUrl(url)
 
-                url.contains("https://streamtape.com") && hosterSelection.contains("stape") -> {
+                url.contains("streamtape") && hosterSelection.contains("stape") -> {
                     runCatching {
                         val stapeHeaders = Headers.headersOf(
                             "Referer",
@@ -119,7 +118,7 @@ class FilmPalast : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                     }.getOrNull()
                 }
 
-                url.contains("https://evoload.io") && hosterSelection.contains("evo") -> {
+                url.contains("evoload") && hosterSelection.contains("evo") -> {
                     val quality = "Evoload"
                     document.selectFirst("#EvoVid_html5_api")?.attr("src")?.let { videoUrl ->
                         if (videoUrl.contains("EvoStreams")) {
@@ -129,12 +128,9 @@ class FilmPalast : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                         }
                     }
                 }
-
-                url.contains("filemoon.sx") && hosterSelection.contains("moon") ->
-                    FilemoonExtractor(client).videosFromUrl(url)
-                url.contains("hide.com") && hosterSelection.contains("hide") ->
+                url.contains("hide") && hosterSelection.contains("hide") ->
                     StreamHideVidExtractor(client).videosFromUrl(url, "StreamHide")
-                url.contains("streamvid.net") && hosterSelection.contains("vid") ->
+                url.contains("streamvid") && hosterSelection.contains("vid") ->
                     StreamHideVidExtractor(client).videosFromUrl(url, "StreamVid")
 
                 "wolfstream" in url && hosterSelection.contains("wolf") -> {
@@ -258,7 +254,6 @@ class FilmPalast : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             "Streamtape",
             "Evoload",
             "Upstream",
-            "Filemoon",
             "StreamHide",
             "StreamVid",
             "WolfStream",
@@ -268,7 +263,6 @@ class FilmPalast : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             "https://streamtape.com",
             "https://evoload.io",
             "https://upstream.to",
-            "https://filemoon.sx",
             "hide.com",
             "streamvid.net",
             "https://wolfstream",
@@ -282,7 +276,6 @@ class FilmPalast : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             "stape",
             "evo",
             "up",
-            "moon",
             "hide",
             "vid",
             "wolf",
