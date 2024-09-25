@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.th.pinoymoviepedia
+package eu.kanade.tachiyomi.animeextension.en.pinoymoviepedia
 
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
