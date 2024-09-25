@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.th.pinoymoviepedia
+package eu.kanade.tachiyomi.animeextension.en.pinoymoviepedia
 
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
