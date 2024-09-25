@@ -57,6 +57,7 @@ data class VideoSourceResponse(
 @Serializable
 data class EpisodeExtra(
     val source: String,
+    val episodeNum: Float,
     val episodeId: String,
     val hasDub: Boolean,
 )
