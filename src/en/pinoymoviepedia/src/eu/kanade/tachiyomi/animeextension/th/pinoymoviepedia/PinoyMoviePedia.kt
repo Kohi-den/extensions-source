@@ -17,7 +17,7 @@ import okhttp3.Response
 import org.jsoup.nodes.Element
 
 class PinoyMoviePedia : DooPlay(
-    "th",
+    "en",
     "PinoyMoviePedia",
     "https://pinoymoviepedia.ru",
 ) {
