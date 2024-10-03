@@ -85,4 +85,5 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
         @SerialName("chillx") val keys: List<String>
     )
 }
+
 class ErrorLoadingException(message: String) : Exception(message)
