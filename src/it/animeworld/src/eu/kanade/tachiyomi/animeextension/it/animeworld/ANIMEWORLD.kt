@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.SharedPreferences
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
-import eu.kanade.tachiyomi.animeextension.it.animeworld.extractors.StreamHideExtractor
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -13,8 +12,9 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
-import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
+import eu.kanade.tachiyomi.lib.streamhidevidextractor.StreamHideVidExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
+import eu.kanade.tachiyomi.lib.vidguardextractor.VidGuardExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import kotlinx.serialization.Serializable
@@ -102,17 +102,12 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         if (copyrightError.hasText()) throw Exception(copyrightError.text())
 
         val serverList = mutableListOf<Pair<String, String>>()
-
-        val elements = document.select(videoListSelector())
         val epId = document.selectFirst("div#player[data-episode-id]")?.attr("data-episode-id")
 
         val altServers = mutableListOf<Pair<String, String>>()
-        val altList = listOf("StreamHide", "FileMoon")
         document.select("div.servers > div.widget-title span.server-tab").forEach {
             val name = it.text()
-            if (altList.any { t -> t.contains(name, true) }) {
-                altServers.add(Pair(name, it.attr("data-name")))
-            }
+            altServers.add(Pair(name, it.attr("data-name")))
         }
 
         altServers.forEach { serverPair ->
@@ -128,21 +123,16 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                     .build()
                 val target = json.decodeFromString<ServerResponse>(
                     client.newCall(GET(apiUrl, headers = apiHeaders)).execute().body.string(),
-                ).target
+                ).grabber
                 serverList.add(Pair(serverPair.first, target))
             }
         }
 
-        for (element in elements) {
-            val url = element.attr("href")
-            val name = element.text().substringAfter("ownload ").substringBefore(" ")
-            serverList.add(Pair(name, url))
-        }
-
         val videoList = serverList.flatMap { server ->
             val url = server.second
+            val url2 = server.first
             when {
-                url.contains("streamingaw") -> {
+                url2.contains("AnimeWorld Server") -> {
                     listOf(Video(url, "AnimeWorld Server", url))
                 }
                 url.contains("https://doo") -> {
@@ -153,14 +143,14 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                     StreamTapeExtractor(client).videoFromUrl(url.replace("/v/", "/e/"))
                         ?.let(::listOf)
                 }
-                url.contains("filemoon") -> {
-                    FilemoonExtractor(client).videosFromUrl(url, prefix = "${server.first} - ", headers = headers)
+                url.contains("streamhide") -> {
+                    StreamHideVidExtractor(client).videosFromUrl(url)
                 }
-                server.first.contains("streamhide", true) -> {
-                    StreamHideExtractor(client).videosFromUrl(url, headers)
+                url.contains("vidguard") or url.contains("listeamed") -> {
+                    VidGuardExtractor(client).videosFromUrl(url)
                 }
                 else -> null
-            }.orEmpty()
+            } ?: emptyList()
         }
 
         return videoList
@@ -518,8 +508,8 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         ListPreference(screen.context).apply {
             key = "preferred_server"
             title = "Preferred server"
-            entries = arrayOf("Animeworld server", "FileMoon", "StreamHide", "Doodstream", "StreamTape")
-            entryValues = arrayOf("Animeworld server", "FileMoon", "StreamHide", "Doodstream", "StreamTape")
+            entries = arrayOf("Animeworld server", "StreamHide", "Doodstream", "StreamTape", "VidGuard", "Listeamed")
+            entryValues = arrayOf("Animeworld server", "StreamHide", "Doodstream", "StreamTape", "VidGuard", "Listeamed")
             setDefaultValue("Animeworld server")
             summary = "%s"
 
@@ -537,5 +527,6 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     @Serializable
     data class ServerResponse(
         val target: String,
+        val grabber: String,
     )
 }
