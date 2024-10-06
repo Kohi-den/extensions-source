@@ -339,7 +339,7 @@ class Hikari : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     private fun getVideosFromEmbed(embedUrl: String, name: String): List<Video> = when {
         name.contains("vidhide", true) -> vidHideExtractor.videosFromUrl(embedUrl, videoNameGen = { s -> "$name - $s" })
         embedUrl.contains("filemoon", true) -> filemoonExtractor.videosFromUrl(embedUrl, prefix = "$name - ", headers = headers)
-        else -> chillxExtractor.videoFromUrl(embedUrl, referer = baseUrl, prefix = "$name - ")
+        else -> chillxExtractor.videoFromUrl(embedUrl, referer = "https://playerx.stream/", prefix = "$name - ")
     }
 
     override fun videoListSelector() = ".server-item:has(a[onclick~=getEmbed])"
