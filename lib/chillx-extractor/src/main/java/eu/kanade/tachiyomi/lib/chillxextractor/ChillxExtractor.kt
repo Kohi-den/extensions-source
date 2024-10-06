@@ -29,7 +29,7 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
 
     fun videoFromUrl(url: String, referer: String, prefix: String = "Chillx - "): List<Video> {
         val newHeaders = headers.newBuilder()
-            .set("Referer", "$referer/")
+            .set("Referer", referer)
             .set("Accept-Language", "en-US,en;q=0.5")
             .build()
 
@@ -56,7 +56,7 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
 
         return playlistUtils.extractFromHls(
             playlistUrl = masterUrl,
-            referer = url,
+            referer = referer,
             videoNameGen = { "$prefix$it" },
             subtitleList = subtitleList,
         )
