@@ -83,7 +83,7 @@ class HostersDto(
 object BooleanSerializer : JsonTransformingSerializer<Boolean>(Boolean.serializer()) {
     override fun transformDeserialize(element: JsonElement): JsonElement {
         require(element is JsonPrimitive)
-        return if (element.jsonPrimitive.isString) {
+        return if (element.jsonPrimitive.isString && element.jsonPrimitive.content == "true") {
             JsonPrimitive(true)
         } else {
             JsonPrimitive(element.jsonPrimitive.booleanOrNull ?: false)

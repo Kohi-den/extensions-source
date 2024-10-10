@@ -10,7 +10,8 @@ import eu.kanade.tachiyomi.animeextension.pt.vizer.dto.SearchItemDto
 import eu.kanade.tachiyomi.animeextension.pt.vizer.dto.SearchResultDto
 import eu.kanade.tachiyomi.animeextension.pt.vizer.dto.VideoDto
 import eu.kanade.tachiyomi.animeextension.pt.vizer.dto.VideoListDto
-import eu.kanade.tachiyomi.animeextension.pt.vizer.extractors.WarezExtractor
+import eu.kanade.tachiyomi.animeextension.pt.vizer.extractors.FireplayerExtractor
+import eu.kanade.tachiyomi.animeextension.pt.vizer.interceptor.WebViewResolver
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -41,7 +42,7 @@ class Vizer : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override val name = "Vizer.tv"
 
-    override val baseUrl = "https://vizertv.in"
+    override val baseUrl = "https://novizer.com"
     private val apiUrl = "$baseUrl/includes/ajax"
 
     override val lang = "pt-BR"
@@ -57,6 +58,8 @@ class Vizer : ConfigurableAnimeSource, AnimeHttpSource() {
     private val preferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
+
+    private val webViewResolver by lazy { WebViewResolver(headers) }
 
     // ============================== Popular ===============================
     override fun popularAnimeRequest(page: Int): Request {
@@ -176,7 +179,7 @@ class Vizer : ConfigurableAnimeSource, AnimeHttpSource() {
         val response = episodesClient.newCall(apiRequest("getEpisodes=$id")).execute()
         val episodes = response.parseAs<EpisodeListDto>().episodes
             .values
-            .filter { it.released }
+            .filter { it.released === true }
             .map {
                 SEpisode.create().apply {
                     name = "$sname: Ep ${it.name}".run {
@@ -243,7 +246,7 @@ class Vizer : ConfigurableAnimeSource, AnimeHttpSource() {
 
     private val mixdropExtractor by lazy { MixDropExtractor(client) }
     private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
-    private val warezExtractor by lazy { WarezExtractor(client, headers) }
+    private val fireplayerExtractor by lazy { FireplayerExtractor(client, "https://basseqwevewcewcewecwcw.xyz") }
 
     private fun getVideosFromObject(videoObj: VideoDto): List<Video> {
         val hosters = videoObj.hosters ?: return emptyList()
@@ -253,10 +256,13 @@ class Vizer : ConfigurableAnimeSource, AnimeHttpSource() {
         return hosters.iterator().flatMap { (name, status) ->
             if (status != 3) return@flatMap emptyList()
             val url = getPlayerUrl(videoObj.id, name)
+            if (url.isNullOrBlank()) {
+                return emptyList()
+            }
             when (name) {
                 "mixdrop" -> mixdropExtractor.videosFromUrl(url, langPrefix)
                 "streamtape" -> streamtapeExtractor.videosFromUrl(url, "StreamTape($langPrefix)")
-                "warezcdn" -> warezExtractor.videosFromUrl(url, langPrefix)
+                "warezcdn" -> fireplayerExtractor.videosFromUrl(url, langPrefix)
                 else -> emptyList()
             }
         }
@@ -295,17 +301,8 @@ class Vizer : ConfigurableAnimeSource, AnimeHttpSource() {
     // ============================= Utilities ==============================
     private val noRedirectClient = client.newBuilder().followRedirects(false).build()
 
-    private fun getPlayerUrl(id: String, name: String): String {
-        val req = GET("$baseUrl/embed/getPlay.php?id=$id&sv=$name", headers)
-        return if (name == "warezcdn") {
-            val res = noRedirectClient.newCall(req).execute()
-            res.close()
-            res.headers["location"]!!
-        } else {
-            val res = client.newCall(req).execute()
-            val body = res.body.string()
-            body.substringAfter("location.href=\"", "").substringBefore("\";", "")
-        }
+    private fun getPlayerUrl(id: String, name: String): String? {
+        return webViewResolver.getUrl("$baseUrl/embed/getEmbed.php?id=$id&sv=$name", "$baseUrl/termos")
     }
 
     private fun apiRequest(body: String): Request {
