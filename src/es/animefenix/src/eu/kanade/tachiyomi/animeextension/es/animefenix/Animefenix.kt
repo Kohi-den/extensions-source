@@ -47,6 +47,7 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
     private val preferences: SharedPreferences by lazy { Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000) }
 
     companion object {
+        private val SERVER_REGEX = """tabsArray\['?\d+'?]\s*=\s*['\"](https[^'\"]+)['\"]""".toRegex()
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_DEFAULT = "1080"
         private val QUALITY_LIST = arrayOf("1080", "720", "480", "360")
@@ -65,14 +66,13 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val document = response.asJsoup()
-        val elements = document.select("article.serie-card")
-        val nextPage = document.select("ul.pagination-list li a.pagination-link:contains(Siguiente)").any()
+        val elements = document.select("main > div.container > div.grid > div.group")
+        val nextPage = document.select("nav[aria-label=Pagination] span:containsOwn(Next)").any()
         val animeList = elements.map { element ->
             SAnime.create().apply {
-                setUrlWithoutDomain(element.select("figure.image a").attr("abs:href"))
-                title = element.select("div.title h3 a").text()
-                thumbnail_url = element.select("figure.image a img").attr("abs:src")
-                description = element.select("div.serie-card__information p").text()
+                setUrlWithoutDomain(element.selectFirst("a")!!.attr("abs:href"))
+                title = element.selectFirst("div h3.text-primary")!!.ownText()
+                thumbnail_url = element.selectFirst("img.object-cover")?.attr("abs:src")
             }
         }
         return AnimesPage(animeList, nextPage)
@@ -96,12 +96,10 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
-        return document.select("ul.anime-page__episode-list.is-size-6 li").map { it ->
-            val epNum = it.select("a span").text().replace("Episodio", "")
+        return document.select("div.container > div > ul > li").map { element ->
             SEpisode.create().apply {
-                episode_number = epNum.toFloat()
-                name = "Episodio $epNum"
-                setUrlWithoutDomain(it.select("a").attr("abs:href"))
+                name = element.selectFirst("span > span")!!.ownText()
+                setUrlWithoutDomain(element.selectFirst("a")!!.attr("abs:href"))
             }
         }
     }
@@ -109,9 +107,8 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
         val videoList = mutableListOf<Video>()
-        val servers = document.selectFirst("script:containsData(var tabsArray)")!!.data()
-            .split("tabsArray").map { it.substringAfter("src='").substringBefore("'").replace("amp;", "") }
-            .filter { it.contains("https") }
+        val serversData = document.selectFirst("script:containsData(var tabsArray)")?.data() ?: throw Exception("No se encontraron servidores")
+        val servers = SERVER_REGEX.findAll(serversData).map { it.groupValues[1] }.toList()
 
         servers.forEach { server ->
             val decodedUrl = URLDecoder.decode(server, "UTF-8")
@@ -216,12 +213,13 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
         ).reversed()
     }
 
-    override fun animeDetailsParse(response: Response): SAnime {
+    override fun animeDetailsParse(response: Response) = SAnime.create().apply {
         val document = response.asJsoup()
-        return SAnime.create().apply {
-            title = document.select("h1.title.has-text-orange").text()
-            genre = document.select("a.button.is-small.is-orange.is-outlined.is-roundedX").joinToString { it.text() }
-            status = parseStatus(document.select("div.column.is-12-mobile.xis-3-tablet.xis-3-desktop.xhas-background-danger.is-narrow-tablet.is-narrow-desktop a").text())
+        with(document.selectFirst("main > div.relative > div.container > div.flex")!!) {
+            title = selectFirst("h1.font-bold")!!.ownText()
+            genre = select("div:has(h2:containsOwn(Géneros)) > div.flex > a").joinToString { it.text() }
+            status = parseStatus(selectFirst("li:has(> span:containsOwn(Estado))")!!.ownText())
+            description = select("div:has(h2:containsOwn(Sinopsis)) > p").text()
         }
     }
 
