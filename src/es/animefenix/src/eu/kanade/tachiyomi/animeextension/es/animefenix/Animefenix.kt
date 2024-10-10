@@ -46,8 +46,24 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
 
     private val preferences: SharedPreferences by lazy { Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000) }
 
+    private object CSSQuery {
+        object AnimeList {
+            const val GRID = "main div.container div.grid"
+            const val ELEMENT = "a"
+            const val ELEMENT_URL = "a"
+            const val ELEMENT_TITLE = "div div h3"
+            const val ELEMENT_THUMBNAIL_URL = "img"
+            const val ELEMENT_STATUS = "div div span.bg-zinc-700"
+            const val NEXT = "a:has(span.sr-only:contains(Next))"
+        }
+
+        object EpisodeList {
+            const val EPISODE = "div.container div.bg-zinc-800 ul li"
+            const val NUMBER = "a span span"
+            const val URL = "a"
+        }
+    }
     companion object {
-        private val SERVER_REGEX = """tabsArray\['?\d+'?]\s*=\s*['\"](https[^'\"]+)['\"]""".toRegex()
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_DEFAULT = "1080"
         private val QUALITY_LIST = arrayOf("1080", "720", "480", "360")
@@ -66,13 +82,17 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val document = response.asJsoup()
-        val elements = document.select("main > div.container > div.grid > div.group")
-        val nextPage = document.select("nav[aria-label=Pagination] span:containsOwn(Next)").any()
+
+        val grid = document.select(CSSQuery.AnimeList.GRID)[1]
+
+        val elements = grid.select(CSSQuery.AnimeList.ELEMENT)
+        val nextPage = document.select(CSSQuery.AnimeList.NEXT).any()
         val animeList = elements.map { element ->
             SAnime.create().apply {
-                setUrlWithoutDomain(element.selectFirst("a")!!.attr("abs:href"))
-                title = element.selectFirst("div h3.text-primary")!!.ownText()
-                thumbnail_url = element.selectFirst("img.object-cover")?.attr("abs:src")
+                setUrlWithoutDomain(element.select(CSSQuery.AnimeList.ELEMENT_URL).attr("abs:href"))
+                title = element.select(CSSQuery.AnimeList.ELEMENT_TITLE).text()
+                thumbnail_url = element.select(CSSQuery.AnimeList.ELEMENT_THUMBNAIL_URL).attr("abs:src")
+                status = parseStatus(element.select(CSSQuery.AnimeList.ELEMENT_STATUS).text())
             }
         }
         return AnimesPage(animeList, nextPage)
@@ -96,10 +116,12 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
-        return document.select("div.container > div > ul > li").map { element ->
+        return document.select(CSSQuery.EpisodeList.EPISODE).map { it ->
+            val epNum = it.select(CSSQuery.EpisodeList.NUMBER).text().replace("Episodio", "")
             SEpisode.create().apply {
-                name = element.selectFirst("span > span")!!.ownText()
-                setUrlWithoutDomain(element.selectFirst("a")!!.attr("abs:href"))
+                episode_number = epNum.toFloat()
+                name = "Episodio $epNum"
+                setUrlWithoutDomain(it.select(CSSQuery.EpisodeList.URL).attr("abs:href"))
             }
         }
     }
@@ -107,8 +129,11 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
         val videoList = mutableListOf<Video>()
-        val serversData = document.selectFirst("script:containsData(var tabsArray)")?.data() ?: throw Exception("No se encontraron servidores")
-        val servers = SERVER_REGEX.findAll(serversData).map { it.groupValues[1] }.toList()
+        val servers = document.selectFirst("script:containsData(var tabsArray)")!!.data()
+            .split("\n")
+            .filter { it.contains("tabsArray[") }
+            .map { it.split(" = ").last().trim().trim(';').trim('"') }
+            .filter { it.contains("https") }
 
         servers.forEach { server ->
             val decodedUrl = URLDecoder.decode(server, "UTF-8")
