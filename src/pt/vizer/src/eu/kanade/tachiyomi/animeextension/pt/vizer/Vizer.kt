@@ -10,7 +10,6 @@ import eu.kanade.tachiyomi.animeextension.pt.vizer.dto.SearchItemDto
 import eu.kanade.tachiyomi.animeextension.pt.vizer.dto.SearchResultDto
 import eu.kanade.tachiyomi.animeextension.pt.vizer.dto.VideoDto
 import eu.kanade.tachiyomi.animeextension.pt.vizer.dto.VideoListDto
-import eu.kanade.tachiyomi.animeextension.pt.vizer.extractors.FireplayerExtractor
 import eu.kanade.tachiyomi.animeextension.pt.vizer.interceptor.WebViewResolver
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -19,6 +18,7 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import eu.kanade.tachiyomi.lib.fireplayerextractor.FireplayerExtractor
 import eu.kanade.tachiyomi.lib.mixdropextractor.MixDropExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.network.GET
@@ -246,7 +246,7 @@ class Vizer : ConfigurableAnimeSource, AnimeHttpSource() {
 
     private val mixdropExtractor by lazy { MixDropExtractor(client) }
     private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
-    private val fireplayerExtractor by lazy { FireplayerExtractor(client, "https://basseqwevewcewcewecwcw.xyz") }
+    private val fireplayerExtractor by lazy { FireplayerExtractor(client) }
 
     private fun getVideosFromObject(videoObj: VideoDto): List<Video> {
         val hosters = videoObj.hosters ?: return emptyList()
@@ -254,7 +254,8 @@ class Vizer : ConfigurableAnimeSource, AnimeHttpSource() {
         val langPrefix = if (videoObj.lang == "1") "LEG" else "DUB"
 
         return hosters.iterator().flatMap { (name, status) ->
-            if (status != 3) return@flatMap emptyList()
+            // Always try the warezcdn
+            if (status != 3 && name != "warezcdn") return@flatMap emptyList()
             val url = getPlayerUrl(videoObj.id, name)
             if (url.isNullOrBlank()) {
                 return emptyList()
@@ -262,7 +263,7 @@ class Vizer : ConfigurableAnimeSource, AnimeHttpSource() {
             when (name) {
                 "mixdrop" -> mixdropExtractor.videosFromUrl(url, langPrefix)
                 "streamtape" -> streamtapeExtractor.videosFromUrl(url, "StreamTape($langPrefix)")
-                "warezcdn" -> fireplayerExtractor.videosFromUrl(url, langPrefix)
+                "warezcdn" -> fireplayerExtractor.videosFromUrl(url, videoNameGen = { "WarezCDN($langPrefix) - $it" })
                 else -> emptyList()
             }
         }
