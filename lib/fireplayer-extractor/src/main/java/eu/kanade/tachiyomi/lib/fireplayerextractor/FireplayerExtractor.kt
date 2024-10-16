@@ -36,6 +36,7 @@ class FireplayerExtractor(
 
             val script =
                 doc.selectFirst("script:containsData(eval):containsData(p,a,c,k,e,d)")?.data()
+                    ?.replace(Regex("[\\u00E0-\\u00FC]"), "-") // Fix a bug in JsUnpacker with accents
                     ?.let(JsUnpacker::unpackAndCombine)
                     ?: doc.selectFirst("script:containsData(FirePlayer)")?.data()
 
