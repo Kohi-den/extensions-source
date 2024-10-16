@@ -3,7 +3,7 @@ ext {
     extClass = '.AnimeOnlineNinja'
     themePkg = 'dooplay'
     baseUrl = 'https://ww3.animeonline.ninja'
-    overrideVersionCode = 40
+    overrideVersionCode = 41
 }
 
 apply from: "$rootDir/common.gradle"

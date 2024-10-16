@@ -3,7 +3,7 @@ ext {
     extClass = '.Bakashi'
     themePkg = 'dooplay'
     baseUrl = 'https://bakashi.tv'
-    overrideVersionCode = 12
+    overrideVersionCode = 13
 }
 
 apply from: "$rootDir/common.gradle"
