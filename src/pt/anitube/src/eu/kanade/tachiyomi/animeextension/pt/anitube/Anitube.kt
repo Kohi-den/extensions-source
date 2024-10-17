@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
+import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.animeextension.pt.anitube.extractors.AnitubeDownloadExtractor
 import eu.kanade.tachiyomi.animeextension.pt.anitube.extractors.AnitubeExtractor
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -199,8 +200,10 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
         val links = mutableListOf(document.location())
 
-        document.selectFirst("div.abaItemDown > a")?.attr("href")?.let {
-            links.add(it)
+        if (preferences.getBoolean(PREF_FILE4GO_KEY, PREF_FILE4GO_DEFAULT)!!) {
+            document.selectFirst("div.abaItemDown > a")?.attr("href")?.let {
+                links.add(it)
+            }
         }
 
         val epName = document.selectFirst("meta[itemprop=name]")!!.attr("content")
@@ -232,6 +235,16 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 val index = findIndexOfValue(selected)
                 val entry = entryValues[index] as String
                 preferences.edit().putString(key, entry).commit()
+            }
+        }.also(screen::addPreference)
+
+        SwitchPreferenceCompat(screen.context).apply {
+            key = PREF_FILE4GO_KEY
+            title = "Usar File4Go como mirror"
+            setDefaultValue(PREF_FILE4GO_DEFAULT)
+            summary = PREF_FILE4GO_SUMMARY
+            setOnPreferenceChangeListener { _, newValue ->
+                preferences.edit().putBoolean(key, newValue as Boolean).commit()
             }
         }.also(screen::addPreference)
 
@@ -308,6 +321,9 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private const val PREF_AUTHCODE_KEY = "authcode"
         private const val PREF_AUTHCODE_SUMMARY = "Código de Autenticação"
         private const val PREF_AUTHCODE_DEFAULT = ""
+        private const val PREF_FILE4GO_KEY = "file4go"
+        private const val PREF_FILE4GO_SUMMARY = "Usar File4Go como mirror"
+        private const val PREF_FILE4GO_DEFAULT = false
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_TITLE = "Qualidade preferida"
         private const val PREF_QUALITY_DEFAULT = "HD"
