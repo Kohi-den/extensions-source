@@ -132,7 +132,7 @@ class Xfani : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override fun getFilterList(): AnimeFilterList {
         return AnimeFilterList(
-            AnimeFilter.Header("设置筛选后搜索关键字搜索会失效"),
+            AnimeFilter.Header("设置筛选后关键字搜索会失效"),
             TypeFilter(),
             ClassFilter(),
             VersionFilter(),
