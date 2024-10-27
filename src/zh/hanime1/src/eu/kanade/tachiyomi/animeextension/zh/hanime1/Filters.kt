@@ -16,12 +16,20 @@ open class TagFilter(val key: String, name: String, state: Boolean = false) :
     AnimeFilter.CheckBox(name, state)
 
 class GenreFilter(values: Array<String>) :
-    QueryFilter("影片類型", "genre", values.ifEmpty { arrayOf("全部") })
+    QueryFilter(
+        "影片類型",
+        "genre",
+        values.ifEmpty { arrayOf("全部", "裏番", "泡面番", "Motion Anime") },
+    )
 
 class SortFilter(values: Array<String>) :
-    QueryFilter("排序方式", "sort", values.ifEmpty { arrayOf("最新上市") })
+    QueryFilter(
+        "排序方式",
+        "sort",
+        values.ifEmpty { arrayOf("最新上市", "最新上傳", "本日排行", "本週排行", "本月排行") },
+    )
 
-class HotFilter : TagFilter("sort", "本周排行", true)
+object HotFilter : TagFilter("sort", "本周排行", true)
 
 class YearFilter(values: Array<String>) :
     QueryFilter("發佈年份", "year", values.ifEmpty { arrayOf("全部年份") })

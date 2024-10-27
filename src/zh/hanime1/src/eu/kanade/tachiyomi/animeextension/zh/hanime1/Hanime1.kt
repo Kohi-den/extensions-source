@@ -116,7 +116,7 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
     override fun popularAnimeParse(response: Response): AnimesPage = searchAnimeParse(response)
 
     override fun popularAnimeRequest(page: Int) =
-        searchAnimeRequest(page, "", AnimeFilterList(HotFilter()))
+        searchAnimeRequest(page, "", AnimeFilterList(HotFilter))
 
     private fun String.appendInvisibleChar(): String {
         // The search result title will be same as one episode name of anime.
