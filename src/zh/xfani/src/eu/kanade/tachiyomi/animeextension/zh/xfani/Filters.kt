@@ -52,7 +52,10 @@ class VersionFilter(
 
 class LetterFilter(
     tags: Array<String> = "ABCDEFGHIJKLMNOPQRSTUYWXYZ".map { it.toString() }.toMutableList()
-        .also { it.add("0-9") }.toTypedArray(),
+        .also {
+            it.add(0, "全部")
+            it.add("0-9")
+        }.toTypedArray(),
 ) : TagFilter("字母", tags)
 
 class SortFilter(
@@ -62,3 +65,5 @@ class SortFilter(
         "按评分" to "score",
     ),
 ) : SelectFilter("排序", kv)
+
+class YearFilter(tags: Array<String>) : TagFilter("年份", tags)
