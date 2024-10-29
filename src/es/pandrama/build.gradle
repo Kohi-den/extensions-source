@@ -1,0 +1,12 @@
+ext {
+    extName = 'Pandrama'
+    extClass = '.Pandrama'
+    extVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:okru-extractor'))
+    implementation(project(':lib:vk-extractor'))
+}
