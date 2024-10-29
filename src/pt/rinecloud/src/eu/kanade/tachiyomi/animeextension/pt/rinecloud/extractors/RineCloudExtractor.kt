@@ -29,21 +29,19 @@ class RineCloudExtractor(private val client: OkHttpClient, private val headers: 
                 ?: return emptyList()
         }
 
-        return if ("googlevideo" in script) {
-            script.substringAfter("sources:").substringBefore("]")
-                .split("{")
-                .drop(1)
-                .map {
-                    val videoUrl = it.substringAfter("file\":\"").substringBefore('"')
-                    val quality = it.substringAfter("label\":\"").substringBefore('"')
-                    Video(videoUrl, "Rinecloud - $quality", videoUrl, headers)
-                }
-        } else {
-            val masterPlaylistUrl = script.substringAfter("sources:")
-                .substringAfter("file\":\"")
-                .substringBefore('"')
+        return script.substringAfter("sources:").substringBefore("]")
+            .split("{")
+            .drop(1)
+            .flatMap {
+                val videoUrl = it.substringAfter("\"file\"").substringAfter('"').substringBefore('"')
+                val quality = it.substringAfter("\"label\"").substringAfter('"').substringBefore('"').ifBlank { "Unknown" }
 
-            playlistUtils.extractFromHls(masterPlaylistUrl, videoNameGen = { "Rinecloud - $it" })
-        }
+                when {
+                    arrayOf("googlevideo", ".mp4").any(videoUrl) -> listOf(Video(videoUrl, "Rinecloud - $quality", videoUrl, headers))
+                    else -> playlistUtils.extractFromHls(videoUrl, videoNameGen = { "Rinecloud - ${if (it == "Video") quality else it}" })
+                }
+            }
     }
+
+    private fun Array<String>.any(url: String): Boolean = this.any { url.contains(it, ignoreCase = true) }
 }
