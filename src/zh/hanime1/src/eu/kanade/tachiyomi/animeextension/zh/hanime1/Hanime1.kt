@@ -154,7 +154,22 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
         if (query.isNotEmpty()) {
             searchUrl.addQueryParameter("query", query)
         }
-        filters.list.forEach {
+        filters.list.flatMap {
+            when (it) {
+                is TagsFilter -> {
+                    it.state.flatMap { inner ->
+                        if (inner is CategoryFilter) {
+                            inner.state
+                        } else {
+                            listOf(inner)
+                        }
+                    }
+                }
+
+                is AnimeFilter.Group<*> -> it.state
+                else -> listOf(it)
+            }
+        }.forEach {
             when (it) {
                 is QueryFilter -> {
                     if (it.selected.isNotEmpty()) {
@@ -162,7 +177,18 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
                     }
                 }
 
-                is TagFilter -> searchUrl.addQueryParameter(it.key, it.name)
+                is BroadMatchFilter -> {
+                    if (it.state) {
+                        searchUrl.addQueryParameter(it.key, "on")
+                    }
+                }
+
+                is TagFilter -> {
+                    if (it.state) {
+                        searchUrl.addQueryParameter(it.key, it.name)
+                    }
+                }
+
                 else -> {}
             }
         }
@@ -258,7 +284,8 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
                 entries = arrayOf("1080P", "720P", "480P")
                 entryValues = entries
                 setDefaultValue(DEFAULT_QUALITY)
-                summary = "當前選擇：${preferences.getString(PREF_KEY_VIDEO_QUALITY, DEFAULT_QUALITY)}"
+                summary =
+                    "當前選擇：${preferences.getString(PREF_KEY_VIDEO_QUALITY, DEFAULT_QUALITY)}"
                 setOnPreferenceChangeListener { _, newValue ->
                     summary = "當前選擇：${newValue as String}"
                     true
