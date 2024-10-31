@@ -48,7 +48,12 @@ class Anime1 : AnimeHttpSource() {
     private val cookieManager
         get() = CookieManager.getInstance()
 
-    override fun animeDetailsParse(response: Response) = SAnime.create()
+    override fun animeDetailsParse(response: Response) = throw UnsupportedOperationException()
+    override suspend fun getAnimeDetails(anime: SAnime): SAnime {
+        return SAnime.create().apply {
+            thumbnail_url = FIX_COVER
+        }
+    }
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         var document: Document? = response.asJsoup()
@@ -106,7 +111,7 @@ class Anime1 : AnimeHttpSource() {
                     val id = array.getContent(0)!!
                     url = "?cat=$id"
                     title = array.getContent(1)!!
-                    if (id == "0" || title.contains("</a>")){
+                    if (id == "0" || title.contains("</a>")) {
                         val doc = Jsoup.parse(title)
                         doc.selectFirst("a")?.let { link ->
                             url = link.attr("href")
