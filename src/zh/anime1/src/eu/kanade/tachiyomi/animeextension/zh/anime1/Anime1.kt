@@ -22,6 +22,7 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -102,8 +103,16 @@ class Anime1 : AnimeHttpSource() {
             items.map {
                 SAnime.create().apply {
                     val array = it.jsonArray
-                    url = "?cat=${array.getContent(0)!!}"
+                    val id = array.getContent(0)!!
+                    url = "?cat=$id"
                     title = array.getContent(1)!!
+                    if (id == "0" || title.contains("</a>")){
+                        val doc = Jsoup.parse(title)
+                        doc.selectFirst("a")?.let { link ->
+                            url = link.attr("href")
+                        }
+                        title = doc.text()
+                    }
                     status = if (array.getContent(2)?.contains("連載中") == true) {
                         SAnime.ONGOING
                     } else {
