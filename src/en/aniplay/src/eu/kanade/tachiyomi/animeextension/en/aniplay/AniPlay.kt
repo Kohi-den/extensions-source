@@ -110,7 +110,11 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         }
 
         val responseString = response.body.string()
-        val episodesArrayString = responseString.split("1:").last()
+        val episodesArrayString = extractEpisodeList(responseString)
+        if (episodesArrayString == null) {
+            Log.e("AniPlay", "Episode list not found - ${response.request}\nbody:${response.request.body}\n${responseString.substring(0,200)}")
+            throw Exception("Episode list not found")
+        }
 
         val providers = episodesArrayString.parseAs<List<EpisodeListResponse>>()
         val episodes = mutableMapOf<Int, EpisodeListResponse.Episode>()
@@ -190,7 +194,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 try {
                     json.decodeFromString<List<EpisodeExtra>>(it)
                 } catch (e: SerializationException) {
-                    Log.e("AniPlay", "Error parsing JSON", e)
+                    Log.e("AniPlay", "Error parsing JSON extras", e)
                     emptyList()
                 }
             }
@@ -287,6 +291,26 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 .thenByDescending { it.quality.contains(quality) }
                 .thenByDescending { it.quality.contains(server, true) },
         )
+    }
+
+    private fun extractEpisodeList(input: String): String? {
+        val startMarker = "1:["
+        val list1Index = input.indexOf(startMarker)
+        if (list1Index == -1) return null
+
+        val startIndex = list1Index + startMarker.length
+        var endIndex = startIndex
+        var bracketCount = 1
+
+        while (endIndex < input.length && bracketCount > 0) {
+            when (input[endIndex]) {
+                '[' -> bracketCount++
+                ']' -> bracketCount--
+            }
+            endIndex++
+        }
+
+        return if (bracketCount == 0) input.substring(startIndex - 1, endIndex) else null
     }
 
     /* ====================================== Preferences ====================================== */
