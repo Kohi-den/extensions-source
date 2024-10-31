@@ -31,7 +31,7 @@ class Anime1 : AnimeHttpSource() {
     override val baseUrl: String
         get() = "https://anime1.me"
     override val lang: String
-        get() = "zh"
+        get() = "zh-hant"
     override val name: String
         get() = "Anime1.me"
     override val supportsLatest: Boolean
@@ -44,7 +44,7 @@ class Anime1 : AnimeHttpSource() {
     private val uploadDateFormat: SimpleDateFormat by lazy {
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.getDefault())
     }
-    private lateinit var data: JsonArray // real data
+    private lateinit var data: JsonArray
     private val cookieManager
         get() = CookieManager.getInstance()
 
@@ -58,11 +58,13 @@ class Anime1 : AnimeHttpSource() {
     override fun episodeListParse(response: Response): List<SEpisode> {
         var document: Document? = response.asJsoup()
         val episodes = mutableListOf<SEpisode>()
+        val requestUrl = response.request.url.toString()
         while (document != null) {
             val items = document.select("article.post").map {
                 SEpisode.create().apply {
                     name = it.select(".entry-title").text()
-                    setUrlWithoutDomain(it.select(".entry-title a").attr("href"))
+                    val url = it.selectFirst(".entry-title a")?.attr("href") ?: requestUrl
+                    setUrlWithoutDomain(url)
                     date_upload = it.select("time.updated").attr("datetime").let { date ->
                         runCatching { uploadDateFormat.parse(date)?.time }.getOrNull() ?: 0L
                     }
@@ -76,7 +78,6 @@ class Anime1 : AnimeHttpSource() {
                 client.newCall(GET(previousUrl)).execute().asJsoup()
             }
         }
-
         return episodes
     }
 
