@@ -1,0 +1,7 @@
+ext {
+    extName = 'Xiaoxintv'
+    extClass = '.Xiaoxintv'
+    extVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
