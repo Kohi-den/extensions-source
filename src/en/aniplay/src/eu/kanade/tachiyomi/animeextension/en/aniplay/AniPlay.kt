@@ -68,6 +68,8 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
+    val baseHost: String get() = "${preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)}"
+
     /* ====================================== Episode List ====================================== */
 
     override fun episodeListRequest(anime: SAnime): Request {
@@ -80,7 +82,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         val headersWithAction =
             headers.newBuilder()
                 // next.js stuff I guess
-                .add("Next-Action", HEADER_NEXT_ACTION_EPISODE_LIST_VALUE)
+                .add("Next-Action", getHeaderValue(baseHost, NEXT_ACTION_EPISODE_LIST))
                 .build()
 
         return POST(url = "$baseUrl/anime/info/$animeId", headersWithAction, requestBody)
@@ -197,7 +199,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         val headersWithAction =
             headers.newBuilder()
                 // next.js stuff I guess
-                .add("Next-Action", HEADER_NEXT_ACTION_SOURCES_LIST_VALUE)
+                .add("Next-Action", getHeaderValue(baseHost, NEXT_ACTION_SOURCES_LIST))
                 .build()
 
         val episodeDataList = extras.parallelFlatMapBlocking { extra ->
@@ -408,6 +410,10 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         } ?: 0L
     }
 
+    private fun getHeaderValue(serverHost: String, key: String): String {
+        return HEADER_NEXT_ACTION[serverHost]?.get(key) ?: throw Exception("Bad host/key")
+    }
+
     companion object {
         private const val PREF_DOMAIN_KEY = "domain"
         private val PREF_DOMAIN_ENTRIES = arrayOf("aniplaynow.live (default)", "aniplay.lol (backup)")
@@ -438,8 +444,19 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         private const val PREF_MARK_FILLER_EPISODE_DEFAULT = true
 
         // These values has probably something to do with Next.js server and hydration
-        private const val HEADER_NEXT_ACTION_EPISODE_LIST_VALUE = "f3422af67c84852f5e63d50e1f51718f1c0225c4"
-        private const val HEADER_NEXT_ACTION_SOURCES_LIST_VALUE = "5dbcd21c7c276c4d15f8de29d9ef27aef5ea4a5e"
+        private const val NEXT_ACTION_EPISODE_LIST = "NEXT_ACTION_EPISODE_LIST"
+        private const val NEXT_ACTION_SOURCES_LIST = "NEXT_ACTION_SOURCES_LIST"
+
+        private val HEADER_NEXT_ACTION = mapOf(
+            PREF_DOMAIN_ENTRY_VALUES[0] to mapOf(
+                "NEXT_ACTION_EPISODE_LIST" to "f3422af67c84852f5e63d50e1f51718f1c0225c4",
+                "NEXT_ACTION_SOURCES_LIST" to "5dbcd21c7c276c4d15f8de29d9ef27aef5ea4a5e",
+            ),
+            PREF_DOMAIN_ENTRY_VALUES[1] to mapOf(
+                "NEXT_ACTION_EPISODE_LIST" to "56e4151352ded056cbe226d2376c7436cffc9a37",
+                "NEXT_ACTION_SOURCES_LIST" to "8a76af451978c817dde2364326a5e4e45eb43db1",
+            ),
+        )
 
         private val DATE_FORMATTER = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
     }
