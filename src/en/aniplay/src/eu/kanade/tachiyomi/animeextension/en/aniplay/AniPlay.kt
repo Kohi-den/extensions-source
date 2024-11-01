@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.multisrc.anilist.AniListAnimeHttpSource
+import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.parallelFlatMapBlocking
 import eu.kanade.tachiyomi.util.parseAs
@@ -67,6 +68,8 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
+    val baseHost: String get() = "${preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)}"
+
     /* ====================================== Episode List ====================================== */
 
     override fun episodeListRequest(anime: SAnime): Request {
@@ -79,7 +82,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         val headersWithAction =
             headers.newBuilder()
                 // next.js stuff I guess
-                .add("Next-Action", HEADER_NEXT_ACTION_EPISODE_LIST_VALUE)
+                .add("Next-Action", getHeaderValue(baseHost, NEXT_ACTION_EPISODE_LIST))
                 .build()
 
         return POST(url = "$baseUrl/anime/info/$animeId", headersWithAction, requestBody)
@@ -90,8 +93,28 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         val episodeListUrl = response.request.url
         val animeId = episodeListUrl.pathSegments[2]
 
+        val responsePage = client.newCall(GET("$baseUrl/anime/watch/$animeId")).execute()
+        val responsePageString = responsePage.body.string()
+        var idMal: Number? = null
+        val idMalIndex = responsePageString.indexOf("\\\"idMal\\\":")
+        if (idMalIndex != -1) {
+            val startIndex = idMalIndex + "\\\"idMal\\\":".length
+            val endIndex = responsePageString.indexOf(',', startIndex)
+            if (endIndex != -1) {
+                idMal = responsePageString.substring(startIndex, endIndex).toIntOrNull()
+            }
+        }
+        if (idMal == null) {
+            Log.e("AniPlay", "idMal not found - responsePageString: $responsePageString")
+            throw Exception("idMal not found")
+        }
+
         val responseString = response.body.string()
-        val episodesArrayString = responseString.split("1:").last()
+        val episodesArrayString = extractEpisodeList(responseString)
+        if (episodesArrayString == null) {
+            Log.e("AniPlay", "Episode list not found - ${response.request}\nbody:${response.request.body}\n${responseString.substring(0,200)}")
+            throw Exception("Episode list not found")
+        }
 
         val providers = episodesArrayString.parseAs<List<EpisodeListResponse>>()
         val episodes = mutableMapOf<Int, EpisodeListResponse.Episode>()
@@ -127,6 +150,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 .addQueryParameter("id", animeId)
                 .addQueryParameter("ep", episodeNumber.toString())
                 .addQueryParameter("extras", episodeExtraString)
+                .addQueryParameter("idMal", idMal.toString())
                 .build()
 
             val name = parseEpisodeName(episodeNumber.toString(), episode.title)
@@ -156,7 +180,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
         val episodeUrl = episode.url.toHttpUrl()
         val animeId = episodeUrl.queryParameter("id") ?: return emptyList()
-        // val episodeNum = episodeUrl.queryParameter("ep") ?: return emptyList()
+        val idMal = episodeUrl.queryParameter("idMal") ?: return emptyList()
         val extras = episodeUrl.queryParameter("extras")
             ?.let {
                 try {
@@ -170,7 +194,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 try {
                     json.decodeFromString<List<EpisodeExtra>>(it)
                 } catch (e: SerializationException) {
-                    Log.e("AniPlay", "Error parsing JSON", e)
+                    Log.e("AniPlay", "Error parsing JSON extras", e)
                     emptyList()
                 }
             }
@@ -179,7 +203,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         val headersWithAction =
             headers.newBuilder()
                 // next.js stuff I guess
-                .add("Next-Action", HEADER_NEXT_ACTION_SOURCES_LIST_VALUE)
+                .add("Next-Action", getHeaderValue(baseHost, NEXT_ACTION_SOURCES_LIST))
                 .build()
 
         val episodeDataList = extras.parallelFlatMapBlocking { extra ->
@@ -193,7 +217,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                     extra.episodeNum.toString() // If it has a fractional part, leave it as a float
                 }
 
-                val requestBody = "[\"$animeId\",\"${extra.source}\",\"${extra.episodeId}\",\"$epNum\",\"$language\"]"
+                val requestBody = "[\"$animeId\",$idMal,\"${extra.source}\",\"${extra.episodeId}\",\"$epNum\",\"$language\"]"
                     .toRequestBody("application/json".toMediaType())
 
                 val params = mapOf(
@@ -205,7 +229,6 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 val builder = Uri.parse("$baseUrl/anime/watch").buildUpon()
                 params.map { (k, v) -> builder.appendQueryParameter(k, v); }
                 val url = builder.build().toString()
-                Log.i("AniPlay", "Url: $url")
                 try {
                     val request = POST(url, headersWithAction, requestBody)
                     val response = client.newCall(request).execute()
@@ -268,6 +291,26 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 .thenByDescending { it.quality.contains(quality) }
                 .thenByDescending { it.quality.contains(server, true) },
         )
+    }
+
+    private fun extractEpisodeList(input: String): String? {
+        val startMarker = "1:["
+        val list1Index = input.indexOf(startMarker)
+        if (list1Index == -1) return null
+
+        val startIndex = list1Index + startMarker.length
+        var endIndex = startIndex
+        var bracketCount = 1
+
+        while (endIndex < input.length && bracketCount > 0) {
+            when (input[endIndex]) {
+                '[' -> bracketCount++
+                ']' -> bracketCount--
+            }
+            endIndex++
+        }
+
+        return if (bracketCount == 0) input.substring(startIndex - 1, endIndex) else null
     }
 
     /* ====================================== Preferences ====================================== */
@@ -391,6 +434,10 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         } ?: 0L
     }
 
+    private fun getHeaderValue(serverHost: String, key: String): String {
+        return HEADER_NEXT_ACTION[serverHost]?.get(key) ?: throw Exception("Bad host/key")
+    }
+
     companion object {
         private const val PREF_DOMAIN_KEY = "domain"
         private val PREF_DOMAIN_ENTRIES = arrayOf("aniplaynow.live (default)", "aniplay.lol (backup)")
@@ -421,8 +468,19 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         private const val PREF_MARK_FILLER_EPISODE_DEFAULT = true
 
         // These values has probably something to do with Next.js server and hydration
-        private const val HEADER_NEXT_ACTION_EPISODE_LIST_VALUE = "f3422af67c84852f5e63d50e1f51718f1c0225c4"
-        private const val HEADER_NEXT_ACTION_SOURCES_LIST_VALUE = "5dbcd21c7c276c4d15f8de29d9ef27aef5ea4a5e"
+        private const val NEXT_ACTION_EPISODE_LIST = "NEXT_ACTION_EPISODE_LIST"
+        private const val NEXT_ACTION_SOURCES_LIST = "NEXT_ACTION_SOURCES_LIST"
+
+        private val HEADER_NEXT_ACTION = mapOf(
+            PREF_DOMAIN_ENTRY_VALUES[0] to mapOf(
+                "NEXT_ACTION_EPISODE_LIST" to "f3422af67c84852f5e63d50e1f51718f1c0225c4",
+                "NEXT_ACTION_SOURCES_LIST" to "5dbcd21c7c276c4d15f8de29d9ef27aef5ea4a5e",
+            ),
+            PREF_DOMAIN_ENTRY_VALUES[1] to mapOf(
+                "NEXT_ACTION_EPISODE_LIST" to "56e4151352ded056cbe226d2376c7436cffc9a37",
+                "NEXT_ACTION_SOURCES_LIST" to "8a76af451978c817dde2364326a5e4e45eb43db1",
+            ),
+        )
 
         private val DATE_FORMATTER = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
     }
