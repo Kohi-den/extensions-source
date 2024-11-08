@@ -234,8 +234,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                     val response = client.newCall(request).execute()
 
                     val responseString = response.body.string()
-                    val sourcesString = responseString.split("1:").last()
-                    if (sourcesString.startsWith("null")) return@map null
+                    val sourcesString = extractSourcesList(responseString) ?: return@map null
                     val data = sourcesString.parseAs<VideoSourceResponse>()
 
                     EpisodeData(
@@ -294,7 +293,15 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     private fun extractEpisodeList(input: String): String? {
-        val startMarker = "1:["
+        return extractList(input, '[', ']')
+    }
+
+    private fun extractSourcesList(input: String): String? {
+        return extractList(input, '{', '}')
+    }
+
+    private fun extractList(input: String, bracket1: Char, bracket2: Char): String? {
+        val startMarker = "1:$bracket1"
         val list1Index = input.indexOf(startMarker)
         if (list1Index == -1) return null
 
@@ -304,8 +311,8 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
         while (endIndex < input.length && bracketCount > 0) {
             when (input[endIndex]) {
-                '[' -> bracketCount++
-                ']' -> bracketCount--
+                bracket1 -> bracketCount++
+                bracket2 -> bracketCount--
             }
             endIndex++
         }
