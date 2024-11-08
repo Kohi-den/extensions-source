@@ -222,12 +222,11 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                     .toRequestBody("application/json".toMediaType())
 
                 val params = mapOf(
-                    "id" to animeId,
                     "host" to extra.source,
                     "ep" to epNum,
                     "type" to language,
                 )
-                val builder = Uri.parse("$baseUrl/anime/watch").buildUpon()
+                val builder = Uri.parse("$baseUrl/anime/watch/$animeId").buildUpon()
                 params.map { (k, v) -> builder.appendQueryParameter(k, v); }
                 val url = builder.build().toString()
                 try {
