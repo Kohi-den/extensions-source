@@ -32,6 +32,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+@Suppress("unused")
 class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     override val name = "AniPlay"
     override val lang = "en"
@@ -68,7 +69,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
-    val baseHost: String get() = "${preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)}"
+    private val baseHost: String get() = "${preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)}"
 
     /* ====================================== Episode List ====================================== */
 
