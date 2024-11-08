@@ -426,11 +426,17 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     }
     private fun getServerName(value: String): String {
         val index = PREF_SERVER_ENTRY_VALUES.indexOf(value)
+        if (index == -1) {
+            return "Other"
+        }
         return PREF_SERVER_ENTRIES[index]
     }
 
     private fun getTypeName(value: String): String {
         val index = PREF_TYPE_ENTRY_VALUES.indexOf(value)
+        if (index == -1) {
+            return "Other"
+        }
         return PREF_TYPE_ENTRIES[index]
     }
 
