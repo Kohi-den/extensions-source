@@ -1,12 +1,21 @@
 package eu.kanade.tachiyomi.animeextension.zh.anime1
 
+import android.app.Application
+import android.content.SharedPreferences
 import android.webkit.CookieManager
+import androidx.preference.CheckBoxPreference
+import androidx.preference.ListPreference
+import androidx.preference.PreferenceScreen
+import com.github.houbb.opencc4j.util.ZhTwConverterUtil
+import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import eu.kanade.tachiyomi.lib.bangumiscraper.BangumiFetchType
+import eu.kanade.tachiyomi.lib.bangumiscraper.BangumiScraper
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
@@ -24,10 +33,12 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-class Anime1 : AnimeHttpSource() {
+class Anime1 : AnimeHttpSource(), ConfigurableAnimeSource {
     override val baseUrl: String
         get() = "https://anime1.me"
     override val lang: String
@@ -47,11 +58,22 @@ class Anime1 : AnimeHttpSource() {
     private lateinit var data: JsonArray
     private val cookieManager
         get() = CookieManager.getInstance()
+    private val preferences: SharedPreferences by lazy {
+        Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
+    }
 
     override fun animeDetailsParse(response: Response) = throw UnsupportedOperationException()
+
     override suspend fun getAnimeDetails(anime: SAnime): SAnime {
-        return SAnime.create().apply {
-            thumbnail_url = FIX_COVER
+        return if (bangumiEnable) {
+            BangumiScraper.fetchDetail(
+                client,
+                ZhTwConverterUtil.toSimple(anime.title.removeSuffixMark()),
+                fetchType = bangumiFetchType,
+            )
+        } else {
+            anime.thumbnail_url = FIX_COVER
+            anime
         }
     }
 
@@ -168,13 +190,78 @@ class Anime1 : AnimeHttpSource() {
         return GET(url.build())
     }
 
+    override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        val bangumiScraper = CheckBoxPreference(screen.context).apply {
+            key = PREF_KEY_BANGUMI
+            title = "啟用Bangumi刮削"
+        }
+        val bangumiFetchType = ListPreference(screen.context).apply {
+            key = PREF_KEY_BANGUMI_FETCH_TYPE
+            title = "詳情拉取設置"
+            setVisible(bangumiEnable)
+            entries = arrayOf("拉取部分數據", "拉取完整數據")
+            entryValues = arrayOf(BangumiFetchType.SHORT.name, BangumiFetchType.ALL.name)
+            setDefaultValue(entryValues[0])
+            summary = when (bangumiFetchType) {
+                BangumiFetchType.SHORT -> entries[0]
+                BangumiFetchType.ALL -> entries[1]
+                else -> entries[0]
+            }
+            setOnPreferenceChangeListener { _, value ->
+                summary = when (value) {
+                    BangumiFetchType.SHORT.name -> entries[0]
+                    BangumiFetchType.ALL.name -> entries[1]
+                    else -> entries[0]
+                }
+                true
+            }
+        }
+        bangumiScraper.setOnPreferenceChangeListener { _, value ->
+            bangumiFetchType.setVisible(value as Boolean)
+            true
+        }
+        screen.apply {
+            addPreference(bangumiScraper)
+            addPreference(bangumiFetchType)
+        }
+    }
+
+    private val bangumiEnable: Boolean
+        get() = preferences.getBoolean(PREF_KEY_BANGUMI, false)
+    private val bangumiFetchType: BangumiFetchType
+        get() {
+            val fetchTypeName =
+                preferences.getString(PREF_KEY_BANGUMI_FETCH_TYPE, BangumiFetchType.SHORT.name)
+            return when (fetchTypeName) {
+                BangumiFetchType.SHORT.name -> BangumiFetchType.SHORT
+                BangumiFetchType.ALL.name -> BangumiFetchType.ALL
+                else -> BangumiFetchType.SHORT
+            }
+        }
+
     private fun JsonArray.getContent(index: Int): String? {
         return getOrNull(index)?.jsonPrimitive?.contentOrNull
+    }
+
+    private fun String.removeSuffixMark(): String {
+        return removeBracket("(", ")").removeBracket("[", "]").trim()
+    }
+
+    private fun String.removeBracket(start: String, end: String): String {
+        val seasonStart = indexOf(start)
+        val seasonEnd = indexOf(end)
+        if (seasonEnd > seasonStart) {
+            return removeRange(seasonStart, seasonEnd + 1)
+        }
+        return this
     }
 
     companion object {
         const val PAGE_SIZE = 20
         const val FIX_COVER = "https://sta.anicdn.com/playerImg/8.jpg"
+
+        const val PREF_KEY_BANGUMI = "PREF_KEY_BANGUMI"
+        const val PREF_KEY_BANGUMI_FETCH_TYPE = "PREF_KEY_BANGUMI_FETCH_TYPE"
     }
 }
 
