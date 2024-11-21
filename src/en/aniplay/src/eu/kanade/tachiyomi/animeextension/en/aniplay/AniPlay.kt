@@ -208,10 +208,13 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 .build()
 
         val episodeDataList = extras.parallelFlatMapBlocking { extra ->
+        var timeouts: Int = 0
+        var maxTimeout: Int = 0
             val languages = mutableListOf("sub").apply {
                 if (extra.hasDub) add("dub")
             }
             languages.map { language ->
+                maxTimeout += 1
                 val epNum = if (extra.episodeNum == extra.episodeNum.toInt().toFloat()) {
                     extra.episodeNum.toInt().toString() // If it has no fractional part, convert it to an integer
                 } else {
@@ -242,14 +245,23 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                         language = language,
                         response = data,
                     )
+                } catch (e: java.net.SocketTimeoutException) {
+                    timeouts += 1
+                    null
                 } catch (e: IOException) {
                     Log.w("AniPlay", "VideoList $url IOException", e)
+                    timeouts = -999
                     null // Return null to be filtered out
                 } catch (e: Exception) {
                     Log.w("AniPlay", "VideoList $url Exception", e)
+                    timeouts = -999
                     null // Return null to be filtered out
                 }
             }.filterNotNull() // Filter out null values due to errors
+        }
+
+        if (maxTimeout == timeouts && timeouts != 0) {
+            throw Exception("Timed out")
         }
 
         val videos = episodeDataList.flatMap { episodeData ->
