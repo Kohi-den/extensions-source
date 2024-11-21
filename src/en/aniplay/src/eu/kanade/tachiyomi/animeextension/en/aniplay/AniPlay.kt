@@ -429,7 +429,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         if (index == -1) {
             return "Other"
         }
-        return PREF_SERVER_ENTRIES[index]
+        return PREF_SERVER_ENTRIES2[index]
     }
 
     private fun getTypeName(value: String): String {
@@ -459,6 +459,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
         private const val PREF_SERVER_KEY = "server"
         private val PREF_SERVER_ENTRIES = arrayOf("Kuro (Gogoanime)", "Yuki (HiAnime)", "Yuno (Yugenanime)")
+        private val PREF_SERVER_ENTRIES2 = arrayOf("Kuro", "Yuki", "Yuno")
         private val PREF_SERVER_ENTRY_VALUES = arrayOf("kuro", "yuki", "yuno")
         private const val PREF_SERVER_DEFAULT = "kuro"
 
