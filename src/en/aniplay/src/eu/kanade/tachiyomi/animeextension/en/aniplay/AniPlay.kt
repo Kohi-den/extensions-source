@@ -132,7 +132,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                     source = provider.providerId,
                     episodeId = episode.id,
                     episodeNum = episode.number,
-                    hasDub = episode.hasDub,
+                    hasDub = episode.hasDub ?: false,
                 )
                 episodeExtras[episodeNumber] = existingEpisodeExtras + listOf(episodeExtra)
             }
@@ -161,7 +161,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 else -> ""
             }
             val filler = when {
-                episode.isFiller && isMarkFiller -> " • Filler Episode"
+                episode.isFiller == true && isMarkFiller -> " • Filler Episode"
                 else -> ""
             }
             val scanlator = "Sub$dub$filler"
