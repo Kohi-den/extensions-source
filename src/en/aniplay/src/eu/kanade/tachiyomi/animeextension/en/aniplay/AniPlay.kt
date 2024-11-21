@@ -208,8 +208,8 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 .add("Next-Action", getHeaderValue(baseHost, NEXT_ACTION_SOURCES_LIST))
                 .build()
 
-        var timeouts: Int = 0
-        var maxTimeout: Int = 0
+        var timeouts = 0
+        var maxTimeout = 0
         val episodeDataList = extras.parallelFlatMap { extra ->
             val languages = mutableListOf("sub").apply {
                 if (extra.hasDub) add("dub")
