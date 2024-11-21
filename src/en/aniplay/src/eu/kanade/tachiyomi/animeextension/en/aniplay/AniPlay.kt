@@ -17,7 +17,8 @@ import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.multisrc.anilist.AniListAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
-import eu.kanade.tachiyomi.util.parallelFlatMapBlocking
+import eu.kanade.tachiyomi.util.parallelFlatMap
+import eu.kanade.tachiyomi.util.parallelMap
 import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -207,13 +208,13 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 .add("Next-Action", getHeaderValue(baseHost, NEXT_ACTION_SOURCES_LIST))
                 .build()
 
-        val episodeDataList = extras.parallelFlatMapBlocking { extra ->
         var timeouts: Int = 0
         var maxTimeout: Int = 0
+        val episodeDataList = extras.parallelFlatMap { extra ->
             val languages = mutableListOf("sub").apply {
                 if (extra.hasDub) add("dub")
             }
-            languages.map { language ->
+            languages.parallelMap { language ->
                 maxTimeout += 1
                 val epNum = if (extra.episodeNum == extra.episodeNum.toInt().toFloat()) {
                     extra.episodeNum.toInt().toString() // If it has no fractional part, convert it to an integer
@@ -237,7 +238,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                     val response = client.newCall(request).execute()
 
                     val responseString = response.body.string()
-                    val sourcesString = extractSourcesList(responseString) ?: return@map null
+                    val sourcesString = extractSourcesList(responseString) ?: return@parallelMap null
                     val data = sourcesString.parseAs<VideoSourceResponse>()
 
                     EpisodeData(
