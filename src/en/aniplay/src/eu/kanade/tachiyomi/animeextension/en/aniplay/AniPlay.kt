@@ -17,7 +17,8 @@ import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.multisrc.anilist.AniListAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
-import eu.kanade.tachiyomi.util.parallelFlatMapBlocking
+import eu.kanade.tachiyomi.util.parallelFlatMap
+import eu.kanade.tachiyomi.util.parallelMap
 import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -32,6 +33,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+@Suppress("unused")
 class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     override val name = "AniPlay"
     override val lang = "en"
@@ -68,7 +70,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
-    val baseHost: String get() = "${preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)}"
+    private val baseHost: String get() = "${preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)}"
 
     /* ====================================== Episode List ====================================== */
 
@@ -131,7 +133,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                     source = provider.providerId,
                     episodeId = episode.id,
                     episodeNum = episode.number,
-                    hasDub = episode.hasDub,
+                    hasDub = episode.hasDub ?: false,
                 )
                 episodeExtras[episodeNumber] = existingEpisodeExtras + listOf(episodeExtra)
             }
@@ -160,7 +162,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 else -> ""
             }
             val filler = when {
-                episode.isFiller && isMarkFiller -> " • Filler Episode"
+                episode.isFiller == true && isMarkFiller -> " • Filler Episode"
                 else -> ""
             }
             val scanlator = "Sub$dub$filler"
@@ -206,11 +208,14 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 .add("Next-Action", getHeaderValue(baseHost, NEXT_ACTION_SOURCES_LIST))
                 .build()
 
-        val episodeDataList = extras.parallelFlatMapBlocking { extra ->
+        var timeouts = 0
+        var maxTimeout = 0
+        val episodeDataList = extras.parallelFlatMap { extra ->
             val languages = mutableListOf("sub").apply {
                 if (extra.hasDub) add("dub")
             }
-            languages.map { language ->
+            languages.parallelMap { language ->
+                maxTimeout += 1
                 val epNum = if (extra.episodeNum == extra.episodeNum.toInt().toFloat()) {
                     extra.episodeNum.toInt().toString() // If it has no fractional part, convert it to an integer
                 } else {
@@ -221,12 +226,11 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                     .toRequestBody("application/json".toMediaType())
 
                 val params = mapOf(
-                    "id" to animeId,
                     "host" to extra.source,
                     "ep" to epNum,
                     "type" to language,
                 )
-                val builder = Uri.parse("$baseUrl/anime/watch").buildUpon()
+                val builder = Uri.parse("$baseUrl/anime/watch/$animeId").buildUpon()
                 params.map { (k, v) -> builder.appendQueryParameter(k, v); }
                 val url = builder.build().toString()
                 try {
@@ -234,8 +238,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                     val response = client.newCall(request).execute()
 
                     val responseString = response.body.string()
-                    val sourcesString = responseString.split("1:").last()
-                    if (sourcesString.startsWith("null")) return@map null
+                    val sourcesString = extractSourcesList(responseString) ?: return@parallelMap null
                     val data = sourcesString.parseAs<VideoSourceResponse>()
 
                     EpisodeData(
@@ -243,14 +246,23 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                         language = language,
                         response = data,
                     )
+                } catch (e: java.net.SocketTimeoutException) {
+                    timeouts += 1
+                    null
                 } catch (e: IOException) {
                     Log.w("AniPlay", "VideoList $url IOException", e)
+                    timeouts = -999
                     null // Return null to be filtered out
                 } catch (e: Exception) {
                     Log.w("AniPlay", "VideoList $url Exception", e)
+                    timeouts = -999
                     null // Return null to be filtered out
                 }
             }.filterNotNull() // Filter out null values due to errors
+        }
+
+        if (maxTimeout == timeouts && timeouts != 0) {
+            throw Exception("Timed out")
         }
 
         val videos = episodeDataList.flatMap { episodeData ->
@@ -294,7 +306,15 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     private fun extractEpisodeList(input: String): String? {
-        val startMarker = "1:["
+        return extractList(input, '[', ']')
+    }
+
+    private fun extractSourcesList(input: String): String? {
+        return extractList(input, '{', '}')
+    }
+
+    private fun extractList(input: String, bracket1: Char, bracket2: Char): String? {
+        val startMarker = "1:$bracket1"
         val list1Index = input.indexOf(startMarker)
         if (list1Index == -1) return null
 
@@ -304,8 +324,8 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
         while (endIndex < input.length && bracketCount > 0) {
             when (input[endIndex]) {
-                '[' -> bracketCount++
-                ']' -> bracketCount--
+                bracket1 -> bracketCount++
+                bracket2 -> bracketCount--
             }
             endIndex++
         }
@@ -419,11 +439,17 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     }
     private fun getServerName(value: String): String {
         val index = PREF_SERVER_ENTRY_VALUES.indexOf(value)
+        if (index == -1) {
+            return "Other"
+        }
         return PREF_SERVER_ENTRIES[index]
     }
 
     private fun getTypeName(value: String): String {
         val index = PREF_TYPE_ENTRY_VALUES.indexOf(value)
+        if (index == -1) {
+            return "Other"
+        }
         return PREF_TYPE_ENTRIES[index]
     }
 
@@ -445,7 +471,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         private const val PREF_DOMAIN_DEFAULT = "aniplaynow.live"
 
         private const val PREF_SERVER_KEY = "server"
-        private val PREF_SERVER_ENTRIES = arrayOf("Kuro (Gogoanime)", "Yuki (HiAnime)", "Yuno (Yugenanime)")
+        private val PREF_SERVER_ENTRIES = arrayOf("Kuro", "Yuki", "Yuno")
         private val PREF_SERVER_ENTRY_VALUES = arrayOf("kuro", "yuki", "yuno")
         private const val PREF_SERVER_DEFAULT = "kuro"
 
