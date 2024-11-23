@@ -38,7 +38,7 @@ class Hentaila : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override val name = "Hentaila"
 
-    override val baseUrl = "https://www4.hentaila.com"
+    override val baseUrl = "https://www5.hentaila.com"
 
     override val lang = "es"
 
