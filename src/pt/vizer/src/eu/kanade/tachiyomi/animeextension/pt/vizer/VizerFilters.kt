@@ -1,7 +1,9 @@
 package eu.kanade.tachiyomi.animeextension.pt.vizer
 
+import eu.kanade.tachiyomi.animeextension.pt.vizer.VizerFilters.VizerFiltersData.CURRENT_YEAR
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import java.util.Calendar
 
 object VizerFilters {
     open class QueryPartFilter(
@@ -41,7 +43,7 @@ object VizerFilters {
     data class FilterSearchParams(
         val type: String = "anime",
         val minYear: String = "1890",
-        val maxYear: String = "2022",
+        val maxYear: String = CURRENT_YEAR.toString(),
         val genre: String = "all",
         val orderBy: String = "rating",
         val orderWay: String = "desc",
@@ -74,7 +76,10 @@ object VizerFilters {
             Pair("Filmes", "Movies"),
             Pair("Series", "Series"),
         )
-        val MAX_YEARS = (2022 downTo 1890).map {
+        val CURRENT_YEAR by lazy {
+            Calendar.getInstance()[Calendar.YEAR]
+        }
+        val MAX_YEARS = (CURRENT_YEAR downTo 1890).map {
             Pair(it.toString(), it.toString())
         }.toTypedArray()
 
