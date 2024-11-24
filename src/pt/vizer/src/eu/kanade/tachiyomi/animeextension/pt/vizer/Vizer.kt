@@ -26,6 +26,7 @@ import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.interceptor.rateLimitHost
 import eu.kanade.tachiyomi.util.asJsoup
+import eu.kanade.tachiyomi.util.parallelCatchingFlatMap
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import eu.kanade.tachiyomi.util.parseAs
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -248,17 +249,17 @@ class Vizer : ConfigurableAnimeSource, AnimeHttpSource() {
     private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
     private val fireplayerExtractor by lazy { FireplayerExtractor(client) }
 
-    private fun getVideosFromObject(videoObj: VideoDto): List<Video> {
+    private suspend fun getVideosFromObject(videoObj: VideoDto): List<Video> {
         val hosters = videoObj.hosters ?: return emptyList()
 
         val langPrefix = if (videoObj.lang == "1") "LEG" else "DUB"
 
-        return hosters.iterator().flatMap { (name, status) ->
+        return hosters.iterator().parallelCatchingFlatMap { (name, status) ->
             // Always try the warezcdn
-            if (status != 3 && name != "warezcdn") return@flatMap emptyList()
+            if (status != 3 && name != "warezcdn") return@parallelCatchingFlatMap emptyList()
             val url = getPlayerUrl(videoObj.id, name)
             if (url.isNullOrBlank()) {
-                return emptyList()
+                return@parallelCatchingFlatMap emptyList()
             }
             when (name) {
                 "mixdrop" -> mixdropExtractor.videosFromUrl(url, langPrefix)
