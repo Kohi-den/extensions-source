@@ -664,6 +664,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
             "AllDebrid",
             "DebridLink",
             "Offcloud",
+            "TorBox",
         )
         private val PREF_DEBRID_VALUES = arrayOf(
             "none",
@@ -672,6 +673,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
             "alldebrid",
             "debridlink",
             "offcloud",
+            "torbox",
         )
 
         // Sort
