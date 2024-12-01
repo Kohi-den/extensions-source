@@ -256,19 +256,23 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 ?.map { Track(it.url, it.lang) }
                 ?: emptyList()
 
-            playlistUtils.extractFromHls(
-                playlistUrl = defaultSource.url,
-                videoNameGen = { quality ->
-                    val serverName = getServerName(episodeData.source)
-                    val typeName = when {
-                        subtitles.isNotEmpty() -> "SoftSub"
-                        else -> getTypeName(episodeData.language)
-                    }
-
-                    "$serverName - $quality - $typeName"
-                },
-                subtitleList = subtitles,
-            )
+            try {
+                playlistUtils.extractFromHls(
+                    playlistUrl = defaultSource.url,
+                    videoNameGen = { quality ->
+                        val serverName = getServerName(episodeData.source)
+                        val typeName = when {
+                            subtitles.isNotEmpty() -> "SoftSub"
+                            else -> getTypeName(episodeData.language)
+                        }
+                        "$serverName - $quality - $typeName"
+                    },
+                    subtitleList = subtitles,
+                )
+            } catch (e: Exception) {
+                Log.e("AniPlay", "extractFromHls Error: $e")
+                emptyList()
+            }
         }
 
         return videos.sort()
