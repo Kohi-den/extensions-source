@@ -15,7 +15,6 @@ import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.multisrc.anilist.AniListAnimeHttpSource
-import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.parallelFlatMap
 import eu.kanade.tachiyomi.util.parallelMap
@@ -95,22 +94,6 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         val episodeListUrl = response.request.url
         val animeId = episodeListUrl.pathSegments[2]
 
-        val responsePage = client.newCall(GET("$baseUrl/anime/watch/$animeId")).execute()
-        val responsePageString = responsePage.body.string()
-        var idMal: Number? = null
-        val idMalIndex = responsePageString.indexOf("\\\"idMal\\\":")
-        if (idMalIndex != -1) {
-            val startIndex = idMalIndex + "\\\"idMal\\\":".length
-            val endIndex = responsePageString.indexOf(',', startIndex)
-            if (endIndex != -1) {
-                idMal = responsePageString.substring(startIndex, endIndex).toIntOrNull()
-            }
-        }
-        if (idMal == null) {
-            Log.e("AniPlay", "idMal not found - responsePageString: $responsePageString")
-            throw Exception("idMal not found")
-        }
-
         val responseString = response.body.string()
         val episodesArrayString = extractEpisodeList(responseString)
         if (episodesArrayString == null) {
@@ -152,7 +135,6 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 .addQueryParameter("id", animeId)
                 .addQueryParameter("ep", episodeNumber.toString())
                 .addQueryParameter("extras", episodeExtraString)
-                .addQueryParameter("idMal", idMal.toString())
                 .build()
 
             val name = parseEpisodeName(episodeNumber.toString(), episode.title)
@@ -182,7 +164,6 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
         val episodeUrl = episode.url.toHttpUrl()
         val animeId = episodeUrl.queryParameter("id") ?: return emptyList()
-        val idMal = episodeUrl.queryParameter("idMal") ?: return emptyList()
         val extras = episodeUrl.queryParameter("extras")
             ?.let {
                 try {
@@ -222,7 +203,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                     extra.episodeNum.toString() // If it has a fractional part, leave it as a float
                 }
 
-                val requestBody = "[\"$animeId\",$idMal,\"${extra.source}\",\"${extra.episodeId}\",\"$epNum\",\"$language\"]"
+                val requestBody = "[\"$animeId\",\"${extra.source}\",\"${extra.episodeId}\",\"$epNum\",\"$language\"]"
                     .toRequestBody("application/json".toMediaType())
 
                 val params = mapOf(
@@ -275,19 +256,23 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 ?.map { Track(it.url, it.lang) }
                 ?: emptyList()
 
-            playlistUtils.extractFromHls(
-                playlistUrl = defaultSource.url,
-                videoNameGen = { quality ->
-                    val serverName = getServerName(episodeData.source)
-                    val typeName = when {
-                        subtitles.isNotEmpty() -> "SoftSub"
-                        else -> getTypeName(episodeData.language)
-                    }
-
-                    "$serverName - $quality - $typeName"
-                },
-                subtitleList = subtitles,
-            )
+            try {
+                playlistUtils.extractFromHls(
+                    playlistUrl = defaultSource.url,
+                    videoNameGen = { quality ->
+                        val serverName = getServerName(episodeData.source)
+                        val typeName = when {
+                            subtitles.isNotEmpty() -> "SoftSub"
+                            else -> getTypeName(episodeData.language)
+                        }
+                        "$serverName - $quality - $typeName"
+                    },
+                    subtitleList = subtitles,
+                )
+            } catch (e: Exception) {
+                Log.e("AniPlay", "extractFromHls Error: $e")
+                emptyList()
+            }
         }
 
         return videos.sort()
