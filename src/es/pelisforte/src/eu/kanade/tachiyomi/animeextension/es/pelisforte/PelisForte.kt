@@ -23,10 +23,12 @@ import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
 import eu.kanade.tachiyomi.lib.upstreamextractor.UpstreamExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
+import eu.kanade.tachiyomi.lib.vidguardextractor.VidGuardExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
+import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
@@ -62,6 +64,7 @@ open class PelisForte : ConfigurableAnimeSource, AnimeHttpSource() {
             "YourUpload", "Voe", "Mp4Upload", "Doodstream",
             "Upload", "BurstCloud", "Upstream", "StreamTape",
             "Fastream", "Filemoon", "StreamWish", "Okru",
+            "VidGuard",
         )
     }
 
@@ -149,83 +152,70 @@ open class PelisForte : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
-        val videoList = mutableListOf<Video>()
-        document.select(".video-player iframe").forEach {
-            try {
-                val id = it.parent()?.attr("id")
-                val idTab = document.selectFirst("[href=\"#$id\"]")?.closest(".lrt")?.attr("id")
-                val lang = document.select("[tab=$idTab]").text()
-                val src = it.attr("src").ifEmpty { it.attr("data-src") }
-                val key = src.substringAfter("/?h=")
-                val player = "https://${src.toHttpUrl().host}/r.php?h=$key"
-                val prefix = when {
-                    lang.contains("Latino", true) -> "[LAT]"
-                    lang.contains("Subtitulado", true) -> "[SUB]"
-                    lang.contains("Castellano", true) -> "[CAST]"
-                    else -> ""
-                }
-                val locationsDdh = client.newCall(GET(player, headers = headers.newBuilder().add("referer", src).build()))
-                    .execute().networkResponse.toString()
+        return document.select(".video-player iframe").parallelCatchingFlatMapBlocking {
+            val id = it.parent()?.attr("id")
+            val idTab = document.selectFirst("[href=\"#$id\"]")?.closest(".lrt")?.attr("id")
+            val lang = document.select("[tab=$idTab]").text()
+            val src = it.attr("src").ifEmpty { it.attr("data-src") }
+            val key = src.substringAfter("/?h=")
+            val player = "https://${src.toHttpUrl().host}/r.php?h=$key"
 
-                fetchUrls(locationsDdh).forEach {
-                    serverVideoResolver(it, prefix, src).also(videoList::addAll)
-                }
-            } catch (_: Exception) {}
+            val prefix = when {
+                lang.contains("Latino", true) -> "[LAT]"
+                lang.contains("Subtitulado", true) -> "[SUB]"
+                lang.contains("Castellano", true) -> "[CAST]"
+                else -> ""
+            }
+
+            val locationsDdh = client.newCall(
+                GET(player, headers = headers.newBuilder().add("referer", src).build()),
+            ).execute().networkResponse.toString()
+
+            fetchUrls(locationsDdh).flatMap { serverVideoResolver(it, prefix) }
         }
-        return videoList
     }
 
-    private fun serverVideoResolver(url: String, prefix: String = "", referer: String = ""): List<Video> {
-        val videoList = mutableListOf<Video>()
-        val embedUrl = url.lowercase()
-        try {
-            if (embedUrl.contains("voe")) {
-                VoeExtractor(client).videosFromUrl(url, prefix).also(videoList::addAll)
+    /*--------------------------------Video extractors------------------------------------*/
+    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val okruExtractor by lazy { OkruExtractor(client) }
+    private val filemoonExtractor by lazy { FilemoonExtractor(client) }
+    private val uqloadExtractor by lazy { UqloadExtractor(client) }
+    private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
+    private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
+    private val doodExtractor by lazy { DoodExtractor(client) }
+    private val streamlareExtractor by lazy { StreamlareExtractor(client) }
+    private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
+    private val burstCloudExtractor by lazy { BurstCloudExtractor(client) }
+    private val fastreamExtractor by lazy { FastreamExtractor(client, headers) }
+    private val upstreamExtractor by lazy { UpstreamExtractor(client) }
+    private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
+    private val vidGuardExtractor by lazy { VidGuardExtractor(client) }
+
+    private fun serverVideoResolver(url: String, prefix: String = ""): List<Video> {
+        return runCatching {
+            when {
+                arrayOf("voe").any(url) -> voeExtractor.videosFromUrl(url, "$prefix ")
+                arrayOf("ok.ru", "okru").any(url) -> okruExtractor.videosFromUrl(url, prefix)
+                arrayOf("filemoon", "moonplayer").any(url) -> filemoonExtractor.videosFromUrl(url, prefix = "$prefix Filemoon:")
+                arrayOf("uqload").any(url) -> uqloadExtractor.videosFromUrl(url, prefix)
+                arrayOf("mp4upload").any(url) -> mp4uploadExtractor.videosFromUrl(url, headers, prefix = "$prefix ")
+                arrayOf("wishembed", "streamwish", "strwish", "wish").any(url) -> {
+                    streamWishExtractor.videosFromUrl(url, videoNameGen = { "$prefix StreamWish:$it" })
+                }
+                arrayOf("doodstream", "dood.", "ds2play", "doods.").any(url) -> {
+                    val url2 = url.replace("https://doodstream.com/e/", "https://d0000d.com/e/")
+                    doodExtractor.videosFromUrl(url2, "$prefix DoodStream")
+                }
+                arrayOf("streamlare").any(url) -> streamlareExtractor.videosFromUrl(url, prefix)
+                arrayOf("yourupload", "upload").any(url) -> yourUploadExtractor.videoFromUrl(url, headers = headers, prefix = "$prefix ")
+                arrayOf("burstcloud", "burst").any(url) -> burstCloudExtractor.videoFromUrl(url, headers = headers, prefix = "$prefix ")
+                arrayOf("fastream").any(url) -> fastreamExtractor.videosFromUrl(url, prefix = "$prefix Fastream:")
+                arrayOf("upstream").any(url) -> upstreamExtractor.videosFromUrl(url, prefix = "$prefix ")
+                arrayOf("streamtape", "stp", "stape").any(url) -> streamTapeExtractor.videosFromUrl(url, quality = "$prefix StreamTape")
+                arrayOf("vembed", "guard", "listeamed", "bembed", "vgfplay").any(url) -> vidGuardExtractor.videosFromUrl(url, prefix = "$prefix ")
+                else -> emptyList()
             }
-            if (embedUrl.contains("ok.ru") || embedUrl.contains("okru")) {
-                OkruExtractor(client).videosFromUrl(url, prefix).also(videoList::addAll)
-            }
-            if (embedUrl.contains("filemoon") || embedUrl.contains("moonplayer")) {
-                FilemoonExtractor(client).videosFromUrl(url, prefix = "${prefix}Filemoon").also(videoList::addAll)
-            }
-            if (embedUrl.contains("uqload")) {
-                UqloadExtractor(client).videosFromUrl(url, prefix = prefix).also(videoList::addAll)
-            }
-            if (embedUrl.contains("mp4upload")) {
-                Mp4uploadExtractor(client).videosFromUrl(url, headers, prefix = prefix).let { videoList.addAll(it) }
-            }
-            if (embedUrl.contains("wishembed") || embedUrl.contains("streamwish") ||
-                embedUrl.contains("strwish") || embedUrl.contains("wish")
-            ) {
-                val docHeaders = headers.newBuilder()
-                    .add("Referer", referer)
-                    .build()
-                StreamWishExtractor(client, docHeaders).videosFromUrl(url, videoNameGen = { "${prefix}StreamWish:$it" }).also(videoList::addAll)
-            }
-            if (embedUrl.contains("doodstream") || embedUrl.contains("dood.")) {
-                DoodExtractor(client).videoFromUrl(url, "${prefix}DoodStream", false)?.let { videoList.add(it) }
-            }
-            if (embedUrl.contains("streamlare")) {
-                StreamlareExtractor(client).videosFromUrl(url, prefix = prefix).let { videoList.addAll(it) }
-            }
-            if (embedUrl.contains("yourupload")) {
-                YourUploadExtractor(client).videoFromUrl(url, headers = headers, prefix = prefix).let { videoList.addAll(it) }
-            }
-            if (embedUrl.contains("burstcloud") || embedUrl.contains("burst")) {
-                BurstCloudExtractor(client).videoFromUrl(url, headers = headers, prefix = prefix).let { videoList.addAll(it) }
-            }
-            if (embedUrl.contains("fastream")) {
-                FastreamExtractor(client, headers).videosFromUrl(url, prefix = "${prefix}Fastream:").also(videoList::addAll)
-            }
-            if (embedUrl.contains("upstream")) {
-                UpstreamExtractor(client).videosFromUrl(url, prefix = prefix).let { videoList.addAll(it) }
-            }
-            if (embedUrl.contains("streamtape")) {
-                StreamTapeExtractor(client).videoFromUrl(url, quality = "${prefix}StreamTape")?.let { videoList.add(it) }
-            }
-        } catch (_: Exception) {
-        }
-        return videoList
+        }.getOrNull() ?: emptyList()
     }
 
     override fun List<Video>.sort(): List<Video> {
@@ -277,6 +267,8 @@ open class PelisForte : ConfigurableAnimeSource, AnimeHttpSource() {
         AnimeFilter.Select<String>(displayName, vals.map { it.first }.toTypedArray()) {
         fun toUriPart() = vals[state].second
     }
+
+    private fun Array<String>.any(url: String): Boolean = this.any { url.contains(it, ignoreCase = true) }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         ListPreference(screen.context).apply {

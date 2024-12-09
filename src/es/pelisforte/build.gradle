@@ -1,7 +1,7 @@
 ext {
     extName = 'PelisForte'
     extClass = '.PelisForte'
-    extVersionCode = 16
+    extVersionCode = 17
 }
 
 apply from: "$rootDir/common.gradle"
@@ -21,4 +21,5 @@ dependencies {
     implementation(project(':lib:playlist-utils'))
     implementation(project(':lib:streamlare-extractor'))
     implementation(project(':lib:okru-extractor'))
+    implementation(project(':lib:vidguard-extractor'))
 }

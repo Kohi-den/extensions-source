@@ -5,19 +5,27 @@ import android.content.SharedPreferences
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
-import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import eu.kanade.tachiyomi.lib.burstcloudextractor.BurstCloudExtractor
 import eu.kanade.tachiyomi.lib.fastreamextractor.FastreamExtractor
+import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
+import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
+import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.upstreamextractor.UpstreamExtractor
+import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
+import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
+import okhttp3.FormBody
 import okhttp3.Request
 import okhttp3.Response
+import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -25,7 +33,7 @@ class HomeCine : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override val name = "HomeCine"
 
-    override val baseUrl = "https://www3.homecine.tv"
+    override val baseUrl = "https://homecine.cc"
 
     override val lang = "es"
 
@@ -45,116 +53,175 @@ class HomeCine : ConfigurableAnimeSource, AnimeHttpSource() {
         private val QUALITY_LIST = arrayOf("1080", "720", "480", "360")
 
         private const val PREF_SERVER_KEY = "preferred_server"
-        private const val PREF_SERVER_DEFAULT = "Fastream"
-        private val SERVER_LIST = arrayOf("Fastream")
+        private const val PREF_SERVER_DEFAULT = "YourUpload"
+        private val SERVER_LIST = arrayOf(
+            "YourUpload",
+            "BurstCloud",
+            "Voe",
+            "StreamWish",
+            "Mp4Upload",
+            "Fastream",
+            "Upstream",
+            "Filemoon",
+        )
     }
 
-    override fun animeDetailsParse(response: Response): SAnime {
-        val document = response.asJsoup()
-        val animeDetails = SAnime.create().apply {
-            title = document.selectFirst(".mvic-desc h1")?.text()?.trim() ?: ""
-            status = if (document.location().contains("/series/")) SAnime.UNKNOWN else SAnime.COMPLETED
-            description = document.selectFirst(".mvic-desc .f-desc")?.ownText()
-            genre = document.select(".mvic-info [rel='category tag']").joinToString { it.text() }
-            thumbnail_url = document.selectFirst("[itemprop=image]")?.attr("abs:src")?.replace("/w185/", "/w500/")
-            document.select(".mvici-left p").map { it.text() }.map { textContent ->
-                when {
-                    "Director" in textContent -> author = textContent.substringAfter("Director:").trim().split(", ").firstOrNull()
-                    "Actors" in textContent -> artist = textContent.substringAfter("Actors:").trim().split(", ").firstOrNull()
-                }
-            }
-        }
-        return animeDetails
-    }
-
-    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/peliculas/page/$page", headers)
+    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/cartelera-series/page/$page", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val document = response.asJsoup()
-        val elements = document.select("[data-movie-id] > a")
-        val nextPage = document.select(".pagination li a:contains(Last)").any()
+        val elements = document.select(".post")
+        val nextPage = document.select(".nav-links .current ~ a").any()
         val animeList = elements.map { element ->
             SAnime.create().apply {
-                title = element.selectFirst(".mli-info")?.text()?.trim() ?: ""
-                thumbnail_url = element.selectFirst("img")!!.attr("abs:data-original")
-                setUrlWithoutDomain(element.attr("abs:href"))
+                setUrlWithoutDomain(element.selectFirst(".lnk-blk")?.attr("abs:href") ?: "")
+                title = element.selectFirst(".entry-header .entry-title")?.text() ?: ""
+                description = element.select(".entry-content p").text() ?: ""
+                thumbnail_url = element.selectFirst(".post-thumbnail figure img")?.let { getImageUrl(it) }
             }
         }
         return AnimesPage(animeList, nextPage)
     }
 
-    override fun latestUpdatesParse(response: Response) = popularAnimeParse(response)
-
     override fun latestUpdatesRequest(page: Int) = popularAnimeRequest(page)
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        val filterList = if (filters.isEmpty()) getFilterList() else filters
-        val genreFilter = filterList.find { it is GenreFilter } as GenreFilter
+    override fun latestUpdatesParse(response: Response) = popularAnimeParse(response)
 
-        return when {
-            query.isNotBlank() -> GET("$baseUrl/page/$page/?s=$query", headers)
-            genreFilter.state != 0 -> GET("$baseUrl/${genreFilter.toUriPart()}/page/$page", headers)
-            else -> popularAnimeRequest(page)
-        }
-    }
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList) = GET("$baseUrl/?s=$query", headers)
 
     override fun searchAnimeParse(response: Response) = popularAnimeParse(response)
 
+    override fun animeDetailsParse(response: Response): SAnime {
+        val document = response.asJsoup()
+        return SAnime.create().apply {
+            title = document.selectFirst("aside .entry-header .entry-title")?.text() ?: ""
+            description = document.select("aside .description p:not([class])").joinToString { it.text() }
+            thumbnail_url = document.selectFirst(".post-thumbnail img")?.let { getImageUrl(it)?.replace("/w185/", "/w500/") }
+            genre = document.select(".genres a").joinToString { it.text() }
+            status = if (document.location().contains("pelicula")) SAnime.COMPLETED else SAnime.UNKNOWN
+        }
+    }
+
+    private fun getImageUrl(element: Element): String? {
+        return when {
+            element.hasAttr("data-src") -> element.attr("abs:data-src")
+            element.hasAttr("src") -> element.attr("abs:src")
+            else -> null
+        }
+    }
+
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
-        return if (document.location().contains("/series/")) {
-            var episodeCounter = 1F
-            document.select(".tvseason").flatMap { season ->
-                val noSeason = season.select(".les-title strong").text().substringAfter("Temporada").trim()
-                season.select(".les-content a").map { ep ->
-                    SEpisode.create().apply {
-                        episode_number = episodeCounter++
-                        name = "T$noSeason - ${ep.text().trim()}"
-                        setUrlWithoutDomain(ep.attr("abs:href"))
-                    }
-                }
-            }.reversed()
-        } else {
+        val referer = response.request.url.toString()
+        return if (referer.contains("pelicula")) {
             listOf(
                 SEpisode.create().apply {
                     episode_number = 1f
-                    name = "PELÍCULA"
-                    setUrlWithoutDomain(document.location())
+                    name = "Película"
+                    setUrlWithoutDomain(referer)
                 },
             )
+        } else {
+            val chunkSize = Runtime.getRuntime().availableProcessors()
+            document.select(".sel-temp a")
+                .sortedByDescending { it.attr("data-season") }
+                .chunked(chunkSize).flatMap { chunk ->
+                    chunk.parallelCatchingFlatMapBlocking { season ->
+                        getDetailSeason(season, referer)
+                    }
+                }.sortedByDescending {
+                    it.name.substringBeforeLast("-")
+                }
+        }
+    }
+
+    private fun getDetailSeason(element: Element, referer: String): List<SEpisode> {
+        return try {
+            val post = element.attr("data-post")
+            val season = element.attr("data-season")
+            val formBody = FormBody.Builder()
+                .add("action", "action_select_season")
+                .add("season", season)
+                .add("post", post)
+                .build()
+
+            val request = Request.Builder()
+                .url("$baseUrl/wp-admin/admin-ajax.php")
+                .post(formBody)
+                .header("Origin", baseUrl)
+                .header("Referer", referer)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+            val detail = client.newCall(request).execute().asJsoup()
+
+            detail.select(".post").reversed().mapIndexed { idx, it ->
+                val epNumber = try {
+                    it.select(".entry-header .num-epi").text().substringAfter("x").substringBefore("–").trim()
+                } catch (_: Exception) { "${idx + 1}" }
+
+                SEpisode.create().apply {
+                    setUrlWithoutDomain(it.select("a").attr("abs:href"))
+                    name = "T$season - Episodio $epNumber"
+                    episode_number = epNumber.toFloat()
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
-
-        return document.select(".movieplay iframe").parallelCatchingFlatMapBlocking {
-            val link = it.attr("abs:src")
+        val videoList = mutableListOf<Video>()
+        document.select(".aa-tbs-video a").forEach {
             val prefix = runCatching {
-                val tabElement = it.closest("[id*=tab]") ?: return@runCatching ""
-                val tabName = tabElement.attr("id")
-                val lang = document.selectFirst("[href=\"#$tabName\"]")?.ownText()?.trim() ?: ""
+                val lang = it.select(".server").text().lowercase()
                 when {
-                    lang.lowercase().contains("latino") -> "[LAT]"
-                    lang.lowercase().contains("castellano") -> "[CAST]"
-                    lang.lowercase().contains("subtitulado") -> "[SUB]"
+                    lang.contains("latino") -> "[LAT]"
+                    lang.contains("castellano") -> "[CAST]"
+                    lang.contains("sub") || lang.contains("vose") -> "[SUB]"
                     else -> ""
                 }
             }.getOrDefault("")
 
-            serverVideoResolver(link, prefix)
-        }
-    }
+            val ide = it.attr("href")
+            var src = document.select("$ide iframe").attr("data-src").replace("#038;", "&").replace("&amp;", "")
+            try {
+                if (src.contains("home")) {
+                    src = client.newCall(GET(src)).execute().asJsoup().selectFirst("iframe")?.attr("src") ?: ""
+                }
 
-    private fun serverVideoResolver(url: String, prefix: String = ""): List<Video> {
-        val embedUrl = url.lowercase()
-        return when {
-            embedUrl.contains("fastream") -> {
-                val link = if (url.contains("emb.html")) "https://fastream.to/embed-${url.split("/").last()}.html" else url
-                FastreamExtractor(client, headers).videosFromUrl(link, prefix = "$prefix Fastream:")
-            }
-            else -> emptyList()
+                if (src.contains("fastream")) {
+                    if (src.contains("emb.html")) {
+                        val key = src.split("/").last()
+                        src = "https://fastream.to/embed-$key.html"
+                    }
+                    FastreamExtractor(client, headers).videosFromUrl(src, needsSleep = false, prefix = "$prefix Fastream:").also(videoList::addAll)
+                }
+                if (src.contains("upstream")) {
+                    UpstreamExtractor(client).videosFromUrl(src, prefix = "$prefix ").let { videoList.addAll(it) }
+                }
+                if (src.contains("yourupload")) {
+                    YourUploadExtractor(client).videoFromUrl(src, headers, prefix = "$prefix ").let { videoList.addAll(it) }
+                }
+                if (src.contains("voe")) {
+                    VoeExtractor(client).videosFromUrl(src, prefix = "$prefix ").also(videoList::addAll)
+                }
+                if (src.contains("wishembed") || src.contains("streamwish") || src.contains("wish")) {
+                    StreamWishExtractor(client, headers).videosFromUrl(src) { "$prefix StreamWish:$it" }.also(videoList::addAll)
+                }
+                if (src.contains("mp4upload")) {
+                    Mp4uploadExtractor(client).videosFromUrl(src, headers, prefix = "$prefix ").let { videoList.addAll(it) }
+                }
+                if (src.contains("burst")) {
+                    BurstCloudExtractor(client).videoFromUrl(src, headers = headers, prefix = "$prefix ").let { videoList.addAll(it) }
+                }
+                if (src.contains("filemoon") || src.contains("moonplayer")) {
+                    FilemoonExtractor(client).videosFromUrl(src, headers = headers, prefix = "$prefix Filemoon:").let { videoList.addAll(it) }
+                }
+            } catch (_: Exception) {}
         }
+        return videoList
     }
 
     override fun List<Video>.sort(): List<Video> {
@@ -169,25 +236,6 @@ class HomeCine : ConfigurableAnimeSource, AnimeHttpSource() {
                 { Regex("""(\d+)p""").find(it.quality)?.groupValues?.get(1)?.toIntOrNull() ?: 0 },
             ),
         ).reversed()
-    }
-
-    override fun getFilterList(): AnimeFilterList = AnimeFilterList(
-        AnimeFilter.Header("La busqueda por texto ignora el filtro"),
-        GenreFilter(),
-    )
-
-    private class GenreFilter : UriPartFilter(
-        "Género",
-        arrayOf(
-            Pair("<Seleccionar>", ""),
-            Pair("Películas", "peliculas"),
-            Pair("Series", "series"),
-        ),
-    )
-
-    private open class UriPartFilter(displayName: String, val vals: Array<Pair<String, String>>) :
-        AnimeFilter.Select<String>(displayName, vals.map { it.first }.toTypedArray()) {
-        fun toUriPart() = vals[state].second
     }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
@@ -208,11 +256,11 @@ class HomeCine : ConfigurableAnimeSource, AnimeHttpSource() {
         }.also(screen::addPreference)
 
         ListPreference(screen.context).apply {
-            key = PREF_SERVER_KEY
-            title = "Preferred server"
-            entries = SERVER_LIST
-            entryValues = SERVER_LIST
-            setDefaultValue(PREF_SERVER_DEFAULT)
+            key = PREF_QUALITY_KEY
+            title = "Preferred quality"
+            entries = QUALITY_LIST
+            entryValues = QUALITY_LIST
+            setDefaultValue(PREF_QUALITY_DEFAULT)
             summary = "%s"
 
             setOnPreferenceChangeListener { _, newValue ->
@@ -224,11 +272,11 @@ class HomeCine : ConfigurableAnimeSource, AnimeHttpSource() {
         }.also(screen::addPreference)
 
         ListPreference(screen.context).apply {
-            key = PREF_QUALITY_KEY
-            title = "Preferred quality"
-            entries = QUALITY_LIST
-            entryValues = QUALITY_LIST
-            setDefaultValue(PREF_QUALITY_DEFAULT)
+            key = PREF_SERVER_KEY
+            title = "Preferred server"
+            entries = SERVER_LIST
+            entryValues = SERVER_LIST
+            setDefaultValue(PREF_SERVER_DEFAULT)
             summary = "%s"
 
             setOnPreferenceChangeListener { _, newValue ->
