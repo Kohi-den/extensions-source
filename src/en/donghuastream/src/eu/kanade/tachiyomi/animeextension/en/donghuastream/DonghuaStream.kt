@@ -8,7 +8,7 @@ import eu.kanade.tachiyomi.multisrc.animestream.AnimeStream
 class DonghuaStream : AnimeStream(
     "en",
     "DonghuaStream",
-    "https://donghuastream.co.in",
+    "https://donghuastream.org",
 ) {
     override val fetchFilters: Boolean
         get() = false
