@@ -4,6 +4,8 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.megacloudextractor.MegaCloudExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.multisrc.zorotheme.ZoroTheme
+import eu.kanade.tachiyomi.network.GET
+import okhttp3.Request
 
 class HiAnime : ZoroTheme(
     "en",
@@ -21,6 +23,8 @@ class HiAnime : ZoroTheme(
 
     private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
     private val megaCloudExtractor by lazy { MegaCloudExtractor(client, headers, preferences) }
+
+    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/recently-updated?page=$page", docHeaders)
 
     override fun extractVideo(server: VideoData): List<Video> {
         return when (server.name) {
