@@ -23,7 +23,7 @@ import java.util.Locale
 class Bakashi : DooPlay(
     "pt-BR",
     "Bakashi",
-    "https://bakashi.tv",
+    "https://bakashi.net",
 ) {
 
     override val id: Long = 2969482460524685571L
@@ -94,7 +94,7 @@ class Bakashi : DooPlay(
             "filemoon" in name -> filemoonExtractor.videosFromUrl(url)
             "mixdrop" in name -> mixDropExtractor.videoFromUrl(url)
             "streamtape" in name -> streamTapeExtractor.videosFromUrl(url)
-            "/noance/" in url || "/noa" in url -> noaExtractor.videosFromUrl(url)
+            "/noance/" in url || "/noa" in url || "/ao/" in url -> noaExtractor.videosFromUrl(url)
             "/player/" in url -> bloggerExtractor.videosFromUrl(url, headers)
             else -> emptyList()
         }
@@ -104,7 +104,7 @@ class Bakashi : DooPlay(
         val playerId = player.attr("data-nume")
         val iframe = player.root().selectFirst("div#source-player-$playerId iframe")
 
-        return iframe?.attr("src")?.takeIf(String::isNotBlank)
+        return iframe?.tryGetAttr("data-litespeed-src", "src")?.takeIf(String::isNotBlank)
             ?.let {
                 when {
                     it.contains("/aviso/") ->
@@ -141,6 +141,11 @@ class Bakashi : DooPlay(
             client.newCall(GET(it.attr("href"), headers)).execute()
                 .asJsoup()
         } ?: document
+    }
+
+    private fun Element.tryGetAttr(vararg attributeKeys: String): String? {
+        val attributeKey = attributeKeys.first { hasAttr(it) }
+        return attributeKey?.let { attr(attributeKey) }
     }
 
     override fun List<Video>.sort(): List<Video> {
