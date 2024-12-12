@@ -142,49 +142,49 @@ class Anime4Up : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val hd: Map<String, String> = emptyMap(),
         val sd: Map<String, String> = emptyMap(),
     )
-    
+
     @Serializable
     data class WatchServerData(
         val name: String,
         val link: String,
         val order: String,
-        val icon: Boolean
+        val icon: Boolean,
     )
-    
+
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
-        
+
         // Decode base64 for each quality level
         val base64Fhd = document.selectFirst(".WatchServersEmbed form input[name='watch_fhd']")
             ?.attr("value")
             ?.let { String(Base64.decode(it, Base64.DEFAULT)) }
             ?: "[]"
-        
+
         val base64Hd = document.selectFirst(".WatchServersEmbed form input[name='watch_hd']")
             ?.attr("value")
             ?.let { String(Base64.decode(it, Base64.DEFAULT)) }
             ?: "[]"
-        
+
         val base64Sd = document.selectFirst(".WatchServersEmbed form input[name='watch_SD']")
             ?.attr("value")
             ?.let { String(Base64.decode(it, Base64.DEFAULT)) }
             ?: "[]"
-        
+
         // Parse the base64 decoded strings into lists of WatchServerData
         val parsedFhd = json.decodeFromString<List<WatchServerData>>(base64Fhd)
         val parsedHd = json.decodeFromString<List<WatchServerData>>(base64Hd)
         val parsedSd = json.decodeFromString<List<WatchServerData>>(base64Sd)
-        
+
         // Convert to the old Qualities structure
         val qualities = Qualities(
             fhd = parsedFhd.associate { it.name to it.link },
             hd = parsedHd.associate { it.name to it.link },
-            sd = parsedSd.associate { it.name to it.link }
+            sd = parsedSd.associate { it.name to it.link },
         )
-        
+
         // Use the same logic as the old implementation
         val streamLinks = with(qualities) { fhd + hd + sd }
-        
+
         return streamLinks.values.distinct().flatMap(::extractVideos)
     }
 
