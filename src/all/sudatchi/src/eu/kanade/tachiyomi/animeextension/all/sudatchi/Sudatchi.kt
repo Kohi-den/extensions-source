@@ -39,7 +39,7 @@ class Sudatchi : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override val baseUrl = "https://sudatchi.com"
 
-    private val ipfsUrl = "https://gboesk298le91ct41kibaonc7o.ingress.akashprovid.com"
+    private val ipfsUrl = "https://ipfs.sudatchi.com"
 
     override val lang = "all"
 
