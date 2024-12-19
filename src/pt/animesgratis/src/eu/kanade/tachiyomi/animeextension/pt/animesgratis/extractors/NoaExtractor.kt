@@ -7,19 +7,35 @@ import okhttp3.OkHttpClient
 
 class NoaExtractor(private val client: OkHttpClient, private val headers: Headers) {
     fun videosFromUrl(url: String): List<Video> {
-        return client.newCall(GET(url)).execute()
+        val body = client.newCall(GET(url)).execute()
             .body.string()
-            .substringAfter("sources: [")
-            .substringBefore("]")
-            .split("{")
-            .drop(1)
-            .map {
-                val label = it.substringAfter("label").substringAfter(":\"").substringBefore('"')
-                val videoUrl = it.substringAfter("file")
+
+        return when {
+            "file: jw.file" in body -> {
+                val videoUrl = body.substringAfter("file")
                     .substringAfter(":\"")
                     .substringBefore('"')
                     .replace("\\", "")
-                Video(videoUrl, "Player - $label", videoUrl, headers)
+                listOf(Video(videoUrl, "NOA", videoUrl, headers))
             }
+
+            "sources:" in body -> {
+                body.substringAfter("sources: [")
+                    .substringBefore("]")
+                    .split("{")
+                    .drop(1)
+                    .map {
+                        val label =
+                            it.substringAfter("label").substringAfter(":\"").substringBefore('"')
+                        val videoUrl = it.substringAfter("file")
+                            .substringAfter(":\"")
+                            .substringBefore('"')
+                            .replace("\\", "")
+                        Video(videoUrl, "NOA - $label", videoUrl, headers)
+                    }
+            }
+
+            else -> emptyList()
+        }
     }
 }

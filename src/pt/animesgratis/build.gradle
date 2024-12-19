@@ -1,9 +1,9 @@
 ext {
-    extName = 'Bakashi'
-    extClass = '.Bakashi'
+    extName = 'Q1N'
+    extClass = '.Q1N'
     themePkg = 'dooplay'
-    baseUrl = 'https://bakashi.tv'
-    overrideVersionCode = 14
+    baseUrl = 'https://q1n.net'
+    overrideVersionCode = 15
 }
 
 apply from: "$rootDir/common.gradle"
