@@ -17,7 +17,6 @@ import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.multisrc.anilist.AniListAnimeHttpSource
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.parallelFlatMap
-import eu.kanade.tachiyomi.util.parallelMap
 import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -183,99 +182,152 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
             }
             ?: emptyList()
 
-        val headersWithAction =
-            headers.newBuilder()
-                // next.js stuff I guess
-                .add("Next-Action", getHeaderValue(baseHost, NEXT_ACTION_SOURCES_LIST))
-                .build()
-
         var timeouts = 0
         var maxTimeout = 0
-        val episodeDataList = extras.parallelFlatMap { extra ->
+        val videos = extras.parallelFlatMap { extra ->
             val languages = mutableListOf("sub").apply {
                 if (extra.hasDub) add("dub")
             }
-            languages.parallelMap { language ->
-                maxTimeout += 1
+            languages.parallelFlatMap { language ->
                 val epNum = if (extra.episodeNum == extra.episodeNum.toInt().toFloat()) {
-                    extra.episodeNum.toInt().toString() // If it has no fractional part, convert it to an integer
+                    extra.episodeNum.toInt().toString()
                 } else {
-                    extra.episodeNum.toString() // If it has a fractional part, leave it as a float
+                    extra.episodeNum.toString()
                 }
-
-                val requestBody = "[\"$animeId\",\"${extra.source}\",\"${extra.episodeId}\",\"$epNum\",\"$language\"]"
-                    .toRequestBody("application/json".toMediaType())
 
                 val params = mapOf(
                     "host" to extra.source,
                     "ep" to epNum,
                     "type" to language,
                 )
+
                 val builder = Uri.parse("$baseUrl/anime/watch/$animeId").buildUpon()
                 params.map { (k, v) -> builder.appendQueryParameter(k, v); }
-                val url = builder.build().toString()
+                val url = builder.build()
+
+                val headersWithAction =
+                    headers.newBuilder()
+                        .add("Next-Action", getHeaderValue(baseHost, NEXT_ACTION_SOURCES_LIST))
+                        .build()
+
+                val requestBody = "[\"$animeId\",\"${extra.source}\",\"${extra.episodeId}\",\"$epNum\",\"$language\"]"
+                    .toRequestBody("application/json".toMediaType())
+
+                val request = POST(url.toString(), headersWithAction, requestBody)
+
+                maxTimeout += 1
                 try {
-                    val request = POST(url, headersWithAction, requestBody)
-                    val response = client.newCall(request).execute()
+                    getVideos(extra, language, request)
+                } catch (e: java.net.SocketTimeoutException) {
+                    Log.e("AniPlay", "VideoList $url SocketTimeoutException", e)
+                    timeouts++
+                    emptyList()
+                } catch (e: IOException) {
+                    Log.e("AniPlay", "VideoList $url IOException", e)
+                    emptyList()
+                } catch (e: Exception) {
+                    Log.e("AniPlay", "VideoList $url Exception", e)
+                    emptyList()
+                }
+            }
+        }
 
-                    val responseString = response.body.string()
-                    val sourcesString = extractSourcesList(responseString) ?: return@parallelMap null
-                    val data = sourcesString.parseAs<VideoSourceResponse>()
+        if (videos.isEmpty() && timeouts != 0 && maxTimeout == timeouts) {
+            throw Exception("Timed out")
+        }
 
+        return videos.sort()
+    }
+
+    private fun getVideos(extra: EpisodeExtra, language: String, request: Request): List<Video> {
+        val response = client.newCall(request).execute()
+
+        val responseString = response.body.string()
+        val sourcesString = extractSourcesList(responseString) ?: return emptyList()
+        Log.i("AniPlay", "${extra.source} $language -> $sourcesString")
+
+        when (extra.source.lowercase()) {
+            "yuki" -> {
+                val data = sourcesString.parseAs<VideoSourceResponseYuki>()
+                return processEpisodeDataYuki(
+                    EpisodeDataYuki(
+                        source = extra.source,
+                        language = language,
+                        response = data,
+                    ),
+                )
+            }
+            else -> {
+                val data = sourcesString.parseAs<VideoSourceResponse>()
+                return processEpisodeData(
                     EpisodeData(
                         source = extra.source,
                         language = language,
                         response = data,
-                    )
-                } catch (e: java.net.SocketTimeoutException) {
-                    timeouts += 1
-                    null
-                } catch (e: IOException) {
-                    Log.w("AniPlay", "VideoList $url IOException", e)
-                    timeouts = -999
-                    null // Return null to be filtered out
-                } catch (e: Exception) {
-                    Log.w("AniPlay", "VideoList $url Exception", e)
-                    timeouts = -999
-                    null // Return null to be filtered out
-                }
-            }.filterNotNull() // Filter out null values due to errors
-        }
-
-        if (maxTimeout == timeouts && timeouts != 0) {
-            throw Exception("Timed out")
-        }
-
-        val videos = episodeDataList.flatMap { episodeData ->
-            val defaultSource = episodeData.response.sources?.firstOrNull {
-                it.quality in listOf("default", "auto")
-            } ?: return@flatMap emptyList()
-
-            val subtitles = episodeData.response.subtitles
-                ?.filter { it.lang != "Thumbnails" }
-                ?.map { Track(it.url, it.lang) }
-                ?: emptyList()
-
-            try {
-                playlistUtils.extractFromHls(
-                    playlistUrl = defaultSource.url,
-                    videoNameGen = { quality ->
-                        val serverName = getServerName(episodeData.source)
-                        val typeName = when {
-                            subtitles.isNotEmpty() -> "SoftSub"
-                            else -> getTypeName(episodeData.language)
-                        }
-                        "$serverName - $quality - $typeName"
-                    },
-                    subtitleList = subtitles,
+                    ),
                 )
-            } catch (e: Exception) {
-                Log.e("AniPlay", "extractFromHls Error: $e")
-                emptyList()
             }
         }
+    }
 
-        return videos.sort()
+    private fun processEpisodeDataYuki(episodeData: EpisodeDataYuki): List<Video> {
+        val defaultSource = episodeData.response.sources?.firstOrNull()
+
+        if (defaultSource == null) {
+            Log.e("AniPlay", "defaultSource is null (${episodeData.response})")
+            return emptyList()
+        }
+
+        val subtitles = episodeData.response.tracks
+            ?.filter { it.kind?.lowercase() == "captions" }
+            ?.map { Track(it.file, it.label ?: "Unknown") }
+            ?: emptyList()
+
+        val serverName = getServerName(episodeData.source)
+        val typeName = getTypeName(episodeData.language).let {
+            if (it == "Sub" && subtitles.isNotEmpty()) "SoftSub" else it
+        }
+
+        try {
+            return playlistUtils.extractFromHls(
+                playlistUrl = defaultSource.url,
+                videoNameGen = { quality -> "$serverName - $quality - $typeName" },
+                subtitleList = subtitles,
+            )
+        } catch (e: Exception) {
+            Log.e("AniPlay", "processEpisodeDataYuki extractFromHls Error (\"$serverName - $typeName\"): $e")
+        }
+
+        return emptyList()
+    }
+
+    private fun processEpisodeData(episodeData: EpisodeData): List<Video> {
+        val defaultSource = episodeData.response.sources?.firstOrNull {
+            it.quality in listOf("default", "auto")
+        } ?: return emptyList()
+
+        val subtitles = episodeData.response.subtitles
+            ?.filter { it.lang?.lowercase() != "thumbnails" }
+            ?.map { Track(it.url, it.lang ?: "Unk") }
+            ?: emptyList()
+
+        val serverName = getServerName(episodeData.source)
+        val typeName = when {
+            subtitles.isNotEmpty() -> "SoftSub"
+            else -> getTypeName(episodeData.language)
+        }
+
+        try {
+            return playlistUtils.extractFromHls(
+                playlistUrl = defaultSource.url,
+                videoNameGen = { quality -> "$serverName - $quality - $typeName" },
+                subtitleList = subtitles,
+            )
+        } catch (e: Exception) {
+            Log.e("AniPlay", "processEpisodeData extractFromHls Error (\"$serverName - $typeName\"): $e")
+        }
+
+        return emptyList()
     }
 
     override fun List<Video>.sort(): List<Video> {
@@ -431,7 +483,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     private fun getTypeName(value: String): String {
-        val index = PREF_TYPE_ENTRY_VALUES.indexOf(value)
+        val index = PREF_TYPE_ENTRY_VALUES.indexOf(value.lowercase())
         if (index == -1) {
             return "Other"
         }
@@ -456,8 +508,8 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         private const val PREF_DOMAIN_DEFAULT = "aniplaynow.live"
 
         private const val PREF_SERVER_KEY = "server"
-        private val PREF_SERVER_ENTRIES = arrayOf("Kuro", "Yuki", "Yuno")
-        private val PREF_SERVER_ENTRY_VALUES = arrayOf("kuro", "yuki", "yuno")
+        private val PREF_SERVER_ENTRIES = arrayOf("Kuro", "Anya", "Yuki")
+        private val PREF_SERVER_ENTRY_VALUES = arrayOf("kuro", "anya", "yuki")
         private const val PREF_SERVER_DEFAULT = "kuro"
 
         private const val PREF_QUALITY_KEY = "quality"
