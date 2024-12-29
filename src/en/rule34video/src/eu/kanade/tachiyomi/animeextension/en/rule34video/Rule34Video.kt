@@ -1,8 +1,10 @@
 package eu.kanade.tachiyomi.animeextension.en.rule34video
-
 import android.app.Application
+import android.util.Log
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
+import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -41,7 +43,21 @@ class Rule34Video : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // ============================== Popular ===============================
-    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/latest-updates/$page/")
+    override fun popularAnimeRequest(page: Int): Request {
+        return if (preferences.getBoolean(PREF_UPLOADER_FILTER_ENABLED_KEY, false)) {
+            val uploaderId = preferences.getString(PREF_UPLOADER_ID_KEY, "") ?: ""
+            if (uploaderId.isNotBlank()) {
+                val url = "$baseUrl/members/$uploaderId/videos/?mode=async&function=get_block&block_id=list_videos_uploaded_videos&sort_by=&from_videos=$page"
+                Log.e("Rule34Video", "Loading popular videos from uploader ID: $uploaderId, page: $page, URL: $url")
+                GET(url)
+            } else {
+                Log.e("Rule34Video", "Uploader filter enabled but ID is blank, loading latest updates.")
+                GET("$baseUrl/latest-updates/$page/")
+            }
+        } else {
+            GET("$baseUrl/latest-updates/$page/")
+        }
+    }
 
     override fun popularAnimeSelector() = "div.item.thumb"
 
@@ -102,21 +118,60 @@ class Rule34Video : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // =========================== Anime Details ============================
     override fun animeDetailsParse(document: Document) = SAnime.create().apply {
-        title = document.selectFirst("h1.title_video")!!.text()
-        val info = document.selectFirst("#tab_video_info")!!
-        author = info.select("div.label:contains(Artist:) + a").eachText().joinToString()
+        title = document.selectFirst("h1.title_video")?.text().toString()
+
+        val infoRow = document.selectFirst("div.info.row")
+        val detailRows = document.select("div.row")
+
+        val artistElement = detailRows.select("div.col:has(div.label:contains(Artist)) a.item span.name").firstOrNull()
+        author = artistElement?.text().orEmpty()
+
         description = buildString {
-            info.selectFirst("div.label:contains(Description:) > em")?.text()?.also { append("$it\n") }
-            info.selectFirst("i.icon-eye + span")?.text()?.also { append("\nViews : ${it.replace(" ", ",")}") }
-            info.selectFirst("i.icon-clock + span")?.text()?.also { append("\nDuration : $it") }
-            document.select("div.label:contains(Download) ~ a.tag_item")
+            detailRows.select("div.row:has(div.label > em) > div.label > em").html()
+                .replace("<br>", "\n") // Ensure single <br> tags are followed by a newline
+                .let { text ->
+                    append(text)
+                }
+            append("\n\n") // Add extra spacing
+
+            infoRow?.selectFirst("div.item_info:nth-child(1) > span")?.text()?.let {
+                append("Uploaded: $it\n")
+            }
+
+            val artist = detailRows.select("div.col:has(div.label:contains(Artist)) a.item span.name")
+                .eachText()
+                .joinToString()
+            if (artist.isNotEmpty()) {
+                append("Artists: $artist\n")
+            }
+
+            val categories = detailRows.select("div.col:has(div.label:contains(Categories)) a.item span")
+                .eachText()
+                .joinToString()
+            if (categories.isNotEmpty()) {
+                append("Categories: $categories\n")
+            }
+
+            val uploader = detailRows.select("div.col:has(div.label:contains(Uploaded by)) a.item").text()
+            if (uploader.isNotEmpty()) {
+                append("Uploader: $uploader\n")
+            }
+
+            infoRow?.select("div.item_info:nth-child(2) > span")?.text()?.let {
+                val views = it.substringBefore(" ").replace(",", "")
+                append("Views: $views\n")
+            }
+            infoRow?.select("div.item_info:nth-child(3) > span")?.text()?.let { append("Duration: $it\n") }
+            document.select("div.row:has(div.label:contains(Download)) a.tag_item")
                 .eachText()
                 .joinToString { it.substringAfter(" ") }
-                .also { append("\nQuality : $it") }
+                .also { append("Quality: $it") }
         }
-        genre = document.select("div.label:contains(Tags) ~ a.tag_item:not(:contains(Suggest))")
+
+        genre = document.select("div.row_spacer:has(div.label:contains(Tags)) a.tag_item:not(:contains(Suggest))")
             .eachText()
             .joinToString()
+
         status = SAnime.COMPLETED
     }
 
@@ -186,6 +241,24 @@ class Rule34Video : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // ============================== Settings ==============================
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        SwitchPreferenceCompat(screen.context).apply {
+            key = PREF_UPLOADER_FILTER_ENABLED_KEY
+            title = "Filter by Uploader"
+            summary = "Load videos only from the specified uploader ID."
+            setDefaultValue(false)
+        }.also(screen::addPreference)
+
+        EditTextPreference(screen.context).apply {
+            key = PREF_UPLOADER_ID_KEY
+            title = "Uploader ID"
+            summary = "Enter the ID of the uploader (e.g., 98965). Requires \"Filter by Uploader\" to be enabled."
+            dialogTitle = "Enter Uploader ID"
+            var dependency = PREF_UPLOADER_FILTER_ENABLED_KEY
+            setOnPreferenceChangeListener { _, newValue ->
+                newValue?.toString().isNullOrBlank().not()
+            }
+        }.also(screen::addPreference)
+
         ListPreference(screen.context).apply {
             key = PREF_QUALITY_KEY
             title = PREF_QUALITY_TITLE
@@ -218,14 +291,20 @@ class Rule34Video : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         return tagList.toTypedArray()
     }
 
-    override fun getFilterList(): AnimeFilterList = AnimeFilterList(
-        OrderFilter(),
-        CategoryBy(),
-        AnimeFilter.Separator(),
-        AnimeFilter.Header("Entered a \"tag\", click on \"filter\" then Click \"reset\" to load tags."),
-        TagFilter(),
-        TagSearch(tagsResults(tagDocument)),
-    )
+    override fun getFilterList(): AnimeFilterList = if (preferences.getBoolean(PREF_UPLOADER_FILTER_ENABLED_KEY, false) &&
+        preferences.getString(PREF_UPLOADER_ID_KEY, "")?.isNotBlank() == true
+    ) {
+        AnimeFilterList() // If uploader filter is enabled and ID is set, show no other filters
+    } else {
+        AnimeFilterList(
+            OrderFilter(),
+            CategoryBy(),
+            AnimeFilter.Separator(),
+            AnimeFilter.Header("Entered a \"tag\", click on \"filter\" then Click \"reset\" to load tags."),
+            TagFilter(),
+            TagSearch(tagsResults(tagDocument)),
+        )
+    }
 
     private class TagFilter : AnimeFilter.Text("Click \"reset\" without any text to load all A-Z tags.", "")
 
@@ -267,5 +346,8 @@ class Rule34Video : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private const val PREF_QUALITY_TITLE = "Preferred quality"
         private const val PREF_QUALITY_DEFAULT = "1080p"
         private val PREF_QUALITY_ENTRIES = arrayOf("2160p", "1080p", "720p", "480p", "360p")
+
+        private const val PREF_UPLOADER_FILTER_ENABLED_KEY = "uploader_filter_enabled"
+        private const val PREF_UPLOADER_ID_KEY = "uploader_id"
     }
 }
