@@ -16,11 +16,13 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
 
     private val apiLycoris = "https://www.lycoris.cafe"
 
+    private val apiKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpnbHlqc3FzdmV2bnl1ZGJhemd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE2OTM0ODYxNjYsImV4cCI6MjAwOTA2MjE2Nn0.H-_D56Tk5_8ebK9X700aFFI-zOPavq7ikhRNtU2njQ0"
+
     private val json: Json by injectLazy()
 
     fun getVideosFromUrl(url: String, headers: Headers, prefix: String): List<Video> {
         val embedHeaders = headers.newBuilder()
-            .add("apikey", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpnbHlqc3FzdmV2bnl1ZGJhemd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE2OTM0ODYxNjYsImV4cCI6MjAwOTA2MjE2Nn0.H-_D56Tk5_8ebK9X700aFFI-zOPavq7ikhRNtU2njQ0")
+            .add("apikey", apiKey)
             .add("Host", "zglyjsqsvevnyudbazgy.supabase.co")
             .build()
 
