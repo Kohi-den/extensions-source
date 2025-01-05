@@ -35,7 +35,7 @@ class Jable(override val lang: String) : AnimeHttpSource() {
     private var tagsUpdated = false
 
     override fun animeDetailsRequest(anime: SAnime): Request {
-        return GET("$baseUrl${anime.url}?lang=$lang", headers)
+        return GET("$baseUrl${anime.url}?lang=${lang.toRequestLang()}", headers)
     }
 
     override fun animeDetailsParse(response: Response): SAnime {
@@ -88,7 +88,7 @@ class Jable(override val lang: String) : AnimeHttpSource() {
                     title = it.select(".detail .title").text()
                 }
             },
-            doc.select(".container .pagination .page-item .page-link.disabled").isNullOrEmpty(),
+            true,
         )
     }
 
@@ -125,7 +125,7 @@ class Jable(override val lang: String) : AnimeHttpSource() {
     ): Request {
         val urlBuilder = baseUrl.toHttpUrl().newBuilder()
             .addPathSegments("$path/")
-            .addQueryParameter("lang", lang)
+            .addQueryParameter("lang", lang.toRequestLang())
         if (tagsUpdated) {
             // load whole page for update filter tags info
             urlBuilder.addQueryParameter("mode", "async")
@@ -202,6 +202,11 @@ class Jable(override val lang: String) : AnimeHttpSource() {
             return true
         }
         return false
+    }
+
+    private fun String.toRequestLang(): String {
+        if (this == "ja") return "jp"
+        return this
     }
 
     private val intl by lazy {
