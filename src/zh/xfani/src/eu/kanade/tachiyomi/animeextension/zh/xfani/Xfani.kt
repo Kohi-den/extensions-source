@@ -33,6 +33,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
+import org.jsoup.select.Elements
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
@@ -143,25 +144,46 @@ class Xfani : AnimeHttpSource(), ConfigurableAnimeSource {
     override fun videoListParse(response: Response): List<Video> {
         val requestUrl = response.request.url
         val currentPath = requestUrl.encodedPath
-        val currentAnthology = response.request.url.pathSegments.last()
+        val currentEpisodePathName = response.request.url.pathSegments.last()
         val document = response.asJsoup()
         val videoUrl = findVideoUrl(document)
-        val sourceList =
+        val allEpisodeElements =
             document.select(".player-anthology .anthology-list .anthology-list-box")
                 .map { element ->
-                    element.select(".anthology-list-play li a").eachAttr("href")
-                        .first { it.endsWith(currentAnthology) }
+                    element.select(".anthology-list-play li a")
                 }
+        val currentEpisodeName = allEpisodeElements.firstNotNullOfOrNull { elements ->
+            elements.firstOrNull { it.attr("href") == currentPath }?.select("span")?.text()
+        }
+        val targetEpisodeNumber = currentEpisodeName?.let { numberRegex.find(it)?.value?.toIntOrNull() } ?: -1
+        val sourceList = allEpisodeElements.map { elements ->
+            elements.findSourceOrNull { name, _ -> numberRegex.find(name)?.value?.toIntOrNull() == targetEpisodeNumber }
+                ?: elements.findSourceOrNull { _, url -> url.endsWith(currentEpisodePathName) }
+        }
         val sourceNameList = document.select(".anthology-tab .swiper-wrapper a").map {
             it.ownText().trim()
         }
-        return sourceList.zip(sourceNameList) { url, name ->
-            if (url.endsWith(currentPath)) {
-                Video("$baseUrl$url", name, videoUrl = videoUrl)
+        return sourceList.zip(sourceNameList) { source, name ->
+            if (source == null) {
+                Video("", "", null)
+            } else if (source.second.endsWith(currentPath)) {
+                Video("$baseUrl${source.second}", "$name-${source.first}", videoUrl = videoUrl)
             } else {
-                Video("$baseUrl$url", name, videoUrl = null)
+                Video("$baseUrl${source.second}", "$name-${source.first}", videoUrl = null)
             }
-        }.sortedByDescending { it.videoUrl != null }
+        }.filter { it.quality.isNotEmpty() }.sortedByDescending { it.videoUrl != null }
+    }
+
+    private fun Elements.findSourceOrNull(predicate: (name: String, url: String) -> Boolean): Pair<String, String>? {
+        return firstNotNullOfOrNull {
+            val name = it.selectFirst("span")?.text() ?: ""
+            val url = it.attr("href")
+            if (predicate(name, url)) {
+                name to url
+            } else {
+                null
+            }
+        }
     }
 
     override fun videoUrlParse(response: Response): String {
