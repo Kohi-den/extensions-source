@@ -8,7 +8,7 @@ class JableFactory : AnimeSourceFactory {
         return listOf(
             Jable("zh"),
             Jable("en"),
-            Jable("jp"),
+            Jable("ja"),
         )
     }
 }

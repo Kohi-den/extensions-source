@@ -20,7 +20,7 @@ internal class JableIntl private constructor(delegate: Intl) : Intl by delegate 
     constructor(lang: String) : this(
         when (lang) {
             "zh" -> ZH()
-            "jp" -> JP()
+            "ja" -> JA()
             "en" -> EN()
             else -> ZH()
         },
@@ -43,7 +43,7 @@ internal class ZH : Intl {
     override val filterTagTitle: String = "標籤"
 }
 
-internal class JP : Intl {
+internal class JA : Intl {
     override val popular: String = "人気優先"
     override val latestUpdate: String = "新作優先"
     override val sortLatestUpdate: String = "最近更新"
