@@ -47,12 +47,13 @@ jobs:
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
           git_user_signingkey: true
           git_commit_gpgsign: true
-          
+
         # This step is going to commit, but this will not trigger another workflow.
       - name: Bump extensions that uses a modified lib
         if: steps.modified-libs.outputs.any_changed == 'true'
         run: |
-          chmod +x ./.github/scripts/bump-versions.py ${{ steps.modified-libs.outputs.all_changed_files }}
+          chmod +x ./.github/scripts/bump-versions.py
+          ./.github/scripts/bump-versions.py ${{ steps.modified-libs.outputs.all_changed_files }}
 
       - name: Validate Gradle Wrapper
         uses: gradle/wrapper-validation-action@a494d935f4b56874c4a5a87d19af7afcf3a163d0 # v2
@@ -174,4 +175,3 @@ jobs:
           cwd: "./repo"
           committer_name: Kohi-den-Bot
           committer_email: 177773202+Kohi-den-Bot@users.noreply.github.com
- 

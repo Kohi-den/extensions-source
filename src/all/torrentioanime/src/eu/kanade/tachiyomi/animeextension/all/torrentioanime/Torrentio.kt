@@ -375,6 +375,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
                     ?.let { videos ->
                         if (preferences.getBoolean(UPCOMING_EP_KEY, UPCOMING_EP_DEFAULT)) { videos } else { videos.filter { video -> (video.released?.let { parseDate(it) } ?: 0L) <= System.currentTimeMillis() } }
                     }
+                    ?.filter { it.thumbnail != null }
                     ?.map { video ->
                         SEpisode.create().apply {
                             episode_number = video.episode?.toFloat() ?: 0.0F
@@ -663,6 +664,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
             "AllDebrid",
             "DebridLink",
             "Offcloud",
+            "TorBox",
         )
         private val PREF_DEBRID_VALUES = arrayOf(
             "none",
@@ -671,6 +673,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
             "alldebrid",
             "debridlink",
             "offcloud",
+            "torbox",
         )
 
         // Sort

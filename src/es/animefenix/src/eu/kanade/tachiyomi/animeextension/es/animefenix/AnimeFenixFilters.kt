@@ -78,7 +78,7 @@ object AnimeFenixFilters {
 
     class SortFilter : QueryPartFilter("Orden", AnimeFenixFiltersData.SORT)
 
-    private object AnimeFenixFiltersData {
+    object AnimeFenixFiltersData {
         val YEARS = (1990..Calendar.getInstance().get(Calendar.YEAR)).map { Pair("$it", "$it") }.reversed().toTypedArray()
 
         val TYPES = arrayOf(

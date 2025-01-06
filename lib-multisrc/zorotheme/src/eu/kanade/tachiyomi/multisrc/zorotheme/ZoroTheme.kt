@@ -48,7 +48,7 @@ abstract class ZoroTheme(
             .clearOldHosts()
     }
 
-    private val docHeaders = headers.newBuilder().apply {
+    protected val docHeaders = headers.newBuilder().apply {
         add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
         add("Host", baseUrl.toHttpUrl().host)
         add("Referer", "$baseUrl/")
@@ -217,7 +217,7 @@ abstract class ZoroTheme(
 
         val serversDoc = response.parseAs<HtmlResponse>().getHtml()
 
-        val embedLinks = listOf("servers-sub", "servers-dub", "servers-mixed").map { type ->
+        val embedLinks = listOf("servers-sub", "servers-dub", "servers-mixed", "servers-raw").map { type ->
             if (type !in typeSelection) return@map emptyList()
 
             serversDoc.select("div.$type div.item").parallelMapNotNull {
@@ -236,6 +236,7 @@ abstract class ZoroTheme(
         }.flatten()
 
         return embedLinks.parallelCatchingFlatMap(::extractVideo)
+            .sort()
     }
 
     abstract fun extractVideo(server: VideoData): List<Video>
@@ -332,8 +333,8 @@ abstract class ZoroTheme(
         private const val PREF_HOSTER_KEY = "hoster_selection"
 
         private const val PREF_TYPE_TOGGLE_KEY = "type_selection"
-        private val TYPES_ENTRIES = arrayOf("Sub", "Dub", "Mixed")
-        private val TYPES_ENTRY_VALUES = arrayOf("servers-sub", "servers-dub", "servers-mixed")
+        private val TYPES_ENTRIES = arrayOf("Sub", "Dub", "Mixed", "Raw")
+        private val TYPES_ENTRY_VALUES = arrayOf("servers-sub", "servers-dub", "servers-mixed", "servers-raw")
         private val PREF_TYPES_TOGGLE_DEFAULT = TYPES_ENTRY_VALUES.toSet()
     }
 

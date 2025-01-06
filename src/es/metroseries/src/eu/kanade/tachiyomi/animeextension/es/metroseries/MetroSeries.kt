@@ -20,25 +20,20 @@ import eu.kanade.tachiyomi.lib.upstreamextractor.UpstreamExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.await
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
-import eu.kanade.tachiyomi.util.parallelMapBlocking
 import okhttp3.FormBody
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override val name = "MetroSeries"
 
-    override val baseUrl = "https://metroseries.net"
+    override val baseUrl = "https://www3.seriesmetro.net"
 
     override val lang = "es"
 
@@ -71,11 +66,11 @@ class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
         )
     }
 
-    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/series/page/$page", headers)
+    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/cartelera-series/page/$page", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val document = response.asJsoup()
-        val elements = document.select(".post-list, .results-post > .post")
+        val elements = document.select(".post")
         val nextPage = document.select(".nav-links .current ~ a").any()
         val animeList = elements.map { element ->
             SAnime.create().apply {
@@ -99,11 +94,11 @@ class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun animeDetailsParse(response: Response): SAnime {
         val document = response.asJsoup()
         return SAnime.create().apply {
-            title = document.selectFirst("main .entry-header .entry-title")?.text() ?: ""
-            description = document.select("main .entry-content p").joinToString { it.text() }
-            thumbnail_url = document.selectFirst("main .post-thumbnail img")?.let { getImageUrl(it) }
-            genre = document.select("main .entry-content .tagcloud a").joinToString { it.text() }
-            status = SAnime.UNKNOWN
+            title = document.selectFirst("aside .entry-header .entry-title")?.text() ?: ""
+            description = document.select("aside .description p:not([class])").joinToString { it.text() }
+            thumbnail_url = document.selectFirst(".post-thumbnail img")?.let { getImageUrl(it)?.replace("/w185/", "/w500/") }
+            genre = document.select(".genres a").joinToString { it.text() }
+            status = if (document.location().contains("pelicula")) SAnime.COMPLETED else SAnime.UNKNOWN
         }
     }
 
@@ -118,34 +113,40 @@ class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
         val referer = response.request.url.toString()
-        val chunkSize = Runtime.getRuntime().availableProcessors()
-        val objectNumber = document.select("#aa-season").attr("data-object")
-        val episodes = document.select(".season-list li a")
-            .sortedByDescending { it.attr("data-season") }
-            .chunked(chunkSize).flatMap { chunk ->
-                chunk.parallelCatchingFlatMapBlocking { season ->
-                    val pages = getDetailSeason(season, objectNumber, referer)
-                    getPageEpisodeList(pages, referer, objectNumber, season.attr("data-season"))
+        return if (referer.contains("pelicula")) {
+            listOf(
+                SEpisode.create().apply {
+                    episode_number = 1f
+                    name = "Película"
+                    setUrlWithoutDomain(referer)
+                },
+            )
+        } else {
+            val chunkSize = Runtime.getRuntime().availableProcessors()
+            document.select(".sel-temp a")
+                .sortedByDescending { it.attr("data-season") }
+                .chunked(chunkSize).flatMap { chunk ->
+                    chunk.parallelCatchingFlatMapBlocking { season ->
+                        getDetailSeason(season, referer)
+                    }
+                }.sortedByDescending {
+                    it.name.substringBeforeLast("-")
                 }
-            }.sortedByDescending {
-                it.name.substringBeforeLast("-")
-            }
-        return episodes
+        }
     }
 
-    private fun getDetailSeason(element: Element, objectNumber: String, referer: String): IntRange {
-        try {
+    private fun getDetailSeason(element: Element, referer: String): List<SEpisode> {
+        return try {
             val post = element.attr("data-post")
             val season = element.attr("data-season")
             val formBody = FormBody.Builder()
                 .add("action", "action_select_season")
                 .add("season", season)
                 .add("post", post)
-                .add("object", objectNumber)
                 .build()
 
             val request = Request.Builder()
-                .url("https://metroseries.net/wp-admin/admin-ajax.php")
+                .url("$baseUrl/wp-admin/admin-ajax.php")
                 .post(formBody)
                 .header("Origin", baseUrl)
                 .header("Referer", referer)
@@ -153,110 +154,72 @@ class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
                 .build()
             val detail = client.newCall(request).execute().asJsoup()
 
-            val firstPage = try { detail.selectFirst("#aa-season > nav > span.page-numbers")?.text()?.toInt() ?: 1 } catch (_: Exception) { 1 }
-            val lastPage = try { detail.select(".pagination a.page-numbers:not(.next)").last()?.text()?.toInt() ?: firstPage } catch (_: Exception) { firstPage }
+            detail.select(".post").reversed().mapIndexed { idx, it ->
+                val epNumber = try {
+                    it.select(".entry-header .num-epi").text().substringAfter("x").substringBefore("–").trim()
+                } catch (_: Exception) { "${idx + 1}" }
 
-            return firstPage.rangeTo(lastPage)
-        } catch (_: Exception) {
-            return 1..1
-        }
-    }
-
-    private fun getPageEpisodeList(pages: IntRange, referer: String, objectNumber: String, season: String): List<SEpisode> {
-        val episodes = mutableListOf<SEpisode>()
-        try {
-            pages.parallelMapBlocking {
-                val formBody = FormBody.Builder()
-                    .add("action", "action_pagination_ep")
-                    .add("page", "$it")
-                    .add("object", objectNumber)
-                    .add("season", season)
-                    .build()
-
-                val requestPage = Request.Builder()
-                    .url("https://metroseries.net/wp-admin/admin-ajax.php")
-                    .post(formBody)
-                    .header("authority", baseUrl.toHttpUrl().host)
-                    .header("Origin", "https://${baseUrl.toHttpUrl().host}")
-                    .header("Referer", referer)
-                    .header("Content-Type", "application/x-www-form-urlencoded")
-                    .build()
-
-                client.newCall(requestPage).await().parseAsEpisodeList().also(episodes::addAll)
+                SEpisode.create().apply {
+                    setUrlWithoutDomain(it.select("a").attr("abs:href"))
+                    name = "T$season - Episodio $epNumber"
+                    episode_number = epNumber.toFloat()
+                }
             }
-        } catch (_: Exception) { }
-        return episodes
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
         val videoList = mutableListOf<Video>()
-        val termId = document.select("#option-players").attr("data-term")
-        document.select(".player-options-list li a").forEach {
+        document.select(".aa-tbs-video a").forEach {
             val prefix = runCatching {
-                val lang = it.select(".option").text().lowercase()
+                val lang = it.select(".server").text().lowercase()
                 when {
                     lang.contains("latino") -> "[LAT]"
                     lang.contains("castellano") -> "[CAST]"
-                    lang.contains("sub") -> "[SUB]"
+                    lang.contains("sub") || lang.contains("vose") -> "[SUB]"
                     else -> ""
                 }
             }.getOrDefault("")
 
-            val ide = it.attr("data-opt")
-            val formBody = FormBody.Builder()
-                .add("action", "action_player_series")
-                .add("ide", ide)
-                .add("term_id", termId)
-                .build()
+            val ide = it.attr("href")
+            var src = document.select("$ide iframe").attr("data-src").replace("#038;", "&").replace("&amp;", "")
+            try {
+                if (src.contains("metro")) {
+                    src = client.newCall(GET(src)).execute().asJsoup().selectFirst("iframe")?.attr("src") ?: ""
+                }
 
-            val postRequest = Request.Builder()
-                .url("https://metroseries.net/wp-admin/admin-ajax.php")
-                .post(formBody)
-                .header("Origin", baseUrl)
-                .header("Referer", response.request.url.toString())
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .build()
-
-            val playerDocument = client.newCall(postRequest).execute().asJsoup()
-            playerDocument.select("iframe").forEach {
-                var src = it.attr("src").replace("#038;", "&").replace("&amp;", "")
-                try {
-                    if (src.contains("metroseries")) {
-                        src = client.newCall(GET(src)).execute().asJsoup().selectFirst("iframe")?.attr("src") ?: ""
+                if (src.contains("fastream")) {
+                    if (src.contains("emb.html")) {
+                        val key = src.split("/").last()
+                        src = "https://fastream.to/embed-$key.html"
                     }
-
-                    if (src.contains("fastream")) {
-                        if (src.contains("emb.html")) {
-                            val key = src.split("/").last()
-                            src = "https://fastream.to/embed-$key.html"
-                        }
-                        FastreamExtractor(client, headers).videosFromUrl(src, needsSleep = false, prefix = "$prefix Fastream:").also(videoList::addAll)
-                    }
-
-                    if (src.contains("upstream")) {
-                        UpstreamExtractor(client).videosFromUrl(src, prefix = "$prefix ").let { videoList.addAll(it) }
-                    }
-                    if (src.contains("yourupload")) {
-                        YourUploadExtractor(client).videoFromUrl(src, headers, prefix = "$prefix ").let { videoList.addAll(it) }
-                    }
-                    if (src.contains("voe")) {
-                        VoeExtractor(client).videosFromUrl(src, prefix = "$prefix ").also(videoList::addAll)
-                    }
-                    if (src.contains("wishembed") || src.contains("streamwish") || src.contains("wish")) {
-                        StreamWishExtractor(client, headers).videosFromUrl(src) { "$prefix StreamWish:$it" }.also(videoList::addAll)
-                    }
-                    if (src.contains("mp4upload")) {
-                        Mp4uploadExtractor(client).videosFromUrl(src, headers, prefix = "$prefix ").let { videoList.addAll(it) }
-                    }
-                    if (src.contains("burst")) {
-                        BurstCloudExtractor(client).videoFromUrl(src, headers = headers, prefix = "$prefix ").let { videoList.addAll(it) }
-                    }
-                    if (src.contains("filemoon") || src.contains("moonplayer")) {
-                        FilemoonExtractor(client).videosFromUrl(src, headers = headers, prefix = "$prefix Filemoon:").let { videoList.addAll(it) }
-                    }
-                } catch (_: Exception) {}
-            }
+                    FastreamExtractor(client, headers).videosFromUrl(src, needsSleep = false, prefix = "$prefix Fastream:").also(videoList::addAll)
+                }
+                if (src.contains("upstream")) {
+                    UpstreamExtractor(client).videosFromUrl(src, prefix = "$prefix ").let { videoList.addAll(it) }
+                }
+                if (src.contains("yourupload")) {
+                    YourUploadExtractor(client).videoFromUrl(src, headers, prefix = "$prefix ").let { videoList.addAll(it) }
+                }
+                if (src.contains("voe")) {
+                    VoeExtractor(client).videosFromUrl(src, prefix = "$prefix ").also(videoList::addAll)
+                }
+                if (src.contains("wishembed") || src.contains("streamwish") || src.contains("wish")) {
+                    StreamWishExtractor(client, headers).videosFromUrl(src) { "$prefix StreamWish:$it" }.also(videoList::addAll)
+                }
+                if (src.contains("mp4upload")) {
+                    Mp4uploadExtractor(client).videosFromUrl(src, headers, prefix = "$prefix ").let { videoList.addAll(it) }
+                }
+                if (src.contains("burst")) {
+                    BurstCloudExtractor(client).videoFromUrl(src, headers = headers, prefix = "$prefix ").let { videoList.addAll(it) }
+                }
+                if (src.contains("filemoon") || src.contains("moonplayer")) {
+                    FilemoonExtractor(client).videosFromUrl(src, headers = headers, prefix = "$prefix Filemoon:").let { videoList.addAll(it) }
+                }
+            } catch (_: Exception) {}
         }
         return videoList
     }
@@ -323,22 +286,5 @@ class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
                 preferences.edit().putString(key, entry).commit()
             }
         }.also(screen::addPreference)
-    }
-
-    private fun Response.parseAsEpisodeList(): List<SEpisode> {
-        return asJsoup().select(".episodes-list li a").reversed().mapIndexed { idx, it ->
-            val epNumber = try { it.ownText().substringAfter("x").substringBefore("–").trim() } catch (_: Exception) { "${idx + 1}" }
-            val season = it.ownText().substringBefore("x").trim()
-            SEpisode.create().apply {
-                setUrlWithoutDomain(it.attr("abs:href"))
-                name = "T$season - E$epNumber - ${it.ownText().substringAfter("–").trim()}"
-                episode_number = epNumber.toFloat()
-                date_upload = try {
-                    SimpleDateFormat("dd-MM-yyyy", Locale.ENGLISH).parse(it.select("span").text()).time
-                } catch (_: Exception) {
-                    System.currentTimeMillis()
-                }
-            }
-        }
     }
 }

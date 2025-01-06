@@ -29,6 +29,7 @@ class MegaCloudExtractor(
     private val json: Json by injectLazy()
 
     private val playlistUtils by lazy { PlaylistUtils(client, headers) }
+    private val webViewResolver by lazy { WebViewResolver(headers) }
 
     private val cacheControl = CacheControl.Builder().noStore().build()
     private val noCacheClient = client.newBuilder()
@@ -141,10 +142,16 @@ class MegaCloudExtractor(
 
     private fun getVideoDto(url: String): VideoDto {
         val type = if (url.startsWith("https://megacloud.tv")) 0 else 1
+
         val keyType = SOURCES_KEY[type]
 
         val id = url.substringAfter(SOURCES_SPLITTER[type], "")
             .substringBefore("?", "").ifEmpty { throw Exception("I HATE THE ANTICHRIST") }
+
+        if (type == 0) {
+            return webViewResolver.getSources(id)!!
+        }
+
         val srcRes = client.newCall(GET(SERVER_URL[type] + SOURCES_URL[type] + id))
             .execute()
             .body.string()

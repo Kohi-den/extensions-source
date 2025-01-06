@@ -23,13 +23,14 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
         private val REGEX_SOURCES = Regex("""sources:\s*\[\{"file":"([^"]+)""")
         private val REGEX_FILE = Regex("""file: ?"([^"]+)"""")
         private val REGEX_SOURCE = Regex("""source = ?"([^"]+)"""")
-        private val REGEX_SUBS = Regex("""\[(.*?)\](https?://[^\s,]+)""")
+        private val REGEX_SUBS = Regex("""\{"file":"([^"]+)","label":"([^"]+)","kind":"captions","default":\w+\}""")
         private const val KEY_SOURCE = "https://raw.githubusercontent.com/Rowdy-Avocado/multi-keys/keys/index.html"
     }
 
     fun videoFromUrl(url: String, referer: String, prefix: String = "Chillx - "): List<Video> {
         val newHeaders = headers.newBuilder()
             .set("Referer", "$referer/")
+            .set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
             .set("Accept-Language", "en-US,en;q=0.5")
             .build()
 
@@ -50,7 +51,7 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
         val subtitleList = buildList {
             val subtitles = REGEX_SUBS.findAll(decryptedScript)
             subtitles.forEach {
-                add(Track(it.groupValues[2], decodeUnicodeEscape(it.groupValues[1])))
+                add(Track(it.groupValues[1], decodeUnicodeEscape(it.groupValues[2])))
             }
         }
 
@@ -85,5 +86,4 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
         @SerialName("chillx") val keys: List<String>
     )
 }
-
 class ErrorLoadingException(message: String) : Exception(message)

@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelMapNotNullBlocking
 import okhttp3.FormBody
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 
 class AnitubeDownloadExtractor(
@@ -20,23 +21,33 @@ class AnitubeDownloadExtractor(
 
     private fun videosFromFile4Go(url: String, quality: String): Video? {
         Log.d(tag, "Checking download for $url")
-        val docDownload = client.newCall(GET(url)).execute().asJsoup()
 
-        val form =
-            docDownload.selectFirst("button.download")?.closest("form")
+        val newHeaders = headers.newBuilder()
+            .set("Referer", "https://${url.toHttpUrl().host}/")
+            .add("Accept", "*/*")
+            .add("Cache-Control", "no-cache")
+            .add("Pragma", "no-cache")
+            .add("Connection", "keep-alive")
+            .add("Sec-Fetch-Dest", "empty")
+            .add("Sec-Fetch-Mode", "cors")
+            .add("Sec-Fetch-Site", "same-site")
+            .build()
 
-        if (form == null) {
-            Log.d(tag, "Download form not found for $url")
-            return null
-        }
+        val id = url.split('/').last()
+        val idusuario =
+            client.newCall(GET("$ADS_URL/file4go.php", headers = newHeaders))
+                .execute()
+                .body.string()
+                .substringAfter("\"publicidade\"")
+                .substringAfter('"')
+                .substringBefore('"')
 
         val body = FormBody.Builder().apply {
-            form.select("input[name]").forEach {
-                add(it.attr("name"), it.attr("value"))
-            }
+            add("id", id)
+            add("idusuario", idusuario)
         }.build()
 
-        val postUrl = form.attr("action")
+        val postUrl = "https://www.file4go.net/getdownload_new_anitube.php"
 
         val postHeaders = headers.newBuilder()
             .set("Referer", url)
@@ -94,5 +105,9 @@ class AnitubeDownloadExtractor(
         }
 
         return videosFromDownloadPage(url, epName)
+    }
+
+    companion object {
+        private const val ADS_URL = "https://ads.anitube.vip"
     }
 }

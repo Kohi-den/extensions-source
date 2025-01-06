@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.animeextension.en.aniplay
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -13,28 +12,14 @@ data class EpisodeListResponse(
     data class Episode(
         val id: String,
         val number: Float,
-        val title: String,
-        val hasDub: Boolean,
-        val isFiller: Boolean,
+        val title: String?,
+        val hasDub: Boolean?,
+        val isFiller: Boolean?,
         val img: String?,
         val description: String?,
         val createdAt: String?,
     )
 }
-
-@Serializable
-data class VideoSourceRequest(
-    val source: String,
-
-    @SerialName("episodeid")
-    val episodeId: String,
-
-    @SerialName("episodenum")
-    val episodeNum: String,
-
-    @SerialName("subtype")
-    val subType: String,
-)
 
 @Serializable
 data class VideoSourceResponse(
@@ -44,13 +29,35 @@ data class VideoSourceResponse(
     @Serializable
     data class Source(
         val url: String,
-        val quality: String,
+        val quality: String?,
     )
 
     @Serializable
     data class Subtitle(
         val url: String,
-        val lang: String,
+        val lang: String?,
+    )
+}
+
+@Serializable
+data class VideoSourceResponseYuki(
+    val sources: List<Source>?,
+    val tracks: List<Subtitle>?,
+    val anilistID: Int?,
+    val malID: Int?,
+) {
+    @Serializable
+    data class Source(
+        val url: String,
+        val type: String?,
+    )
+
+    @Serializable
+    data class Subtitle(
+        val file: String,
+        val label: String?,
+        val kind: String?,
+        val default: Boolean?,
     )
 }
 
@@ -67,4 +74,11 @@ data class EpisodeData(
     val source: String,
     val language: String,
     val response: VideoSourceResponse,
+)
+
+@Serializable
+data class EpisodeDataYuki(
+    val source: String,
+    val language: String,
+    val response: VideoSourceResponseYuki,
 )

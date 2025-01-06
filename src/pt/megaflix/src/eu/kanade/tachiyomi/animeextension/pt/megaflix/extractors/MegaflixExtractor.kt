@@ -21,7 +21,7 @@ class MegaflixExtractor(private val client: OkHttpClient, private val headers: H
 
         return playlistUtils.extractFromHls(
             playlistUrl,
-            "https://megaflix.co",
+            "https://megaflix.ac",
             videoNameGen = { "Megaflix($lang) - $it" },
         )
     }

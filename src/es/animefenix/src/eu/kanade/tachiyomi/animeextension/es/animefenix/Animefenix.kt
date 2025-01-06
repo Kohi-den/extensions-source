@@ -46,6 +46,23 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
 
     private val preferences: SharedPreferences by lazy { Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000) }
 
+    private object CSSQuery {
+        object AnimeList {
+            const val GRID = "main div.container div.grid"
+            const val ELEMENT = "a"
+            const val ELEMENT_URL = "a"
+            const val ELEMENT_TITLE = "div div h3"
+            const val ELEMENT_THUMBNAIL_URL = "img"
+            const val ELEMENT_STATUS = "div div span.bg-zinc-700"
+            const val NEXT = "a:has(span.sr-only:contains(Next))"
+        }
+
+        object EpisodeList {
+            const val EPISODE = "div.container div.bg-zinc-800 ul li"
+            const val NUMBER = "a span span"
+            const val URL = "a"
+        }
+    }
     companion object {
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_DEFAULT = "1080"
@@ -65,14 +82,17 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val document = response.asJsoup()
-        val elements = document.select("article.serie-card")
-        val nextPage = document.select("ul.pagination-list li a.pagination-link:contains(Siguiente)").any()
+
+        val grid = document.select(CSSQuery.AnimeList.GRID)[1]
+
+        val elements = grid.select(CSSQuery.AnimeList.ELEMENT)
+        val nextPage = document.select(CSSQuery.AnimeList.NEXT).any()
         val animeList = elements.map { element ->
             SAnime.create().apply {
-                setUrlWithoutDomain(element.select("figure.image a").attr("abs:href"))
-                title = element.select("div.title h3 a").text()
-                thumbnail_url = element.select("figure.image a img").attr("abs:src")
-                description = element.select("div.serie-card__information p").text()
+                setUrlWithoutDomain(element.select(CSSQuery.AnimeList.ELEMENT_URL).attr("abs:href"))
+                title = element.select(CSSQuery.AnimeList.ELEMENT_TITLE).text()
+                thumbnail_url = element.select(CSSQuery.AnimeList.ELEMENT_THUMBNAIL_URL).attr("abs:src")
+                status = parseStatus(element.select(CSSQuery.AnimeList.ELEMENT_STATUS).text())
             }
         }
         return AnimesPage(animeList, nextPage)
@@ -96,12 +116,12 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
-        return document.select("ul.anime-page__episode-list.is-size-6 li").map { it ->
-            val epNum = it.select("a span").text().replace("Episodio", "")
+        return document.select(CSSQuery.EpisodeList.EPISODE).map { it ->
+            val epNum = it.select(CSSQuery.EpisodeList.NUMBER).text().replace("Episodio", "")
             SEpisode.create().apply {
                 episode_number = epNum.toFloat()
                 name = "Episodio $epNum"
-                setUrlWithoutDomain(it.select("a").attr("abs:href"))
+                setUrlWithoutDomain(it.select(CSSQuery.EpisodeList.URL).attr("abs:href"))
             }
         }
     }
@@ -110,7 +130,9 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
         val document = response.asJsoup()
         val videoList = mutableListOf<Video>()
         val servers = document.selectFirst("script:containsData(var tabsArray)")!!.data()
-            .split("tabsArray").map { it.substringAfter("src='").substringBefore("'").replace("amp;", "") }
+            .split("\n")
+            .filter { it.contains("tabsArray[") }
+            .map { it.split(" = ").last().trim().trim(';').trim('"') }
             .filter { it.contains("https") }
 
         servers.forEach { server ->
@@ -216,12 +238,13 @@ class Animefenix : ConfigurableAnimeSource, AnimeHttpSource() {
         ).reversed()
     }
 
-    override fun animeDetailsParse(response: Response): SAnime {
+    override fun animeDetailsParse(response: Response) = SAnime.create().apply {
         val document = response.asJsoup()
-        return SAnime.create().apply {
-            title = document.select("h1.title.has-text-orange").text()
-            genre = document.select("a.button.is-small.is-orange.is-outlined.is-roundedX").joinToString { it.text() }
-            status = parseStatus(document.select("div.column.is-12-mobile.xis-3-tablet.xis-3-desktop.xhas-background-danger.is-narrow-tablet.is-narrow-desktop a").text())
+        with(document.selectFirst("main > div.relative > div.container > div.flex")!!) {
+            title = selectFirst("h1.font-bold")!!.ownText()
+            genre = select("div:has(h2:containsOwn(Géneros)) > div.flex > a").joinToString { it.text() }
+            status = parseStatus(selectFirst("li:has(> span:containsOwn(Estado))")!!.ownText())
+            description = select("div:has(h2:containsOwn(Sinopsis)) > p").text()
         }
     }
 

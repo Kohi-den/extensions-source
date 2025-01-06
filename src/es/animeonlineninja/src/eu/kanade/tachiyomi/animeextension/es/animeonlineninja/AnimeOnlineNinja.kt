@@ -4,20 +4,24 @@ import androidx.preference.CheckBoxPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
 import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
 import eu.kanade.tachiyomi.lib.mixdropextractor.MixDropExtractor
+import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
+import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
+import eu.kanade.tachiyomi.lib.vidhideextractor.VidHideExtractor
 import eu.kanade.tachiyomi.multisrc.dooplay.DooPlay
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
+import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import uy.kohesive.injekt.api.get
 
 class AnimeOnlineNinja : DooPlay(
     "es",
@@ -91,7 +95,7 @@ class AnimeOnlineNinja : DooPlay(
         } else if (path.startsWith("/letra") || path.startsWith("/tendencias")) {
             val before = path.substringBeforeLast("/")
             val after = path.substringAfterLast("/")
-            GET(baseUrl + before + "/page/$page/" + after)
+            GET("$baseUrl$before/page/$page/$after")
         } else {
             GET("$baseUrl$path/page/$page")
         }
@@ -100,11 +104,29 @@ class AnimeOnlineNinja : DooPlay(
     // ============================== Episodes ==============================
     override val episodeMovieText = "Película"
 
+    override fun episodeListParse(response: Response): List<SEpisode> {
+        val doc = getRealAnimeDoc(response.asJsoup())
+        val seasonList = doc.select(seasonListSelector)
+        return if (seasonList.isEmpty()) {
+            listOf(
+                SEpisode.create().apply {
+                    setUrlWithoutDomain(doc.location())
+                    episode_number = 1F
+                    name = episodeMovieText
+                },
+            )
+        } else {
+            seasonList.reversed().flatMap { seasonElement ->
+                getSeasonEpisodes(seasonElement).reversed()
+            }
+        }
+    }
+
     // ============================ Video Links =============================
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
         val players = document.select("ul#playeroptionsul li")
-        return players.flatMap { player ->
+        return players.parallelCatchingFlatMapBlocking { player ->
             val name = player.selectFirst("span.title")!!.text()
             val url = getPlayerUrl(player)
             extractVideos(url, name)
@@ -116,36 +138,40 @@ class AnimeOnlineNinja : DooPlay(
     private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
     private val mixDropExtractor by lazy { MixDropExtractor(client) }
     private val uqloadExtractor by lazy { UqloadExtractor(client) }
+    private val vidHideExtractor by lazy { VidHideExtractor(client, headers) }
+    private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
+    private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
 
     private fun extractVideos(url: String, lang: String): List<Video> {
-        return when {
-            "saidochesto.top" in url || "MULTISERVER" in lang.uppercase() ->
-                extractFromMulti(url)
-            "filemoon" in url ->
-                filemoonExtractor.videosFromUrl(url, "$lang Filemoon - ", headers)
-            "dood" in url ->
-                doodExtractor.videoFromUrl(url, "$lang DoodStream", false)
-                    ?.let(::listOf)
-            "streamtape" in url ->
-                streamTapeExtractor.videoFromUrl(url, "$lang StreamTape")
-                    ?.let(::listOf)
-            "mixdrop" in url ->
-                mixDropExtractor.videoFromUrl(url, lang)
-            "uqload" in url ->
-                uqloadExtractor.videosFromUrl(url)
-            "wolfstream" in url -> {
-                client.newCall(GET(url, headers)).execute()
-                    .asJsoup()
-                    .selectFirst("script:containsData(sources)")
-                    ?.data()
-                    ?.let { jsData ->
-                        val videoUrl = jsData.substringAfter("{file:\"").substringBefore("\"")
-                        listOf(Video(videoUrl, "$lang WolfStream", videoUrl, headers = headers))
-                    }
-            }
-            else -> null
-        } ?: emptyList<Video>()
+        try {
+            return when {
+                arrayOf("saidochesto.top").any(url) || "MULTISERVER" in lang.uppercase() -> extractFromMulti(url)
+                arrayOf("filemoon", "filemooon", "moon").any(url) -> filemoonExtractor.videosFromUrl(url, "$lang Filemoon:", headers)
+                arrayOf("doodstream", "dood.", "ds2play", "doods.").any(url) -> doodExtractor.videosFromUrl(url, "$lang DoodStream", false)
+                arrayOf("streamtape", "stp", "stape").any(url) -> streamTapeExtractor.videosFromUrl(url, "$lang StreamTape")
+                arrayOf("mixdrop").any(url) -> mixDropExtractor.videoFromUrl(url, prefix = "$lang ")
+                arrayOf("uqload").any(url) -> uqloadExtractor.videosFromUrl(url, prefix = lang)
+                "wolfstream" in url -> {
+                    client.newCall(GET(url, headers)).execute()
+                        .asJsoup()
+                        .selectFirst("script:containsData(sources)")
+                        ?.data()
+                        ?.let { jsData ->
+                            val videoUrl = jsData.substringAfter("{file:\"").substringBefore("\"")
+                            listOf(Video(videoUrl, "$lang WolfStream", videoUrl, headers = headers))
+                        }
+                }
+                arrayOf("mp4upload").any(url) -> mp4uploadExtractor.videosFromUrl(url, headers, prefix = "$lang ")
+                arrayOf("vidhide", "filelions.top", "vid.").any(url) -> vidHideExtractor.videosFromUrl(url) { "$lang VidHide:$it" }
+                arrayOf("wishembed", "streamwish", "strwish", "wish").any(url) -> streamWishExtractor.videosFromUrl(url, videoNameGen = { "$lang StreamWish:$it" })
+                else -> null
+            } ?: emptyList()
+        } catch (e: Exception) {
+            return emptyList()
+        }
     }
+
+    private fun Array<String>.any(url: String): Boolean = this.any { url.contains(it, ignoreCase = true) }
 
     private fun extractFromMulti(url: String): List<Video> {
         val document = client.newCall(GET(url)).execute().asJsoup()
@@ -267,6 +293,7 @@ class AnimeOnlineNinja : DooPlay(
 
     override val prefQualityValues = arrayOf("480p", "720p", "1080p")
     override val prefQualityEntries = prefQualityValues
+    override val episodeNumberRegex by lazy { Regex("""(\d+(?:\.\d+)?)$""") }
 
     companion object {
         private const val PREF_LANG_KEY = "preferred_lang"
@@ -276,7 +303,7 @@ class AnimeOnlineNinja : DooPlay(
         private const val PREF_SERVER_DEFAULT = "Uqload"
         private val PREF_LANG_ENTRIES = arrayOf("SUB", "All", "ES", "LAT")
         private val PREF_LANG_VALUES = arrayOf("SUB", "", "ES", "LAT")
-        private val SERVER_LIST = arrayOf("Filemoon", "DoodStream", "StreamTape", "MixDrop", "Uqload", "WolfStream", "saidochesto.top")
+        private val SERVER_LIST = arrayOf("Filemoon", "DoodStream", "StreamTape", "MixDrop", "Uqload", "WolfStream", "saidochesto.top", "VidHide", "StreamWish", "Mp4Upload")
 
         private const val PREF_VRF_INTERCEPT_KEY = "vrf_intercept"
         private const val PREF_VRF_INTERCEPT_TITLE = "Intercept VRF links (Requiere Reiniciar)"

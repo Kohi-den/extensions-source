@@ -38,7 +38,7 @@ class Anime4Up : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "Anime4Up"
 
-    override val baseUrl = "https://anime4up.cam"
+    override val baseUrl = "https://anime4up.rest"
 
     override val lang = "ar"
 
@@ -136,7 +136,6 @@ class Anime4Up : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         episode_number = name.substringAfterLast(" ").toFloatOrNull() ?: 0F
     }
 
-    // ============================ Video Links =============================
     @Serializable
     data class Qualities(
         val fhd: Map<String, String> = emptyMap(),
@@ -144,14 +143,47 @@ class Anime4Up : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val sd: Map<String, String> = emptyMap(),
     )
 
+    @Serializable
+    data class WatchServerData(
+        val name: String,
+        val link: String,
+        val order: String,
+        val icon: Boolean,
+    )
+
     override fun videoListParse(response: Response): List<Video> {
-        val base64 = response.asJsoup().selectFirst("input[name=wl]")
+        val document = response.asJsoup()
+
+        // Decode base64 for each quality level
+        val base64Fhd = document.selectFirst(".WatchServersEmbed form input[name='watch_fhd']")
             ?.attr("value")
             ?.let { String(Base64.decode(it, Base64.DEFAULT)) }
-            ?: return emptyList()
+            ?: "[]"
 
-        val parsedData = json.decodeFromString<Qualities>(base64)
-        val streamLinks = with(parsedData) { fhd + hd + sd }
+        val base64Hd = document.selectFirst(".WatchServersEmbed form input[name='watch_hd']")
+            ?.attr("value")
+            ?.let { String(Base64.decode(it, Base64.DEFAULT)) }
+            ?: "[]"
+
+        val base64Sd = document.selectFirst(".WatchServersEmbed form input[name='watch_SD']")
+            ?.attr("value")
+            ?.let { String(Base64.decode(it, Base64.DEFAULT)) }
+            ?: "[]"
+
+        // Parse the base64 decoded strings into lists of WatchServerData
+        val parsedFhd = json.decodeFromString<List<WatchServerData>>(base64Fhd)
+        val parsedHd = json.decodeFromString<List<WatchServerData>>(base64Hd)
+        val parsedSd = json.decodeFromString<List<WatchServerData>>(base64Sd)
+
+        // Convert to the old Qualities structure
+        val qualities = Qualities(
+            fhd = parsedFhd.associate { it.name to it.link },
+            hd = parsedHd.associate { it.name to it.link },
+            sd = parsedSd.associate { it.name to it.link },
+        )
+
+        // Use the same logic as the old implementation
+        val streamLinks = with(qualities) { fhd + hd + sd }
 
         return streamLinks.values.distinct().flatMap(::extractVideos)
     }

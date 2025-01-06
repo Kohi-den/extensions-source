@@ -1,0 +1,11 @@
+ext {
+    extName = 'AnimesOtaku'
+    extClass = '.AnimesOtaku'
+    extVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(":lib:blogger-extractor"))
+}

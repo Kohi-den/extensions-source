@@ -15,7 +15,6 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
-import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
@@ -145,13 +144,12 @@ class YoMovies : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val document = response.asJsoup()
 
         val videoList = document.select("div[id*=tab]:has(div.movieplay > iframe)")
-            .parallelCatchingFlatMapBlocking { server ->
+            .flatMap { server ->
                 val iframe = server.selectFirst("div.movieplay > iframe")!!
                 val name = document.selectFirst("ul.idTabs > li:has(a[href=#${server.id()}]) div.les-title")
                     ?.text()
                     ?.let { "[$it] - " }
                     .orEmpty()
-
                 extractVideosFromIframe(iframe.attr("abs:src"), name)
             }
 

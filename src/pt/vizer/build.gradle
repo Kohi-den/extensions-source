@@ -1,13 +1,16 @@
 ext {
     extName = 'Vizer.tv'
     extClass = '.Vizer'
-    extVersionCode = 16
+    extVersionCode = 21
     isNsfw = true
 }
 
 apply from: "$rootDir/common.gradle"
 
 dependencies {
+    implementation(project(':lib:fireplayer-extractor'))
     implementation(project(':lib:mixdrop-extractor'))
+    implementation(project(':lib:playlist-utils'))
     implementation(project(':lib:streamtape-extractor'))
+    implementation "dev.datlag.jsunpacker:jsunpacker:1.0.1"
 }

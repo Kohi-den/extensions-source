@@ -18,7 +18,7 @@ class SuperFlixExtractor(
     private val client: OkHttpClient,
     private val defaultHeaders: Headers,
     private val genericExtractor: (String, String) -> List<Video>,
-    private val host: String = "https://superflixapi.top",
+    private val host: String = "https://superflixapi.dev",
 ) {
     private val json: Json by injectLazy()
 

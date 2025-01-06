@@ -29,7 +29,7 @@ class DramaCool : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // TODO: Check frequency of url changes to potentially
     // add back overridable baseurl preference
-    override val baseUrl = "https://asianc.sh/"
+    override val baseUrl = "https://asianc.co/"
 
     override val lang = "en"
 

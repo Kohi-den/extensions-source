@@ -1,7 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.pt.megaflix
 
 import android.app.Application
-import android.util.Base64
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animeextension.pt.megaflix.extractors.MegaflixExtractor
@@ -14,6 +13,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
 import eu.kanade.tachiyomi.lib.mixdropextractor.MixDropExtractor
+import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
 import eu.kanade.tachiyomi.lib.vidhideextractor.VidHideExtractor
@@ -35,7 +35,7 @@ class Megaflix : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "Megaflix"
 
-    override val baseUrl = "https://megaflix.co"
+    override val baseUrl = "https://megaflix.ac"
 
     override val lang = "pt-BR"
 
@@ -73,7 +73,11 @@ class Megaflix : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun latestUpdatesNextPageSelector() = "div.nav-links > a:containsOwn(PRÓXIMO)"
 
     // =============================== Search ===============================
-    override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
+    override suspend fun getSearchAnime(
+        page: Int,
+        query: String,
+        filters: AnimeFilterList,
+    ): AnimesPage {
         return if (query.startsWith(PREFIX_SEARCH)) { // URL intent handler
             val path = query.removePrefix(PREFIX_SEARCH)
             client.newCall(GET("$baseUrl/$path"))
@@ -135,6 +139,7 @@ class Megaflix : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                     episode_number = 1F
                 },
             )
+
             else -> seasons.parallelFlatMapBlocking(::episodesFromSeason).reversed()
         }
     }
@@ -163,12 +168,14 @@ class Megaflix : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             .parallelCatchingFlatMapBlocking { element ->
                 val language = element.text().substringAfter("-")
                 val id = element.attr("href")
-                val url = element.parents().get(5)?.selectFirst("div$id a")
-                    ?.run {
-                        attr("href")
-                            .substringAfter("token=")
-                            .let { String(Base64.decode(it, Base64.DEFAULT)) }
-                            .substringAfter("||")
+                val url = element.closest("body")?.selectFirst("div$id iframe")
+                    ?.let {
+                        val iframeUrl = it.attr("src")
+                        client.newCall(GET(iframeUrl, headers))
+                            .execute()
+                            .asJsoup()
+                            .selectFirst("iframe")
+                            ?.attr("src")
                     } ?: return@parallelCatchingFlatMapBlocking emptyList()
 
                 getVideoList(url, language)
@@ -176,6 +183,9 @@ class Megaflix : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     /*--------------------------------Video extractors------------------------------------*/
+    private val webViewResolver by lazy { WebViewResolver() }
+    private val playlistUtils by lazy { PlaylistUtils(client, headers) }
+
     private val mixdropExtractor by lazy { MixDropExtractor(client) }
     private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
     private val megaflixExtractor by lazy { MegaflixExtractor(client, headers) }
@@ -193,6 +203,17 @@ class Megaflix : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             arrayOf("filemoon", "moonplayer").any(url) -> filemoonExtractor.videosFromUrl(url, prefix = "$language Filemoon:")
             arrayOf("vidhide", "vid.").any(url) -> vidHideExtractor.videosFromUrl(url, videoNameGen = { "$language VidHide:$it" })
             arrayOf("wishembed", "streamwish", "strwish", "wish", "jwplayerhls").any(url) -> streamWishExtractor.videosFromUrl(url, videoNameGen = { "$language StreamWish:$it" })
+            arrayOf("fembedder").any(url) -> {
+                val webViewResult = webViewResolver.getUrl(url, headers)
+                if (webViewResult.isBlank()) {
+                    return emptyList()
+                }
+                return if (webViewResult.contains("m3u8")) {
+                    playlistUtils.extractFromHls(webViewResult)
+                } else {
+                    listOf(Video(url, "Default", url))
+                }
+            }
             else -> emptyList()
         }
     }
