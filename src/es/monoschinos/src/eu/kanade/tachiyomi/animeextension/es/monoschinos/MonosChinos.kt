@@ -24,7 +24,6 @@ import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
-import eu.kanade.tachiyomi.util.parseAs
 import okhttp3.FormBody
 import okhttp3.Request
 import okhttp3.Response
@@ -37,7 +36,7 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override val name = "MonosChinos"
 
-    override val baseUrl = "https://monoschinos2.com"
+    override val baseUrl = "https://monoschinos2.net"
 
     override val id = 6957694006954649296
 
@@ -80,7 +79,7 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
             status = document.select(".lh-sm .ms-2").eachText().let { items ->
                 when {
                     items.any { it.contains("Finalizado") } -> SAnime.COMPLETED
-                    items.any { it.contains("Estreno") } -> SAnime.ONGOING
+                    items.any { it.contains("En emision") || it.contains("Estreno") } -> SAnime.ONGOING
                     else -> SAnime.UNKNOWN
                 }
             }
@@ -88,12 +87,12 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
         return animeDetails
     }
 
-    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/animes?p=$page", headers)
+    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/animes?pag=$page", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val document = response.asJsoup()
         val elements = document.select(".ficha_efecto a")
-        val nextPage = document.select(".pagination [rel=\"next\"]").any()
+        val nextPage = document.select(".pagination [title=\"Siguiente página\"]").any()
         val animeList = elements.map { element ->
             SAnime.create().apply {
                 title = element.selectFirst(".title_cap")!!.text()
@@ -106,13 +105,13 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun latestUpdatesParse(response: Response) = popularAnimeParse(response)
 
-    override fun latestUpdatesRequest(page: Int) = GET("$baseUrl/emision?p=$page", headers)
+    override fun latestUpdatesRequest(page: Int) = GET("$baseUrl/animes?estado=en+emision&pag=$page", headers)
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val params = MonosChinosFilters.getSearchParameters(filters)
         return when {
-            query.isNotBlank() -> GET("$baseUrl/buscar?q=$query", headers)
-            params.filter.isNotBlank() -> GET("$baseUrl/animes${params.getQuery()}&p=$page", headers)
+            query.isNotBlank() -> GET("$baseUrl/animes?buscar=$query&pag=$page", headers)
+            params.filter.isNotBlank() -> GET("$baseUrl/animes${params.getQuery()}&pag=$page", headers)
             else -> popularAnimeRequest(page)
         }
     }
@@ -121,31 +120,50 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
-        val token = document.select("meta[name='csrf-token']").attr("content")
-        val capListLink = document.select(".caplist").attr("data-ajax")
         val referer = document.location()
+        val dt = document.select("#dt")
 
-        val detail = getEpisodeDetails(capListLink, token, referer)
-        val total = detail.eps.size
-        val perPage = detail.perpage ?: return emptyList()
+        val total = dt.attr("data-e").toInt()
+        val perPage = 50.0
         val pages = (total / perPage).ceilPage()
+        val i = dt.attr("data-i")
+        val u = dt.attr("data-u")
 
+        var pageIdx = 1
         return (1..pages).parallelCatchingFlatMapBlocking {
-            getEpisodePage(detail.paginateUrl ?: "", it, token, referer).caps.mapIndexed { idx, ep ->
-                val episodeNumber = (ep.episodio ?: (idx + 1))
-                SEpisode.create().apply {
-                    name = "Capítulo $episodeNumber"
-                    episode_number = episodeNumber.toFloat()
-                    setUrlWithoutDomain(ep.url ?: "")
-                }
-            }
-        }.reversed()
+            val formBody = FormBody.Builder()
+                .add("acc", "episodes")
+                .add("i", i)
+                .add("u", u)
+                .add("p", pageIdx.toString())
+                .build()
+
+            val request = Request.Builder()
+                .url("$baseUrl/ajax_pagination")
+                .post(formBody)
+                .header("accept", "application/json, text/javascript, */*; q=0.01")
+                .header("accept-language", "es-419,es;q=0.8")
+                .header("content-type", "application/x-www-form-urlencoded; charset=UTF-8")
+                .header("origin", baseUrl)
+                .header("referer", referer)
+                .header("x-requested-with", "XMLHttpRequest")
+                .build()
+            pageIdx++
+
+            client.newCall(request).execute().getEpisodes()
+        }
     }
 
-    private fun getEpisodeDetails(capListLink: String, token: String, referer: String): EpisodesDto {
-        val formBody = FormBody.Builder().add("_token", token).build()
+    override fun videoListParse(response: Response): List<Video> {
+        val document = response.asJsoup()
+        val i = document.select(".opt").attr("data-encrypt")
+        val referer = document.location()
+        val formBody = FormBody.Builder()
+            .add("acc", "opt")
+            .add("i", i)
+            .build()
         val request = Request.Builder()
-            .url(capListLink)
+            .url("$baseUrl/ajax_pagination")
             .post(formBody)
             .header("accept", "application/json, text/javascript, */*; q=0.01")
             .header("accept-language", "es-419,es;q=0.8")
@@ -155,31 +173,9 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
             .header("x-requested-with", "XMLHttpRequest")
             .build()
 
-        return client.newCall(request).execute().parseAs<EpisodesDto>()
-    }
+        val serverDocument = client.newCall(request).execute().asJsoup()
 
-    private fun getEpisodePage(paginateUrl: String, page: Int, token: String, referer: String): EpisodeInfoDto {
-        val formBodyEp = FormBody.Builder()
-            .add("_token", token)
-            .add("p", "$page")
-            .build()
-        val requestEp = Request.Builder()
-            .url(paginateUrl)
-            .post(formBodyEp)
-            .header("accept", "application/json, text/javascript, */*; q=0.01")
-            .header("accept-language", "es-419,es;q=0.8")
-            .header("content-type", "application/x-www-form-urlencoded; charset=UTF-8")
-            .header("origin", baseUrl)
-            .header("referer", referer)
-            .header("x-requested-with", "XMLHttpRequest")
-            .build()
-
-        return client.newCall(requestEp).execute().parseAs<EpisodeInfoDto>()
-    }
-
-    override fun videoListParse(response: Response): List<Video> {
-        val document = response.asJsoup()
-        return document.select("[data-player]")
+        return serverDocument.select("[data-player]")
             .map { String(Base64.decode(it.attr("data-player"), Base64.DEFAULT)) }
             .parallelCatchingFlatMapBlocking { serverVideoResolver(it) }
     }
@@ -241,6 +237,21 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
     }
 
     private fun Double.ceilPage(): Int = if (this % 1 == 0.0) this.toInt() else ceil(this).toInt()
+
+    private fun Response.getEpisodes(): List<SEpisode> {
+        val document = this.asJsoup()
+        return document.select(".ko").mapIndexed { idx, it ->
+            val episodeNumber = try {
+                it.select("h2").text().substringAfter("Capítulo").trim().toFloat()
+            } catch (e: Exception) { idx + 1f }
+
+            SEpisode.create().apply {
+                name = it.select(".fs-6").text()
+                episode_number = episodeNumber
+                setUrlWithoutDomain(it.attr("abs:href"))
+            }
+        }
+    }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         ListPreference(screen.context).apply {

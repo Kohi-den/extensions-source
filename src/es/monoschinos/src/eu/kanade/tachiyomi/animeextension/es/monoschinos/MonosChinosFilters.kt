@@ -54,86 +54,118 @@ object MonosChinosFilters {
         if (filters.isEmpty()) return FilterSearchParams()
         return FilterSearchParams(
             filters.parseCheckbox<GenresFilter>(DoramasytFiltersData.GENRES, "genero") +
+                filters.parseCheckbox<YearsFilter>(DoramasytFiltersData.YEARS, "anio") +
                 filters.parseCheckbox<TypesFilter>(DoramasytFiltersData.TYPES, "tipo") +
-                filters.asQueryPart<YearsFilter>("fecha") +
-                filters.asQueryPart<LettersFilter>("letra"),
+                filters.asQueryPart<StatusFilter>("estado") +
+                filters.asQueryPart<SortFilter>("orden"),
         )
     }
 
     val FILTER_LIST get() = AnimeFilterList(
         AnimeFilter.Header("La busqueda por texto ignora el filtro"),
         GenresFilter(),
-        TypesFilter(),
         YearsFilter(),
-        LettersFilter(),
+        TypesFilter(),
+        StatusFilter(),
+        SortFilter(),
     )
 
     class GenresFilter : CheckBoxFilterList("Género", DoramasytFiltersData.GENRES.map { CheckBoxVal(it.first, false) })
 
+    class YearsFilter : CheckBoxFilterList("Año", DoramasytFiltersData.YEARS.map { CheckBoxVal(it.first, false) })
+
     class TypesFilter : CheckBoxFilterList("Tipo", DoramasytFiltersData.TYPES.map { CheckBoxVal(it.first, false) })
 
-    class YearsFilter : QueryPartFilter("Año", DoramasytFiltersData.YEARS)
+    class StatusFilter : QueryPartFilter("Estado", DoramasytFiltersData.STATUS)
 
-    class LettersFilter : QueryPartFilter("Letra", DoramasytFiltersData.LETTER)
+    class SortFilter : QueryPartFilter("Orden", DoramasytFiltersData.SORT)
 
     private object DoramasytFiltersData {
         val TYPES = arrayOf(
-            Pair("<Selecionar>", ""),
-            Pair("Pelicula", "pelicula"),
             Pair("Anime", "anime"),
+            Pair("Audio Japonés", "audio-japones"),
+            Pair("Corto", "corto"),
+            Pair("Donghua", "donghua"),
+            Pair("Especial", "especial"),
+            Pair("Ona", "ona"),
+            Pair("Ova", "ova"),
+            Pair("Película", "pelicula"),
+            Pair("Película 1080p", "pelicula-1080p"),
+            Pair("TV", "tv"),
+            Pair("Sin Censura", "sin-censura"),
         )
 
-        val YEARS = arrayOf(Pair("<Seleccionar>", "")) + (1982..Calendar.getInstance().get(Calendar.YEAR)).map { Pair("$it", "$it") }.reversed().toTypedArray()
+        val STATUS = arrayOf(
+            Pair("Todos", ""),
+            Pair("En emisión", "en-emision"),
+            Pair("Finalizado", "finalizado"),
+        )
 
-        val LETTER = arrayOf(Pair("<Seleccionar>", "")) + ('A'..'Z').map { Pair("$it", "$it") }.toTypedArray()
+        val YEARS = (1968..Calendar.getInstance().get(Calendar.YEAR)).map { Pair("$it", "$it") }.reversed().toTypedArray()
 
         val GENRES = arrayOf(
-            Pair("<Selecionar>", ""),
             Pair("Acción", "accion"),
+            Pair("Aenime", "aenime"),
+            Pair("Anime Latino", "anime-latino"),
+            Pair("Artes Marciales", "artes-marciales"),
             Pair("Aventura", "aventura"),
+            Pair("Aventuras", "aventuras"),
+            Pair("Blu-ray", "blu-ray"),
             Pair("Carreras", "carreras"),
+            Pair("Castellano", "castellano"),
             Pair("Ciencia Ficción", "ciencia-ficcion"),
             Pair("Comedia", "comedia"),
             Pair("Cyberpunk", "cyberpunk"),
+            Pair("Demencia", "demencia"),
+            Pair("Dementia", "dementia"),
+            Pair("Demonios", "demonios"),
             Pair("Deportes", "deportes"),
             Pair("Drama", "drama"),
             Pair("Ecchi", "ecchi"),
             Pair("Escolares", "escolares"),
+            Pair("Espacial", "espacial"),
             Pair("Fantasía", "fantasia"),
             Pair("Gore", "gore"),
             Pair("Harem", "harem"),
+            Pair("Historia paralela", "historia-paralela"),
+            Pair("Historico", "historico"),
             Pair("Horror", "horror"),
+            Pair("Infantil", "infantil"),
             Pair("Josei", "josei"),
+            Pair("Juegos", "juegos"),
+            Pair("Latino", "latino"),
             Pair("Lucha", "lucha"),
             Pair("Magia", "magia"),
             Pair("Mecha", "mecha"),
             Pair("Militar", "militar"),
             Pair("Misterio", "misterio"),
+            Pair("Monogatari", "monogatari"),
             Pair("Música", "musica"),
+            Pair("Parodia", "parodia"),
             Pair("Parodias", "parodias"),
+            Pair("Policía", "policia"),
             Pair("Psicológico", "psicologico"),
+            Pair("Recuentos de la vida", "recuentos-de-la-vida"),
             Pair("Recuerdos de la vida", "recuerdos-de-la-vida"),
+            Pair("Romance", "romance"),
+            Pair("Samurai", "samurai"),
             Pair("Seinen", "seinen"),
             Pair("Shojo", "shojo"),
             Pair("Shonen", "shonen"),
+            Pair("Shoujo", "shoujo"),
+            Pair("Shounen", "shounen"),
             Pair("Sobrenatural", "sobrenatural"),
+            Pair("Superpoderes", "superpoderes"),
+            Pair("Suspenso", "suspenso"),
+            Pair("Terror", "terror"),
             Pair("Vampiros", "vampiros"),
             Pair("Yaoi", "yaoi"),
             Pair("Yuri", "yuri"),
-            Pair("Latino", "latino"),
-            Pair("Espacial", "espacial"),
-            Pair("Histórico", "historico"),
-            Pair("Samurai", "samurai"),
-            Pair("Artes Marciales", "artes-marciales"),
-            Pair("Demonios", "demonios"),
-            Pair("Romance", "romance"),
-            Pair("Dementia", "dementia"),
-            Pair(" Policía", "policia"),
-            Pair("Castellano", "castellano"),
-            Pair("Historia paralela", "historia-paralela"),
-            Pair("Aenime", "aenime"),
-            Pair("Blu-ray", "blu-ray"),
-            Pair("Monogatari", "monogatari"),
+        )
+
+        val SORT = arrayOf(
+            Pair("Descendente", "desc"),
+            Pair("Ascendente", "asc"),
         )
     }
 }
