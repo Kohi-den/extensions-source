@@ -6,7 +6,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.asJsoup
-import eu.kanade.tachiyomi.util.parallelMapNotNullBlocking
+import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -77,6 +77,17 @@ class AnitubeExtractor(
             return getAdsUrl(serverUrl, thumbUrl, newLink, newHeaders)
         }
 
+        if (docLink.data().contains("window.location.href = redirectUrl")) {
+            val newLink = docLink.data()
+                .substringAfter("redirectUrl = `")
+                .substringBefore("`")
+                .replace("\${token}", finalLink.toHttpUrl().queryParameter("t") ?: "")
+            val newHeaders = linkHeaders.newBuilder().set("Referer", finalLink).build()
+            Log.d(tag, "Following javascript redirection to $newLink")
+
+            return getAdsUrl(serverUrl, thumbUrl, newLink, newHeaders)
+        }
+
         val referer: String = docLink.location() ?: link
 
         Log.d(tag, "Final URL: $referer")
@@ -112,7 +123,7 @@ class AnitubeExtractor(
 
         // Try default url
         Log.e(tag, "Failed to get the ADS URL, trying the default")
-        return "https://www.popads.net/js/adblock.js"
+        return "https://s4.cdnpc.net/vite-bundle/main.css?version=v93"
     }
 
     private fun getAuthCode(serverUrl: String, thumbUrl: String, link: String): String {
@@ -154,7 +165,7 @@ class AnitubeExtractor(
             .build()
 
         val publicidade =
-            client.newCall(POST("$ADS_URL/", headers = newHeaders, body = body))
+            client.newCall(POST(ADS_URL, headers = newHeaders, body = body))
                 .execute()
                 .body.string()
                 .substringAfter("\"publicidade\"")
@@ -173,7 +184,7 @@ class AnitubeExtractor(
         authCode =
             client.newCall(
                 GET(
-                    "$ADS_URL/?token=$publicidade",
+                    "$ADS_URL?token=$publicidade",
                     headers = newHeaders,
                 ),
             )
@@ -226,19 +237,19 @@ class AnitubeExtractor(
                     var quality = "$quality - Anitube"
                 }
             }
-            .parallelMapNotNullBlocking {
+            .parallelCatchingFlatMapBlocking {
                 if (!checkVideoExists(it.url).exists) {
                     Log.d(tag, "Video not exists: ${it.url.substringBefore("?")}")
-                    return@parallelMapNotNullBlocking null
+                    return@parallelCatchingFlatMapBlocking emptyList()
                 }
-                Video(it.url, it.quality, it.url, headers = headers)
+                listOf(Video(it.url, it.quality, it.url, headers = headers))
             }
             .reversed()
     }
 
     companion object {
         private const val PREF_AUTHCODE_KEY = "authcode"
-        private const val ADS_URL = "https://ads.anitube.vip"
+        private const val ADS_URL = "https://ads.anitube.vip/adblock.php"
         private const val SITE_URL = "https://www.anitube.vip/playerricas.php"
     }
 }
