@@ -39,6 +39,8 @@ import uy.kohesive.injekt.api.get
 
 open class Pelisplushd(override val name: String, override val baseUrl: String) : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
+    override val id: Long = 1400819034564144238L
+
     override val lang = "es"
 
     override val supportsLatest = false

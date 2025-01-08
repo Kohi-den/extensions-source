@@ -16,6 +16,8 @@ import org.jsoup.nodes.Element
 
 class Pelisplusph(override val name: String, override val baseUrl: String) : Pelisplushd(name, baseUrl) {
 
+    override val id: Long = 4917265654298497443L
+
     override val supportsLatest = false
 
     companion object {
@@ -52,12 +54,15 @@ class Pelisplusph(override val name: String, override val baseUrl: String) : Pel
         anime.title = document.selectFirst(".info-content h1")!!.text()
         document.select(".info-content p").map { p ->
             if (p.select(".content-type").text().contains("Sinópsis:")) {
-                anime.description = p.select(".sinopsis")!!.text()
+                anime.description = p.select(".sinopsis").text()
             }
             if (p.select(".content-type").text().contains("Géneros:")) {
                 anime.genre = p.select(".content-type-a a").joinToString { it.text() }
             }
             if (p.select(".content-type").text().contains("Reparto:")) {
+                anime.artist = p.select(".content-type ~ span").text().substringBefore(",")
+            }
+            if (p.select(".content-type").text().contains("Actores:")) {
                 anime.artist = p.select(".content-type ~ span").text().substringBefore(",")
             }
         }
