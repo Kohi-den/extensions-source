@@ -23,6 +23,8 @@ import uy.kohesive.injekt.injectLazy
 
 class Pelisplusto(override val name: String, override val baseUrl: String) : Pelisplushd(name, baseUrl) {
 
+    override val id: Long = 1705636111422561130L
+
     private val json: Json by injectLazy()
 
     override val supportsLatest = false
