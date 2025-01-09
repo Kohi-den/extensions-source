@@ -1,7 +1,7 @@
 ext {
     extName = 'Jkanime'
     extClass = '.Jkanime'
-    extVersionCode = 25
+    extVersionCode = 26
 }
 
 apply from: "$rootDir/common.gradle"
@@ -14,4 +14,6 @@ dependencies {
     implementation(project(':lib:filemoon-extractor'))
     implementation(project(':lib:streamtape-extractor'))
     implementation(project(':lib:voe-extractor'))
+    implementation(project(':lib:vidhide-extractor'))
+    implementation 'org.mozilla:rhino:1.7.14'
 }

@@ -20,16 +20,21 @@ import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.vidhideextractor.VidHideExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import eu.kanade.tachiyomi.util.parseAs
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import org.mozilla.javascript.Context
+import org.mozilla.javascript.Scriptable
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -42,6 +47,13 @@ class Jkanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override val lang = "es"
 
     override val supportsLatest = true
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        prettyPrint = true
+        coerceInputValues = true
+    }
 
     private val preferences: SharedPreferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
@@ -172,6 +184,7 @@ class Jkanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
     private val mixDropExtractor by lazy { MixDropExtractor(client) }
     private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
+    private val vidHideExtractor by lazy { VidHideExtractor(client, headers) }
     private val jkanimeExtractor by lazy { JkanimeExtractor(client) }
 
     override fun videoListParse(response: Response): List<Video> {
@@ -180,12 +193,12 @@ class Jkanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             when {
                 "ok" in url -> okruExtractor.videosFromUrl(url, "$lang ")
                 "voe" in url -> voeExtractor.videosFromUrl(url, "$lang ")
-                "filemoon" in url || "moonplayer" in url -> filemoonExtractor.videosFromUrl(url, "$lang Filemoon:")
-                "streamtape" in url || "stp" in url || "stape" in url -> listOf(streamTapeExtractor.videoFromUrl(url, quality = "$lang StreamTape")!!)
-                "mp4upload" in url -> mp4uploadExtractor.videosFromUrl(url, prefix = "$lang ", headers = headers)
-                "mixdrop" in url || "mdbekjwqa" in url -> mixDropExtractor.videosFromUrl(url, prefix = "$lang ")
-                "sfastwish" in url || "wishembed" in url || "streamwish" in url || "strwish" in url || "wish" in url
-                -> streamWishExtractor.videosFromUrl(url, videoNameGen = { "$lang StreamWish:$it" })
+                arrayOf("filemoon", "filemooon", "moon").any(url) -> filemoonExtractor.videosFromUrl(url, "$lang Filemoon:")
+                arrayOf("streamtape", "stp", "stape").any(url) -> listOf(streamTapeExtractor.videoFromUrl(url, quality = "$lang StreamTape")!!)
+                arrayOf("mp4upload").any(url) -> mp4uploadExtractor.videosFromUrl(url, prefix = "$lang ", headers = headers)
+                arrayOf("vidhide", "filelions.top", "vid.").any(url) -> vidHideExtractor.videosFromUrl(url) { "$lang VidHide:$it" }
+                arrayOf("mixdrop", "mdbekjwqa").any(url) -> mixDropExtractor.videosFromUrl(url, prefix = "$lang ")
+                arrayOf("wishembed", "streamwish", "strwish", "wish").any(url) -> streamWishExtractor.videosFromUrl(url, videoNameGen = { "$lang StreamWish:$it" })
                 "stream/jkmedia" in url -> jkanimeExtractor.getDesukaFromUrl(url, "$lang ")
                 "um2.php" in url -> jkanimeExtractor.getNozomiFromUrl(url, "$lang ")
                 "um.php" in url -> jkanimeExtractor.getDesuFromUrl(url, "$lang ")
@@ -277,11 +290,44 @@ class Jkanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 anime
             }
         } else { // is filtered
-            document.select(".card.mb-3.custom_item2").map { animeData ->
-                latestUpdatesFromElement(animeData)
-            }
+            document.selectFirst("script:containsData(var animes =)")?.data()?.let { script ->
+                parseJavaScriptArray(decodeUnicode(script.substringAfter("var animes = ").substringBefore("];")) + "]")?.let { jsonData ->
+                    json.decodeFromString<List<SearchAnimeDto>>(jsonData).map {
+                        SAnime.create().apply {
+                            title = it.title ?: ""
+                            thumbnail_url = it.image
+                            setUrlWithoutDomain("$baseUrl/${it.slug}")
+                        }
+                    }
+                }
+            } ?: emptyList()
         }
         return AnimesPage(animeList, hasNextPage)
+    }
+
+    private fun parseJavaScriptArray(jsCode: String): String? {
+        return try {
+            val cx = Context.enter()
+            cx.optimizationLevel = -1
+            val scope: Scriptable = cx.initStandardObjects()
+            val script = """
+                var animes = $jsCode;
+                JSON.stringify(animes);
+            """.trimIndent()
+            cx.evaluateString(scope, script, "script", 1, null) as String
+        } catch (e: Exception) {
+            null
+        } finally {
+            Context.exit()
+        }
+    }
+
+    private fun decodeUnicode(input: String): String {
+        val unicodePattern = Regex("""\\u([0-9a-fA-F]{4})""")
+        return unicodePattern.replace(input) { match ->
+            val charCode = match.groupValues[1].toInt(16)
+            charCode.toChar().toString()
+        }
     }
 
     override fun searchAnimeFromElement(element: Element): SAnime = throw UnsupportedOperationException()
@@ -290,10 +336,10 @@ class Jkanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun animeDetailsParse(document: Document): SAnime {
         val anime = SAnime.create()
-        anime.thumbnail_url = document.selectFirst("div.col-lg-3 div.anime__details__pic.set-bg")!!.attr("data-setbg")
-        anime.title = document.selectFirst("div.anime__details__text div.anime__details__title h3")!!.text()
-        anime.description = document.selectFirst("div.col-lg-9 div.anime__details__text p")!!.ownText()
-        document.select("div.row div.col-lg-6.col-md-6 ul li").forEach { animeData ->
+        anime.thumbnail_url = document.selectFirst(".anime__details__content .set-bg")?.attr("data-setbg")
+        anime.title = document.selectFirst(".anime__details__title h3")?.text() ?: ""
+        anime.description = document.selectFirst(".sinopsis")?.ownText()
+        document.select(".aninfo li").forEach { animeData ->
             val data = animeData.select("span").text()
             if (data.contains("Genero")) {
                 anime.genre = animeData.select("a").joinToString { it.text() }
@@ -318,20 +364,13 @@ class Jkanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
     }
 
-    override fun latestUpdatesNextPageSelector(): String = "div.container div.navigation a.text.nav-next"
-
-    override fun latestUpdatesFromElement(element: Element): SAnime {
-        val anime = SAnime.create()
-        anime.setUrlWithoutDomain(element.select(".custom_thumb2 > a").attr("abs:href"))
-        anime.title = element.select(".card-title > a").text()
-        anime.thumbnail_url = element.select(".custom_thumb2 a img").attr("abs:src")
-        anime.description = element.select(".synopsis").text()
-        return anime
-    }
-
     override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/directorio/$page/desc/")
 
-    override fun latestUpdatesSelector(): String = "div.card.mb-3.custom_item2"
+    override fun latestUpdatesParse(response: Response): AnimesPage = searchAnimeParse(response)
+
+    override fun latestUpdatesFromElement(element: Element): SAnime = throw UnsupportedOperationException()
+    override fun latestUpdatesNextPageSelector(): String = throw UnsupportedOperationException()
+    override fun latestUpdatesSelector(): String = throw UnsupportedOperationException()
 
     override fun getFilterList(): AnimeFilterList = AnimeFilterList(
         AnimeFilter.Header("La busqueda por texto no incluye todos los filtros"),
@@ -459,6 +498,8 @@ class Jkanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     private class Tags(name: String) : AnimeFilter.Text(name)
 
+    private fun Array<String>.any(url: String): Boolean = this.any { url.contains(it, ignoreCase = true) }
+
     private open class UriPartFilter(displayName: String, val vals: Array<Pair<String, String>>) :
         AnimeFilter.Select<String>(displayName, vals.map { it.first }.toTypedArray()) {
         fun toUriPart() = vals[state].second
@@ -520,5 +561,12 @@ class Jkanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val server: String? = null,
         val lang: Long? = null,
         val slug: String? = null,
+    )
+
+    @Serializable
+    data class SearchAnimeDto(
+        @SerialName("title") var title: String? = null,
+        @SerialName("image") var image: String? = null,
+        @SerialName("slug") var slug: String? = null,
     )
 }
