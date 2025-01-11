@@ -1,0 +1,15 @@
+ext {
+    extName = 'AnimesBr'
+    extClass = '.AnimesBr'
+    themePkg = 'dooplay'
+    baseUrl = 'https://animesbr.tv'
+    overrideVersionCode = 1
+    isNsfw = true
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation("dev.datlag.jsunpacker:jsunpacker:1.0.1")
+    implementation(project(":lib:vidmoly-extractor"))
+}
