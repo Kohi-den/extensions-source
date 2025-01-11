@@ -14,7 +14,7 @@ import eu.kanade.tachiyomi.multisrc.animestream.AnimeStream
 class AnimeXin : AnimeStream(
     "all",
     "AnimeXin",
-    "https://animexin.vip",
+    "https://animexin.dev",
 ) {
     override val id = 4620219025406449669
 
