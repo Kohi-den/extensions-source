@@ -281,7 +281,6 @@ class AniZone : AnimeHttpSource(), ConfigurableAnimeSource {
 
         return SEpisode.create().apply {
             setUrlWithoutDomain(url)
-            episode_number = url.substringAfterLast("/").toFloat()
             name = element.selectFirst("h3")!!.text()
             date_upload = element.select("div.flex-row > span").getOrNull(1)
                 ?.text()
