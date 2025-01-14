@@ -29,7 +29,7 @@ class MissAV : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override val lang = "all"
 
-    override val baseUrl = "https://missav.com"
+    override val baseUrl = "https://missav.ws"
 
     override val supportsLatest = true
 
