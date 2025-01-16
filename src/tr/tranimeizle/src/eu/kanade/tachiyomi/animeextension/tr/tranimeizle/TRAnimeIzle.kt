@@ -43,7 +43,7 @@ class TRAnimeIzle : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     override val name = "TR Anime Izle"
 
-    override val baseUrl = "https://www.tranimeizle.co"
+    override val baseUrl = "https://www.tranimeizle.top"
 
     override val lang = "tr"
 
