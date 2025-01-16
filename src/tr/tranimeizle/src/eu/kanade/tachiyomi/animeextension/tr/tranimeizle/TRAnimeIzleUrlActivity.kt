@@ -8,7 +8,7 @@ import android.util.Log
 import kotlin.system.exitProcess
 
 /**
- * Springboard that accepts https://www.tranimeizle.co/anime/<item> intents
+ * Springboard that accepts https://www.tranimeizle.top/anime/<item> intents
  * and redirects them to the main Aniyomi process.
  */
 class TRAnimeIzleUrlActivity : Activity() {
