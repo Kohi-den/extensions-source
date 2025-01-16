@@ -13,7 +13,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data
-                    android:host="www.tranimeizle.co"
+                    android:host="www.tranimeizle.top"
                     android:pathPattern="/anime/..*"
                     android:scheme="https" />
             </intent-filter>
