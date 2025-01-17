@@ -35,7 +35,6 @@ import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Response
-import kotlin.math.pow
 
 class KwikExtractor(private val client: OkHttpClient) {
     private var cookies: String = ""
@@ -108,52 +107,25 @@ class KwikExtractor(private val client: OkHttpClient) {
     }
 
     private fun decrypt(fullString: String, key: String, v1: Int, v2: Int): String {
-        var r = ""
+        val keyIndexMap = key.withIndex().associate { it.value to it.index }
+        val sb = StringBuilder()
         var i = 0
+        val toFind = key[v2]
 
         while (i < fullString.length) {
-            var s = ""
-
-            while (fullString[i] != key[v2]) {
-                s += fullString[i]
-                ++i
+            val nextIndex = fullString.indexOf(toFind, i)
+            val decodedCharStr = buildString {
+                for (j in i until nextIndex) {
+                    append(keyIndexMap[fullString[j]] ?: -1)
+                }
             }
-            var j = 0
 
-            while (j < key.length) {
-                s = s.replace(key[j].toString(), j.toString())
-                ++j
-            }
-            r += (getString(s, v2).toInt() - v1).toChar()
-            ++i
-        }
-        return r
-    }
+            i = nextIndex + 1
 
-    private fun getString(content: String, s1: Int): String {
-        val s2 = 10
-        val characterMap = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/"
-
-        val slice2 = characterMap.slice(0 until s2)
-        var acc: Long = 0
-
-        for ((n, i) in content.reversed().withIndex()) {
-            acc += when (isNumber("$i")) {
-                true -> "$i".toLong()
-                false -> 0L
-            } * s1.toDouble().pow(n.toDouble()).toInt()
+            val decodedChar = (decodedCharStr.toInt(v2) - v1).toChar()
+            sb.append(decodedChar)
         }
 
-        var k = ""
-
-        while (acc > 0) {
-            k = slice2[(acc % s2).toInt()] + k
-            acc = (acc - (acc % s2)) / s2
-        }
-
-        return when (k != "") {
-            true -> k
-            false -> "0"
-        }
+        return sb.toString()
     }
 }
