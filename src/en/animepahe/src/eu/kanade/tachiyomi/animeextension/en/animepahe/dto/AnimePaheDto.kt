@@ -23,6 +23,7 @@ data class LatestAnimeDto(
     @SerialName("anime_id")
     val id: Int,
     val fansub: String,
+    val anime_session: String,
 )
 
 @Serializable
@@ -30,6 +31,7 @@ data class SearchResultDto(
     val title: String,
     val poster: String,
     val id: Int,
+    val session: String,
 )
 
 @Serializable
