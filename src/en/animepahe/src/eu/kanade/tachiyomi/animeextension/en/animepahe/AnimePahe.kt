@@ -19,6 +19,9 @@ import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parseAs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.Headers
 import okhttp3.Request
@@ -64,7 +67,15 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
      * @see episodeListRequest
      */
     override fun animeDetailsRequest(anime: SAnime): Request {
-        val session = anime.getSession()
+        val animeId = anime.getId()
+        // We're using coroutines here to run it inside another thread and
+        // prevent android.os.NetworkOnMainThreadException when trying to open
+        // webview or share it.
+        val session = runBlocking {
+            withContext(Dispatchers.IO) {
+                fetchSession(animeId)
+            }
+        }
         return GET("$baseUrl/anime/$session")
     }
 
@@ -95,8 +106,8 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
             SAnime.create().apply {
                 title = anime.title
                 thumbnail_url = anime.snapshot
-                val sessionId = anime.anime_session
-                setUrlWithoutDomain("/anime/?session_id=$sessionId")
+                val animeId = anime.id
+                setUrlWithoutDomain("/anime/?anime_id=$animeId")
                 artist = anime.fansub
             }
         }
@@ -113,8 +124,8 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
             SAnime.create().apply {
                 title = anime.title
                 thumbnail_url = anime.poster
-                val sessionId = anime.session
-                setUrlWithoutDomain("/anime/?session_id=$sessionId")
+                val animeId = anime.id
+                setUrlWithoutDomain("/anime/?anime_id=$animeId")
             }
         }
         return AnimesPage(animeList, false)
@@ -135,7 +146,7 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
      * @see animeDetailsRequest
      */
     override fun episodeListRequest(anime: SAnime): Request {
-        val session = anime.getSession()
+        val session = fetchSession(anime.getId())
         return GET("$baseUrl/api?m=release&id=$session&sort=episode_desc&page=1")
     }
 
@@ -299,6 +310,12 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
     }
 
     // ============================= Utilities ==============================
+    private fun fetchSession(animeId: String): String {
+        val resolveAnimeRequest = client.newCall(GET("$baseUrl/a/$animeId")).execute()
+        val sessionId = resolveAnimeRequest.request.url.pathSegments.last()
+        return sessionId
+    }
+
     private fun parseStatus(statusString: String): Int {
         return when (statusString) {
             "Currently Airing" -> SAnime.ONGOING
@@ -307,7 +324,7 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
         }
     }
 
-    private fun SAnime.getSession() = url.substringAfterLast("?session_id=").substringBefore("\"")
+    private fun SAnime.getId() = url.substringAfterLast("?anime_id=").substringBefore("\"")
 
     private fun String.toDate(): Long {
         return runCatching {
