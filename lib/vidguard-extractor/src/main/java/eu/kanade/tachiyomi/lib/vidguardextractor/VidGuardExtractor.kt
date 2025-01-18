@@ -84,12 +84,12 @@ class VidGuardExtractor(private val client: OkHttpClient) {
                     Context.toString(svgObject)
                 }
             } catch (e: Exception) {
-                Log.i("Error", e.toString())
+                Log.e("Error", "JavaScript execution error: ${e.message}")
             } finally {
                 Context.exit()
             }
         }
-        val t = Thread(ThreadGroup("A"), r, "thread_rhino", 2000000) // StackSize 2Mb: Run in a thread because rhino requires more stack size for large scripts.
+        val t = Thread(ThreadGroup("A"), r, "thread_rhino", 8 * 1024 * 1024) // Increase stack size to 8MB
         t.start()
         t.join()
         t.interrupt()
