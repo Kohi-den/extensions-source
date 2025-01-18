@@ -108,7 +108,7 @@ class AnitubeExtractor(
                 .body.string()
 
             val adsUrl = body.let {
-                Regex("""ADS_URL\s*=\s*['"]([^'"]+)['"]""")
+                Regex("""urlToFetch\s*=\s*['"]([^'"]+)['"]""")
                     .find(it)?.groups?.get(1)?.value
                     ?: ""
             }
