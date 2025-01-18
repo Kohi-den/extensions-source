@@ -25,7 +25,9 @@ class AnimeSaturn : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "AnimeSaturn"
 
-    override val baseUrl by lazy { preferences.getString("preferred_domain", "https://animesaturn.in")!! }
+    override val baseUrl by lazy { preferences.getString("preferred_domain", "https://anisaturn.com")!! }
+
+    private fun isNewDomain(): Boolean = baseUrl == "https://anisaturn.com"
 
     override val lang = "it"
 
@@ -37,7 +39,7 @@ class AnimeSaturn : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun popularAnimeSelector(): String = "div.sebox"
 
-    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/animeincorso?page=$page")
+    override fun popularAnimeRequest(page: Int): Request = GET(if (isNewDomain()) "$baseUrl/ongoing?page=$page" else "$baseUrl/animeincorso?page=$page")
 
     private fun formatTitle(titlestring: String): String = titlestring.replace("(ITA) ITA", "Dub ITA").replace("(ITA)", "Dub ITA").replace("Sub ITA", "")
 
@@ -45,7 +47,10 @@ class AnimeSaturn : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val anime = SAnime.create()
         anime.setUrlWithoutDomain(element.selectFirst("div.msebox div.headsebox div.tisebox h2 a")!!.attr("href"))
         anime.title = formatTitle(element.selectFirst("div.msebox div.headsebox div.tisebox h2 a")!!.text())
-        anime.thumbnail_url = element.selectFirst("div.msebox div.bigsebox div.l img.attachment-post-thumbnail.size-post-thumbnail.wp-post-image")!!.attr("src")
+        if (isNewDomain()) {
+            anime.thumbnail_url = element.selectFirst("div.msebox div.bigsebox div.l a img.image-animation")!!.attr("src")
+        } else
+            anime.thumbnail_url = element.selectFirst("div.msebox div.bigsebox div.l img.attachment-post-thumbnail.size-post-thumbnail.wp-post-image")!!.attr("src")
         return anime
     }
 
@@ -152,8 +157,13 @@ class AnimeSaturn : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             anime.thumbnail_url = element.selectFirst("div.card.mb-4.shadow-sm a img.new-anime")!!.attr("src")
         } else {
             // word search
-            anime.setUrlWithoutDomain(element.selectFirst("li.list-group-item.bg-dark-as-box-shadow div.item-archivio div.info-archivio h3 a.badge.badge-archivio.badge-light")!!.attr("href"))
-            anime.title = formatTitle(element.selectFirst("li.list-group-item.bg-dark-as-box-shadow div.item-archivio div.info-archivio h3 a.badge.badge-archivio.badge-light")!!.text())
+            if (isNewDomain()) {
+                anime.setUrlWithoutDomain(element.selectFirst("li.list-group-item.bg-dark-as-box-shadow div.item-archivio div.info-archivio h3 a.badge.badge-archivio.text-left.badge-purple")!!.attr("href"))
+                anime.title = formatTitle(element.selectFirst("li.list-group-item.bg-dark-as-box-shadow div.item-archivio div.info-archivio h3 a.badge.badge-archivio.text-left.badge-purple")!!.text())
+            } else {
+                anime.setUrlWithoutDomain(element.selectFirst("li.list-group-item.bg-dark-as-box-shadow div.item-archivio div.info-archivio h3 a.badge.badge-archivio.badge-light")!!.attr("href"))
+                anime.title = formatTitle(element.selectFirst("li.list-group-item.bg-dark-as-box-shadow div.item-archivio div.info-archivio h3 a.badge.badge-archivio.badge-light")!!.text())
+            }
             anime.thumbnail_url = element.select("li.list-group-item.bg-dark-as-box-shadow div.item-archivio a.thumb.image-wrapper img.rounded.locandina-archivio").attr("src")
         }
         return anime
@@ -346,6 +356,7 @@ class AnimeSaturn : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         Year("2022"),
         Year("2023"),
         Year("2024"),
+        Year("2025"),
     )
 
     internal class State(val id: String, name: String) : AnimeFilter.CheckBox(name)
@@ -438,9 +449,9 @@ class AnimeSaturn : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val domainPref = ListPreference(screen.context).apply {
             key = "preferred_domain"
             title = "Domain in uso (riavvio dell'app richiesto)"
-            entries = arrayOf("animesaturn.in")
-            entryValues = arrayOf("https://animesaturn.in")
-            setDefaultValue("https://animesaturn.in")
+            entries = arrayOf("anisaturn.com", "animesaturn.cx")
+            entryValues = arrayOf("https://anisaturn.com", "https://animesaturn.cx")
+            setDefaultValue("https://anisaturn.com")
             summary = "%s"
 
             setOnPreferenceChangeListener { _, newValue ->
