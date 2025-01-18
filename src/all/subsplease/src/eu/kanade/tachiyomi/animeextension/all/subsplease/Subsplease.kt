@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.animeextension.all.subsplease
 
 import android.app.Application
 import android.content.SharedPreferences
+import android.widget.Toast
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -107,6 +109,19 @@ class Subsplease : ConfigurableAnimeSource, AnimeHttpSource() {
         return videosFromElement(responseString, num)
     }
 
+    private fun debrid(magnet: String): String {
+        val regex = Regex("xt=urn:btih:([A-Fa-f0-9]{40}|[A-Za-z0-9]{32})|dn=([^&]+)")
+        var infohash = ""
+        var title = ""
+        regex.findAll(magnet).forEach { match ->
+            match.groups[1]?.value?.let { infohash = it }
+            match.groups[2]?.value?.let { title = it }
+        }
+        val token = preferences.getString(PREF_TOKEN_KEY, null)
+        val debridProvider = preferences.getString(PREF_DEBRID_KEY, "none")
+        return "https://torrentio.strem.fun/$debridProvider/$token/$infohash/null/0/$title"
+    }
+
     private fun videosFromElement(jsonLine: String?, num: String): List<Video> {
         val jsonData = jsonLine ?: return emptyList()
         val jObject = json.decodeFromString<JsonObject>(jsonData)
@@ -120,7 +135,11 @@ class Subsplease : ConfigurableAnimeSource, AnimeHttpSource() {
                 for (item in dowArray) {
                     val quality = item.jsonObject["res"]!!.jsonPrimitive.content + "p"
                     val videoUrl = item.jsonObject["magnet"]!!.jsonPrimitive.content
-                    videoList.add(Video(videoUrl, quality, videoUrl))
+                    if (preferences.getString(PREF_DEBRID_KEY, "none") == "none") {
+                        videoList.add(Video(videoUrl, quality, videoUrl))
+                    } else {
+                        videoList.add(Video(debrid(videoUrl), quality, debrid(videoUrl)))
+                    }
                 }
             }
         }
@@ -188,7 +207,8 @@ class Subsplease : ConfigurableAnimeSource, AnimeHttpSource() {
     // Preferences
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
-        val qualityPref = ListPreference(screen.context).apply {
+        // quality
+        ListPreference(screen.context).apply {
             key = "preferred_quality"
             title = "Default-Quality"
             entries = arrayOf("1080p", "720p", "480p")
@@ -202,7 +222,67 @@ class Subsplease : ConfigurableAnimeSource, AnimeHttpSource() {
                 val entry = entryValues[index] as String
                 preferences.edit().putString(key, entry).commit()
             }
-        }
-        screen.addPreference(qualityPref)
+        }.also(screen::addPreference)
+
+        // Debrid provider
+        ListPreference(screen.context).apply {
+            key = PREF_DEBRID_KEY
+            title = "Debrid Provider"
+            entries = PREF_DEBRID_ENTRIES
+            entryValues = PREF_DEBRID_VALUES
+            setDefaultValue("none")
+            summary = "%s"
+
+            setOnPreferenceChangeListener { _, newValue ->
+                val selected = newValue as String
+                val index = findIndexOfValue(selected)
+                val entry = entryValues[index] as String
+                preferences.edit().putString(key, entry).commit()
+            }
+        }.also(screen::addPreference)
+
+        // Token
+        EditTextPreference(screen.context).apply {
+            key = PREF_TOKEN_KEY
+            title = "Token"
+            setDefaultValue(PREF_TOKEN_DEFAULT)
+            summary = PREF_TOKEN_SUMMARY
+
+            setOnPreferenceChangeListener { _, newValue ->
+                runCatching {
+                    val value = (newValue as String).trim().ifBlank { PREF_TOKEN_DEFAULT }
+                    Toast.makeText(screen.context, "Restart Aniyomi to apply new setting.", Toast.LENGTH_LONG).show()
+                    preferences.edit().putString(key, value).commit()
+                }.getOrDefault(false)
+            }
+        }.also(screen::addPreference)
+    }
+
+    companion object {
+        // Token
+        private const val PREF_TOKEN_KEY = "token"
+        private const val PREF_TOKEN_DEFAULT = ""
+        private const val PREF_TOKEN_SUMMARY = "Debrid API Token"
+
+        // Debrid
+        private const val PREF_DEBRID_KEY = "debrid_provider"
+        private val PREF_DEBRID_ENTRIES = arrayOf(
+            "None",
+            "RealDebrid",
+            "Premiumize",
+            "AllDebrid",
+            "DebridLink",
+            "Offcloud",
+            "TorBox",
+        )
+        private val PREF_DEBRID_VALUES = arrayOf(
+            "none",
+            "realdebrid",
+            "premiumize",
+            "alldebrid",
+            "debridlink",
+            "offcloud",
+            "torbox",
+        )
     }
 }
