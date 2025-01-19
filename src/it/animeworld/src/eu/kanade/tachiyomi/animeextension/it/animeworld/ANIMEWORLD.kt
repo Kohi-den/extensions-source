@@ -19,6 +19,7 @@ import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
@@ -27,7 +28,6 @@ import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
-import java.lang.Exception
 
 class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
@@ -47,10 +47,19 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
 
+    override fun headersBuilder(): Headers.Builder {
+        return super.headersBuilder().apply {
+            client.newCall(GET(baseUrl)).execute().use { response ->
+                val (secCookie) = """document\.cookie="SecurityAW-gl=\s*([^\s;]+)""".toRegex().find(response.body.string())!!.destructured
+                set("Cookie", "SecurityAW-gl=$secCookie;")
+            }
+        }
+    }
+
     // Popular Anime - Same Format as Search
 
     override fun popularAnimeSelector(): String = searchAnimeSelector()
-    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/filter?sort=6&page=$page")
+    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/filter?sort=6&page=$page", headers)
     override fun popularAnimeFromElement(element: Element): SAnime = searchAnimeFromElement(element)
     override fun popularAnimeNextPageSelector(): String = searchAnimeNextPageSelector()
 
@@ -82,7 +91,7 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun videoListRequest(episode: SEpisode): Request {
         val iframe = baseUrl + episode.url
-        return GET(iframe)
+        return GET(iframe, headers)
     }
 
     override fun videoListParse(response: Response): List<Video> {
@@ -187,7 +196,7 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun searchAnimeNextPageSelector(): String = "div.paging-wrapper a#go-next-page"
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request =
-        GET("$baseUrl/filter?${getSearchParameters(filters)}&keyword=$query&page=$page")
+        GET("$baseUrl/filter?${getSearchParameters(filters)}&keyword=$query&page=$page", headers)
 
     // Details
 
@@ -213,7 +222,7 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // Latest - Same format as search
 
-    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/updated?page=$page")
+    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/updated?page=$page", headers)
     override fun latestUpdatesSelector(): String = searchAnimeSelector()
     override fun latestUpdatesNextPageSelector(): String = searchAnimeNextPageSelector()
     override fun latestUpdatesFromElement(element: Element): SAnime = searchAnimeFromElement(element)
@@ -336,6 +345,9 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         Year("2020"),
         Year("2021"),
         Year("2022"),
+        Year("2023"),
+        Year("2024"),
+        Year("2025"),
     )
 
     internal class Type(val id: String, name: String) : AnimeFilter.CheckBox(name)
