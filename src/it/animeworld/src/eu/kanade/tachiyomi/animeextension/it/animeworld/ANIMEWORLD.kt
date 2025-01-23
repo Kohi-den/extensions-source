@@ -19,7 +19,6 @@ import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
@@ -29,7 +28,6 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.lang.Exception
-import java.util.regex.Pattern
 
 class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
@@ -41,10 +39,12 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val lang = "it"
 
-    private var token: String = ""
-    private var lastTokenRefresh: Long = -1
-
     override val supportsLatest = true
+    override val client by lazy {
+        network.client.newBuilder()
+            .addInterceptor(ShittyRedirectionInterceptor(network.client))
+            .build()
+    }
 
     private val json: Json by injectLazy()
 
@@ -52,42 +52,10 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
 
-    fun extractCookie(html: String): String? {
-        val regex = """document\.cookie="([^"]+);"""
-        val pattern = Pattern.compile(regex)
-        val matcher = pattern.matcher(html)
-
-        return if (matcher.find()) {
-            matcher.group(1) // Extract the cookie value
-        } else {
-            null
-        }
-    }
-
-    fun localGet(
-        url: String,
-        headers: Headers? = null,
-    ): Request {
-        if (lastTokenRefresh == -1L || System.currentTimeMillis() - lastTokenRefresh > 1000 * 60 * 60 * 24) {
-            val response = client.newCall(GET(baseUrl)).execute()
-            val body = response.body!!.string()
-            val cookie = extractCookie(body)
-            if (cookie != null) {
-                token = cookie
-                lastTokenRefresh = System.currentTimeMillis()
-            }
-        }
-        if (headers == null) {
-            return GET(url, headers = Headers.headersOf("Cookie", token))
-        }
-
-        return GET(url, headers = headers.newBuilder().add("Cookie", token).build())
-    }
-
     // Popular Anime - Same Format as Search
 
     override fun popularAnimeSelector(): String = searchAnimeSelector()
-    override fun popularAnimeRequest(page: Int): Request = localGet("$baseUrl/filter?sort=6&page=$page")
+    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/filter?sort=6&page=$page")
     override fun popularAnimeFromElement(element: Element): SAnime = searchAnimeFromElement(element)
     override fun popularAnimeNextPageSelector(): String = searchAnimeNextPageSelector()
 
@@ -119,7 +87,7 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun videoListRequest(episode: SEpisode): Request {
         val iframe = baseUrl + episode.url
-        return localGet(iframe)
+        return GET(iframe)
     }
 
     override fun videoListParse(response: Response): List<Video> {
@@ -159,7 +127,7 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                     .add("X-Requested-With", "XMLHttpRequest")
                     .build()
                 val target = json.decodeFromString<ServerResponse>(
-                    client.newCall(localGet(apiUrl, headers = apiHeaders)).execute().body.string(),
+                    client.newCall(GET(apiUrl, headers = apiHeaders)).execute().body.string(),
                 ).grabber
                 serverList.add(Pair(serverPair.first, target))
             }
@@ -224,7 +192,7 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun searchAnimeNextPageSelector(): String = "div.paging-wrapper a#go-next-page"
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request =
-        localGet("$baseUrl/filter?${getSearchParameters(filters)}&keyword=$query&page=$page")
+        GET("$baseUrl/filter?${getSearchParameters(filters)}&keyword=$query&page=$page")
 
     // Details
 
@@ -250,7 +218,7 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // Latest - Same format as search
 
-    override fun latestUpdatesRequest(page: Int): Request = localGet("$baseUrl/updated?page=$page")
+    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/updated?page=$page")
     override fun latestUpdatesSelector(): String = searchAnimeSelector()
     override fun latestUpdatesNextPageSelector(): String = searchAnimeNextPageSelector()
     override fun latestUpdatesFromElement(element: Element): SAnime = searchAnimeFromElement(element)
@@ -373,6 +341,9 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         Year("2020"),
         Year("2021"),
         Year("2022"),
+        Year("2023"),
+        Year("2024"),
+        Year("2025"),
     )
 
     internal class Type(val id: String, name: String) : AnimeFilter.CheckBox(name)
