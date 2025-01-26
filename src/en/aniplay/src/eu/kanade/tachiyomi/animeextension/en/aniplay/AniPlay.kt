@@ -248,22 +248,29 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
         when (extra.source.lowercase()) {
             "yuki" -> {
-                val data = sourcesString.parseAs<VideoSourceResponseYuki>()
                 return processEpisodeDataYuki(
                     EpisodeDataYuki(
                         source = extra.source,
                         language = language,
-                        response = data,
+                        response = sourcesString.parseAs<VideoSourceResponseYuki>(),
+                    ),
+                )
+            }
+            "pahe" -> {
+                return processEpisodeDataPahe(
+                    EpisodeDataPahe(
+                        source = extra.source,
+                        language = language,
+                        response = sourcesString.parseAs<VideoSourceResponsePahe>(),
                     ),
                 )
             }
             else -> {
-                val data = sourcesString.parseAs<VideoSourceResponse>()
                 return processEpisodeData(
                     EpisodeData(
                         source = extra.source,
                         language = language,
-                        response = data,
+                        response = sourcesString.parseAs<VideoSourceResponse>(),
                     ),
                 )
             }
@@ -296,6 +303,36 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
             )
         } catch (e: Exception) {
             Log.e("AniPlay", "processEpisodeDataYuki extractFromHls Error (\"$serverName - $typeName\"): $e")
+        }
+
+        return emptyList()
+    }
+
+    private fun processEpisodeDataPahe(episodeData: EpisodeDataPahe): List<Video> {
+        val defaultSource = episodeData.response.sources?.firstOrNull {
+            it.quality in listOf("default", "auto")
+        } ?: return emptyList()
+
+        val subtitles = episodeData.response.subtitles
+            ?.filter { it.lang?.lowercase() != "thumbnails" }
+            ?.filter { it.url.isNullOrEmpty().not() }
+            ?.map { Track(it.url ?: throw Exception("To be null or not to be"), it.lang ?: "Unk") }
+            ?: emptyList()
+
+        val serverName = getServerName(episodeData.source)
+        val typeName = when {
+            subtitles.isNotEmpty() -> "SoftSub"
+            else -> getTypeName(episodeData.language)
+        }
+
+        try {
+            return playlistUtils.extractFromHls(
+                playlistUrl = defaultSource.url,
+                videoNameGen = { quality -> "$serverName - $quality - $typeName" },
+                subtitleList = subtitles,
+            )
+        } catch (e: Exception) {
+            Log.e("AniPlay", "processEpisodeDataPahe extractFromHls Error (\"$serverName - $typeName\"): $e")
         }
 
         return emptyList()
@@ -508,8 +545,8 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         private const val PREF_DOMAIN_DEFAULT = "aniplaynow.live"
 
         private const val PREF_SERVER_KEY = "server"
-        private val PREF_SERVER_ENTRIES = arrayOf("Kuro", "Anya", "Yuki")
-        private val PREF_SERVER_ENTRY_VALUES = arrayOf("kuro", "anya", "yuki")
+        private val PREF_SERVER_ENTRIES = arrayOf("Kuro", "Anya", "Yuki", "Pahe")
+        private val PREF_SERVER_ENTRY_VALUES = arrayOf("kuro", "anya", "yuki", "pahe")
         private const val PREF_SERVER_DEFAULT = "kuro"
 
         private const val PREF_QUALITY_KEY = "quality"

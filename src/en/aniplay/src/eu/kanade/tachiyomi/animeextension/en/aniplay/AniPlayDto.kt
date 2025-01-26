@@ -21,6 +21,14 @@ data class EpisodeListResponse(
     )
 }
 
+// Provider else
+@Serializable
+data class EpisodeData(
+    val source: String,
+    val language: String,
+    val response: VideoSourceResponse,
+)
+
 @Serializable
 data class VideoSourceResponse(
     val sources: List<Source>?,
@@ -38,6 +46,14 @@ data class VideoSourceResponse(
         val lang: String?,
     )
 }
+
+// Provider Yuki
+@Serializable
+data class EpisodeDataYuki(
+    val source: String,
+    val language: String,
+    val response: VideoSourceResponseYuki,
+)
 
 @Serializable
 data class VideoSourceResponseYuki(
@@ -61,24 +77,55 @@ data class VideoSourceResponseYuki(
     )
 }
 
+// Provider Pahe
+@Serializable
+data class EpisodeDataPahe(
+    val source: String,
+    val language: String,
+    val response: VideoSourceResponsePahe,
+)
+
+@Serializable
+data class VideoSourceResponsePahe(
+    val sources: List<Source>?,
+    val audio: List<Audio>?,
+    val intro: Timestamp?,
+    val outro: Timestamp?,
+    val subtitles: List<Subtitle>?,
+
+) {
+    @Serializable
+    data class Source(
+        val url: String,
+        val quality: String?,
+    )
+
+    @Serializable
+    data class Audio(
+        val file: String,
+        val label: String?,
+        val kind: String?,
+        val default: Boolean?,
+    )
+
+    @Serializable
+    data class Timestamp(
+        val start: Int?,
+        val end: Int?,
+    )
+
+    @Serializable
+    data class Subtitle(
+        val url: String?,
+        val lang: String?,
+    )
+}
+
+// Extra
 @Serializable
 data class EpisodeExtra(
     val source: String,
     val episodeNum: Float,
     val episodeId: String,
     val hasDub: Boolean,
-)
-
-@Serializable
-data class EpisodeData(
-    val source: String,
-    val language: String,
-    val response: VideoSourceResponse,
-)
-
-@Serializable
-data class EpisodeDataYuki(
-    val source: String,
-    val language: String,
-    val response: VideoSourceResponseYuki,
 )
