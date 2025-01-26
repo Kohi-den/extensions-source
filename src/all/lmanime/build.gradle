@@ -3,7 +3,7 @@ ext {
     extClass = '.LMAnime'
     themePkg = 'animestream'
     baseUrl = 'https://lmanime.com'
-    overrideVersionCode = 8
+    overrideVersionCode = 9
 }
 
 apply from: "$rootDir/common.gradle"
