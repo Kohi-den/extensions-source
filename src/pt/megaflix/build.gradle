@@ -16,5 +16,5 @@ dependencies {
     implementation(project(":lib:streamwish-extractor"))
     implementation(project(":lib:playlist-utils"))
     // for mixdrop and megaflix
-    implementation("dev.datlag.jsunpacker:jsunpacker:1.0.1")
+    implementation(libs.jsunpacker)
 }

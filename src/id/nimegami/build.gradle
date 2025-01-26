@@ -7,6 +7,6 @@ ext {
 apply from: "$rootDir/common.gradle"
 
 dependencies {
-    implementation("dev.datlag.jsunpacker:jsunpacker:1.0.1")
+    implementation(libs.jsunpacker)
     implementation(project(":lib:synchrony"))
 }

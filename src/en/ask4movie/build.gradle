@@ -8,5 +8,5 @@ apply from: "$rootDir/common.gradle"
 
 dependencies {
     implementation(project(':lib:filemoon-extractor'))
-    implementation "dev.datlag.jsunpacker:jsunpacker:1.0.1"
+    implementation(libs.jsunpacker)
 }

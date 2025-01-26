@@ -12,5 +12,5 @@ dependencies {
     implementation(project(":lib:streamwish-extractor"))
     implementation(project(":lib:vidguard-extractor"))
     implementation(project(":lib:playlist-utils"))
-    implementation("dev.datlag.jsunpacker:jsunpacker:1.0.1")
+    implementation(libs.jsunpacker)
 }

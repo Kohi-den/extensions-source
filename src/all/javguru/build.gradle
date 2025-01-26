@@ -12,7 +12,7 @@ dependencies {
     implementation(project(':lib:streamtape-extractor'))
     implementation(project(':lib:dood-extractor'))
     implementation(project(':lib:mixdrop-extractor'))
-    implementation "dev.datlag.jsunpacker:jsunpacker:1.0.1"
+    implementation(libs.jsunpacker)
     implementation(project(':lib:playlist-utils'))
     implementation(project(':lib:javcoverfetcher'))
 }
