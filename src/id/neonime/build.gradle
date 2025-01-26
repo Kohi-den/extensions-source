@@ -11,5 +11,5 @@ dependencies {
     implementation(project(':lib:gdriveplayer-extractor'))
     implementation(project(':lib:yourupload-extractor'))
     implementation(project(':lib:okru-extractor'))
-    implementation "dev.datlag.jsunpacker:jsunpacker:1.0.1"
+    implementation(libs.jsunpacker)
 }

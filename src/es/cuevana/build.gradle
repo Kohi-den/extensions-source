@@ -22,5 +22,5 @@ dependencies {
     implementation(project(':lib:burstcloud-extractor'))
     implementation(project(':lib:fastream-extractor'))
     implementation(project(':lib:upstream-extractor'))
-    implementation "dev.datlag.jsunpacker:jsunpacker:1.0.1"
+    implementation(libs.jsunpacker)
 }
