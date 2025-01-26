@@ -20,6 +20,7 @@ import eu.kanade.tachiyomi.util.parallelFlatMap
 import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
+import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -245,97 +246,18 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         val responseString = response.body.string()
         val sourcesString = extractSourcesList(responseString) ?: return emptyList()
         Log.i("AniPlay", "${extra.source} $language -> $sourcesString")
-
-        when (extra.source.lowercase()) {
-            "yuki" -> {
-                return processEpisodeDataYuki(
-                    EpisodeDataYuki(
-                        source = extra.source,
-                        language = language,
-                        response = sourcesString.parseAs<VideoSourceResponseYuki>(),
-                    ),
-                )
-            }
-            "pahe" -> {
-                return processEpisodeDataPahe(
-                    EpisodeDataPahe(
-                        source = extra.source,
-                        language = language,
-                        response = sourcesString.parseAs<VideoSourceResponsePahe>(),
-                    ),
-                )
-            }
-            else -> {
-                return processEpisodeData(
-                    EpisodeData(
-                        source = extra.source,
-                        language = language,
-                        response = sourcesString.parseAs<VideoSourceResponse>(),
-                    ),
-                )
-            }
-        }
-    }
-
-    private fun processEpisodeDataYuki(episodeData: EpisodeDataYuki): List<Video> {
-        val defaultSource = episodeData.response.sources?.firstOrNull()
-
-        if (defaultSource == null) {
-            Log.e("AniPlay", "defaultSource is null (${episodeData.response})")
+        try {
+            return processEpisodeData(
+                EpisodeData(
+                    source = extra.source,
+                    language = language,
+                    response = sourcesString.parseAs<VideoSourceResponse>(),
+                ),
+            )
+        } catch (e: Exception) {
+            Log.e("AniPlay", "processEpisodeData Error (\"${extra.source} - $language\"): $e")
             return emptyList()
         }
-
-        val subtitles = episodeData.response.tracks
-            ?.filter { it.kind?.lowercase() == "captions" }
-            ?.map { Track(it.file, it.label ?: "Unknown") }
-            ?: emptyList()
-
-        val serverName = getServerName(episodeData.source)
-        val typeName = getTypeName(episodeData.language).let {
-            if (it == "Sub" && subtitles.isNotEmpty()) "SoftSub" else it
-        }
-
-        try {
-            return playlistUtils.extractFromHls(
-                playlistUrl = defaultSource.url,
-                videoNameGen = { quality -> "$serverName - $quality - $typeName" },
-                subtitleList = subtitles,
-            )
-        } catch (e: Exception) {
-            Log.e("AniPlay", "processEpisodeDataYuki extractFromHls Error (\"$serverName - $typeName\"): $e")
-        }
-
-        return emptyList()
-    }
-
-    private fun processEpisodeDataPahe(episodeData: EpisodeDataPahe): List<Video> {
-        val defaultSource = episodeData.response.sources?.firstOrNull {
-            it.quality in listOf("default", "auto")
-        } ?: return emptyList()
-
-        val subtitles = episodeData.response.subtitles
-            ?.filter { it.lang?.lowercase() != "thumbnails" }
-            ?.filter { it.url.isNullOrEmpty().not() }
-            ?.map { Track(it.url ?: throw Exception("To be null or not to be"), it.lang ?: "Unk") }
-            ?: emptyList()
-
-        val serverName = getServerName(episodeData.source)
-        val typeName = when {
-            subtitles.isNotEmpty() -> "SoftSub"
-            else -> getTypeName(episodeData.language)
-        }
-
-        try {
-            return playlistUtils.extractFromHls(
-                playlistUrl = defaultSource.url,
-                videoNameGen = { quality -> "$serverName - $quality - $typeName" },
-                subtitleList = subtitles,
-            )
-        } catch (e: Exception) {
-            Log.e("AniPlay", "processEpisodeDataPahe extractFromHls Error (\"$serverName - $typeName\"): $e")
-        }
-
-        return emptyList()
     }
 
     private fun processEpisodeData(episodeData: EpisodeData): List<Video> {
@@ -345,7 +267,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
         val subtitles = episodeData.response.subtitles
             ?.filter { it.lang?.lowercase() != "thumbnails" }
-            ?.map { Track(it.url, it.lang ?: "Unk") }
+            ?.map { Track(it.url ?: throw Exception("episodeData.response.subtitles.url is null ($it)"), it.lang ?: "Unk") }
             ?: emptyList()
 
         val serverName = getServerName(episodeData.source)
@@ -355,11 +277,26 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         }
 
         try {
-            return playlistUtils.extractFromHls(
-                playlistUrl = defaultSource.url,
-                videoNameGen = { quality -> "$serverName - $quality - $typeName" },
-                subtitleList = subtitles,
-            )
+            if (episodeData.response.headers != null && episodeData.response.headers.Referer?.startsWith("https://") == true) {
+                return playlistUtils.extractFromHls(
+                    playlistUrl = defaultSource.url,
+                    videoNameGen = { quality -> "$serverName - $quality - $typeName" },
+                    subtitleList = subtitles,
+                    masterHeadersGen = { baseHeaders: Headers, _: String ->
+                        baseHeaders.newBuilder().apply {
+                            set("Accept", "*/*")
+                            set("Origin", baseUrl)
+                            set("Referer", episodeData.response.headers.Referer)
+                        }.build()
+                    },
+                )
+            } else {
+                return playlistUtils.extractFromHls(
+                    playlistUrl = defaultSource.url,
+                    videoNameGen = { quality -> "$serverName - $quality - $typeName" },
+                    subtitleList = subtitles,
+                )
+            }
         } catch (e: Exception) {
             Log.e("AniPlay", "processEpisodeData extractFromHls Error (\"$serverName - $typeName\"): $e")
         }
