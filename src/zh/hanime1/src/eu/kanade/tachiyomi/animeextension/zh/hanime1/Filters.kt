@@ -29,7 +29,7 @@ class SortFilter(values: Array<String>) :
         values.ifEmpty { arrayOf("最新上市", "最新上傳", "本日排行", "本週排行", "本月排行") },
     )
 
-object HotFilter : TagFilter("sort", "本周排行", true)
+object HotFilter : TagFilter("sort", "本週排行", true)
 
 class YearFilter(values: Array<String>) :
     QueryFilter("發佈年份", "year", values.ifEmpty { arrayOf("全部年份") })
