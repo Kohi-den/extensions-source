@@ -10,7 +10,6 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
-import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
@@ -38,7 +37,7 @@ class AnimeUnity :
 
     // TODO: Check frequency of url changes to potentially
     // add back overridable baseurl preference
-    override val baseUrl = "https://www.animeunity.to"
+    override val baseUrl = "https://www.animeunity.so"
 
     override val lang = "it"
 
@@ -366,42 +365,42 @@ class AnimeUnity :
                 .asJsoup()
         val scripts = iframe.select("script")
         val script = scripts.find { it.data().contains("masterPlaylist") }!!.data().replace("\n", "\t")
-        var playlistUrl = Regex("""url: ?'(.*?)'""").find(script)!!.groupValues[1]
-        val filename = playlistUrl.slice(playlistUrl.lastIndexOf("/") + 1 until playlistUrl.length)
-        if (!filename.endsWith(".m3u8")) {
-            playlistUrl = playlistUrl.replace(filename, filename + ".m3u8")
-        }
+        val playlistUrl = Regex("""url: ?'(.*?)'""").find(script)!!.groupValues[1]
 
         val expires = Regex("""'expires': ?'(\d+)'""").find(script)!!.groupValues[1]
         val token = Regex("""'token': ?'([\w-]+)'""").find(script)!!.groupValues[1]
-        // Get subtitles
-        val masterPlUrl = "$playlistUrl?token=$token&expires=$expires&n=1"
+
+        val masterPlUrl = buildString {
+            append(playlistUrl)
+            append(if (playlistUrl.contains('?')) '&' else '?')
+            append("h=1&token=")
+            append(token)
+            append("&expires=")
+            append(expires)
+        }
         val masterPl =
             client
                 .newCall(GET(masterPlUrl))
                 .execute()
                 .body
                 .string()
-        val subList =
+
+        // Subtitles are nowhere to be seen... I'm leaving this regex for future reference
+        /*val subList =
             Regex("""#EXT-X-MEDIA:TYPE=SUBTITLES.*?NAME="(.*?)".*?URI="(.*?)"""")
                 .findAll(masterPl)
                 .map {
                     Track(it.groupValues[2], it.groupValues[1])
-                }.toList()
-        Regex("""'token(\d+p?)': ?'([\w-]+)'""").findAll(script).forEach { match ->
-            val quality = match.groupValues[1]
+                }.toList()*/
 
-            val videoUrl =
-                buildString {
-                    append(playlistUrl)
-                    append("?type=video&rendition=")
-                    append(quality)
-                    append("&token=")
-                    append(match.groupValues[2])
-                    append("&expires=$expires")
-                    append("&n=1")
-                }
-            videoList.add(Video(videoUrl, quality, videoUrl, subtitleTracks = subList))
+        Regex("""https?://vixcloud\.co/playlist/(.+)\?.*type=video&.*rendition=(\d+p?).*""").findAll(masterPl).forEach { match ->
+            var videoUrl = match.groupValues[0]
+            val filename = match.groupValues[1]
+            if (!filename.endsWith(".m3u8")) {
+                videoUrl = videoUrl.replace(filename, "$filename.m3u8")
+            }
+            val quality = match.groupValues[2]
+            videoList.add(Video(videoUrl, quality, videoUrl))
         }
 
         require(videoList.isNotEmpty()) { "Failed to fetch videos" }

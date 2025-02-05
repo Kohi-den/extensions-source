@@ -197,7 +197,7 @@ object AnimeUnityFilters {
             Pair("Sì", "true"),
         )
 
-        val YEAR = arrayOf(ANY) + (1969..2024).map {
+        val YEAR = arrayOf(ANY) + (1969..2025).map {
             Pair(it.toString(), it.toString())
         }.reversed().toTypedArray()
     }
