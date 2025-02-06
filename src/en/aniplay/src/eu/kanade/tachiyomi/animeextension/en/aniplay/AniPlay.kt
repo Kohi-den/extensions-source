@@ -282,6 +282,17 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         }
 
         try {
+            if (episodeData.response.proxy == true) {
+                var proxyUrl = "$PROXY_URL/fetch?url=${defaultSource.url}"
+                if (episodeData.response.headers != null && episodeData.response.headers.Referer?.startsWith("https://") == true) {
+                    proxyUrl += "&ref=${episodeData.response.headers.Referer}"
+                }
+                return playlistUtils.extractFromHls(
+                    playlistUrl = proxyUrl,
+                    videoNameGen = { quality -> "$serverName - $quality - $typeName" },
+                    subtitleList = subtitles,
+                )
+            }
             if (episodeData.response.headers != null && episodeData.response.headers.Referer?.startsWith("https://") == true) {
                 return playlistUtils.extractFromHls(
                     playlistUrl = defaultSource.url,
@@ -525,6 +536,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                 "NEXT_ACTION_SOURCES_LIST" to "8a76af451978c817dde2364326a5e4e45eb43db1",
             ),
         )
+        private const val PROXY_URL = "https://aniplay-cors.yqizw7.easypanel.host"
 
         private val DATE_FORMATTER = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
     }

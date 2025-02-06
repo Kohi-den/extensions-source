@@ -37,6 +37,7 @@ data class VideoSourceResponse(
     val outro: Timestamp?,
     val subtitles: List<Subtitle>?,
     val headers: Headers?,
+    val proxy: Boolean?,
 ) {
     @Serializable
     data class Source(
