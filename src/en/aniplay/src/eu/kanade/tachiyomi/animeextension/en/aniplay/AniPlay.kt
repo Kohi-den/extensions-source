@@ -270,10 +270,15 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
             ?.map { Track(it.url ?: throw Exception("episodeData.response.subtitles.url is null ($it)"), it.lang ?: "Unk") }
             ?: emptyList()
 
-        val serverName = getServerName(episodeData.source)
-        val typeName = when {
-            subtitles.isNotEmpty() -> "SoftSub"
-            else -> getTypeName(episodeData.language)
+        var serverName = getServerName(episodeData.source)
+        if (serverName == SERVER_UNKNOWN) {
+            serverName = episodeData.source.substring(0, 69) + "!"
+        }
+        var typeName = getTypeName(episodeData.language)
+        if (typeName == "Sub" && subtitles.isNotEmpty()) {
+            typeName = "SoftSub"
+        } else if (serverName == "Yuki" && typeName == "Dub" && subtitles.isNotEmpty()) {
+            typeName = "Dubtitles"
         }
 
         try {
