@@ -456,7 +456,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     private fun getServerName(value: String): String {
         val index = PREF_SERVER_ENTRY_VALUES.indexOf(value)
         if (index == -1) {
-            return "Other"
+            return SERVER_UNKNOWN
         }
         return PREF_SERVER_ENTRIES[index]
     }
@@ -464,7 +464,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     private fun getTypeName(value: String): String {
         val index = PREF_TYPE_ENTRY_VALUES.indexOf(value.lowercase())
         if (index == -1) {
-            return "Other"
+            return TYPE_UNKNOWN
         }
         return PREF_TYPE_ENTRIES[index]
     }
@@ -482,14 +482,15 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
     companion object {
         private const val PREF_DOMAIN_KEY = "domain"
-        private val PREF_DOMAIN_ENTRIES = arrayOf("aniplaynow.live (default)", "aniplay.lol (backup)")
+        private val PREF_DOMAIN_ENTRIES = arrayOf("aniplaynow.live (default)", "aniplay.lol (backup/experimental)")
         private val PREF_DOMAIN_ENTRY_VALUES = arrayOf("aniplaynow.live", "aniplay.lol")
         private const val PREF_DOMAIN_DEFAULT = "aniplaynow.live"
 
         private const val PREF_SERVER_KEY = "server"
-        private val PREF_SERVER_ENTRIES = arrayOf("Kuro", "Anya", "Yuki", "Pahe")
-        private val PREF_SERVER_ENTRY_VALUES = arrayOf("kuro", "anya", "yuki", "pahe")
-        private const val PREF_SERVER_DEFAULT = "kuro"
+        private val PREF_SERVER_ENTRIES = arrayOf("Maze", "Yuki", "Pahe", "Kuro")
+        private val PREF_SERVER_ENTRY_VALUES = arrayOf("maze", "yuki", "pahe", "kuro")
+        private const val PREF_SERVER_DEFAULT = "yuki"
+        private const val SERVER_UNKNOWN = "Other"
 
         private const val PREF_QUALITY_KEY = "quality"
         private val PREF_QUALITY_ENTRIES = arrayOf("1080p", "720p", "480p", "360p")
@@ -497,9 +498,10 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         private const val PREF_QUALITY_DEFAULT = "1080"
 
         private const val PREF_TYPE_KEY = "type"
-        private val PREF_TYPE_ENTRIES = arrayOf("Sub", "SoftSub", "Dub")
-        private val PREF_TYPE_ENTRY_VALUES = arrayOf("sub", "softsub", "dub")
-        private const val PREF_TYPE_DEFAULT = "sub"
+        private val PREF_TYPE_ENTRIES = arrayOf("Sub", "SoftSub", "Dub", "Dubtitles")
+        private val PREF_TYPE_ENTRY_VALUES = arrayOf("sub", "softsub", "dub", "dubtitles")
+        private const val PREF_TYPE_DEFAULT = "softsub"
+        private const val TYPE_UNKNOWN = "Other"
 
         private const val PREF_TITLE_LANGUAGE_KEY = "title_language"
         private val PREF_TITLE_LANGUAGE_ENTRIES = arrayOf("Romaji", "English", "Native")
