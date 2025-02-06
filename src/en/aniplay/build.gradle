@@ -2,7 +2,7 @@ ext {
     extName = 'AniPlay'
     extClass = '.AniPlay'
     themePkg = 'anilist'
-    overrideVersionCode = 9
+    overrideVersionCode = 10
 }
 
 apply from: "$rootDir/common.gradle"
