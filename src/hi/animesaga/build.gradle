@@ -1,9 +1,9 @@
 ext {
-    extName = 'AnimeSAGA'
-    extClass = '.AnimeSAGA'
+    extName = 'AniSAGA'
+    extClass = '.AniSAGA'
     themePkg = 'dooplay'
-    baseUrl = 'https://www.animesaga.in'
-    overrideVersionCode = 14
+    baseUrl = 'https://www.anisaga.org'
+    overrideVersionCode = 14.1
 }
 
 apply from: "$rootDir/common.gradle"
