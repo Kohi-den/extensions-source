@@ -164,7 +164,7 @@ class MundoDonghua : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 }
             }
         }
-        return videoList
+        return videoList.sort()
     }
 
     override fun videoListSelector() = throw UnsupportedOperationException()

@@ -5,6 +5,7 @@ import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
 import eu.kanade.tachiyomi.multisrc.dooplay.DooPlay
 import eu.kanade.tachiyomi.network.GET
@@ -39,6 +40,7 @@ class Cineplus123 : DooPlay(
 
     private val uqloadExtractor by lazy { UqloadExtractor(client) }
     private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
+    private val universalExtractor by lazy { UniversalExtractor(client) }
 
     // ============================ Video Links =============================
     override fun videoListParse(response: Response): List<Video> {
@@ -56,8 +58,8 @@ class Cineplus123 : DooPlay(
         return when {
             "uqload" in url -> uqloadExtractor.videosFromUrl(url, "$lang -")
             "strwish" in url -> streamWishExtractor.videosFromUrl(url, lang)
-            else -> null
-        } ?: emptyList()
+            else -> universalExtractor.videosFromUrl(url, headers, prefix = lang)
+        }
     }
 
     private fun getPlayerUrl(player: Element): String? {

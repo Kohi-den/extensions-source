@@ -41,7 +41,7 @@ class PiFansubs : DooPlay(
         }
     }
 
-    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client) }
+    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client, headers) }
     private val blembedExtractor by lazy { BlembedExtractor(client, headers) }
 
     private fun getPlayerVideos(url: String): List<Video> {

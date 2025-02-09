@@ -37,7 +37,7 @@ class Serienstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "Serienstream"
 
-    override val baseUrl = "https://s.to"
+    override val baseUrl = "http://186.2.175.5"
 
     override val lang = "de"
 
@@ -91,7 +91,7 @@ class Serienstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val headers = Headers.Builder()
-            .add("Referer", "https://s.to/search")
+            .add("Referer", "http://186.2.175.5/search")
             .add("origin", baseUrl)
             .add("connection", "keep-alive")
             .add("user-agent", "Mozilla/5.0 (Linux; Android 12; Pixel 5 Build/SP2A.220405.004; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/100.0.4896.127 Safari/537.36")

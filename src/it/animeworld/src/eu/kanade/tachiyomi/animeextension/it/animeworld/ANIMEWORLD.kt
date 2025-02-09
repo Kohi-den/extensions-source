@@ -27,7 +27,6 @@ import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
-import java.lang.Exception
 
 class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
@@ -149,7 +148,7 @@ class ANIMEWORLD : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                         ?.let(::listOf)
                 }
                 url.contains("streamhide") -> {
-                    StreamHideVidExtractor(client).videosFromUrl(url)
+                    StreamHideVidExtractor(client, headers).videosFromUrl(url)
                 }
                 url.contains("vidguard") or url.contains("listeamed") -> {
                     VidGuardExtractor(client).videosFromUrl(url)

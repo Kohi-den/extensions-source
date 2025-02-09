@@ -79,7 +79,7 @@ data class SubtitleLangDto(
 data class SubtitleDto(
     val url: String,
     @SerialName("SubtitlesName")
-    val subtitlesName: SubtitleLangDto,
+    val SubtitlesName: SubtitleLangDto,
 )
 
 @Serializable

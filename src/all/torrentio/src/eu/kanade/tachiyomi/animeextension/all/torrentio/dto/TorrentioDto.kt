@@ -110,6 +110,6 @@ class EpisodeVideo(
     val id: String? = null,
     val season: Int? = null,
     val number: Int? = null,
-    val firstAired: String? = null,
-    val name: String? = null,
+    val released: String? = null,
+    val title: String? = null,
 )

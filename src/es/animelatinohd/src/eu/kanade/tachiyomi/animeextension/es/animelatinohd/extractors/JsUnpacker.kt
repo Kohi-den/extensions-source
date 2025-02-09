@@ -31,28 +31,32 @@ class JsUnpacker(packedJS: String?) {
                 Pattern.compile("""\}\s*\('(.*)',\s*(.*?),\s*(\d+),\s*'(.*?)'\.split\('\|'\)""", Pattern.DOTALL)
             var m = p.matcher(js)
             if (m.find() && m.groupCount() == 4) {
-                val payload = m.group(1).replace("\\'", "'")
+                val payload = m.group(1)?.replace("\\'", "'")
                 val radixStr = m.group(2)
                 val countStr = m.group(3)
-                val symtab = m.group(4).split("\\|".toRegex()).toTypedArray()
-                val radix = radixStr.toIntOrNull() ?: 36
-                val count = countStr.toIntOrNull() ?: 0
-                if (symtab.size != count) {
-                    throw Exception("Unknown p.a.c.k.e.r. encoding")
+                val symtab = m.group(4)?.split("\\|".toRegex())?.toTypedArray()
+                val radix = radixStr?.toIntOrNull() ?: 36
+                val count = countStr?.toIntOrNull() ?: 0
+                if (symtab != null) {
+                    if (symtab.size != count) {
+                        throw Exception("Unknown p.a.c.k.e.r. encoding")
+                    }
                 }
                 val unbase = Unbase(radix)
                 p = Pattern.compile("\\b\\w+\\b")
-                m = p.matcher(payload)
+                m = payload?.let { p.matcher(it) }!!
                 val decoded = StringBuilder(payload)
                 var replaceOffset = 0
                 while (m.find()) {
                     val word = m.group(0)
                     val x = unbase.unbase(word)
                     var value: String? = null
-                    if (x < symtab.size && x >= 0) {
-                        value = symtab[x]
+                    if (symtab != null) {
+                        if (x < symtab.size && x >= 0) {
+                            value = symtab[x]
+                        }
                     }
-                    if (value != null && value.isNotEmpty()) {
+                    if (!value.isNullOrEmpty()) {
                         decoded.replace(m.start() + replaceOffset, m.end() + replaceOffset, value)
                         replaceOffset += value.length - word.length
                     }

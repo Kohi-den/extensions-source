@@ -23,6 +23,7 @@ import eu.kanade.tachiyomi.lib.streamlareextractor.StreamlareExtractor
 import eu.kanade.tachiyomi.lib.streamsilkextractor.StreamSilkExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.upstreamextractor.UpstreamExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
 import eu.kanade.tachiyomi.lib.vidguardextractor.VidGuardExtractor
@@ -151,7 +152,7 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
                 }.also(videoList::addAll)
             }
         }
-        return videoList
+        return videoList.sort()
     }
 
     /*--------------------------------Video extractors------------------------------------*/
@@ -168,9 +169,10 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
     private val fastreamExtractor by lazy { FastreamExtractor(client, headers) }
     private val upstreamExtractor by lazy { UpstreamExtractor(client) }
     private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
-    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client) }
+    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client, headers) }
     private val streamSilkExtractor by lazy { StreamSilkExtractor(client) }
     private val vidGuardExtractor by lazy { VidGuardExtractor(client) }
+    private val universalExtractor by lazy { UniversalExtractor(client) }
 
     fun serverVideoResolver(url: String, prefix: String = ""): List<Video> {
         return runCatching {
@@ -211,9 +213,9 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
                 arrayOf("upstream").any(url) -> upstreamExtractor.videosFromUrl(url, prefix = "$prefix ")
                 arrayOf("streamsilk").any(url) -> streamSilkExtractor.videosFromUrl(url, videoNameGen = { "$prefix StreamSilk:$it" })
                 arrayOf("streamtape", "stp", "stape").any(url) -> streamTapeExtractor.videosFromUrl(url, quality = "$prefix StreamTape")
-                arrayOf("ahvsh", "streamhide", "guccihide", "streamvid", "vidhide").any(url) -> streamHideVidExtractor.videosFromUrl(url, prefix = "$prefix ")
+                arrayOf("ahvsh", "streamhide", "guccihide", "streamvid", "vidhide").any(url) -> streamHideVidExtractor.videosFromUrl(url, videoNameGen = { "$prefix StreamHideVid:$it" })
                 arrayOf("vembed", "guard", "listeamed", "bembed", "vgfplay").any(url) -> vidGuardExtractor.videosFromUrl(url, prefix = "$prefix ")
-                else -> emptyList()
+                else -> universalExtractor.videosFromUrl(url, headers, prefix = "$prefix ")
             }
         }.getOrNull() ?: emptyList()
     }

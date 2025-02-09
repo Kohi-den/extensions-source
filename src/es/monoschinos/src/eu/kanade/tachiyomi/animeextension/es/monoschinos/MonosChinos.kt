@@ -19,6 +19,7 @@ import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.network.GET
@@ -177,7 +178,7 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
 
         return serverDocument.select("[data-player]")
             .map { String(Base64.decode(it.attr("data-player"), Base64.DEFAULT)) }
-            .parallelCatchingFlatMapBlocking { serverVideoResolver(it) }
+            .parallelCatchingFlatMapBlocking { serverVideoResolver(it) }.sort()
     }
 
     override fun getFilterList(): AnimeFilterList = MonosChinosFilters.FILTER_LIST
@@ -191,6 +192,7 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
     private val uqloadExtractor by lazy { UqloadExtractor(client) }
     private val okruExtractor by lazy { OkruExtractor(client) }
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
+    private val universalExtractor by lazy { UniversalExtractor(client) }
 
     private fun serverVideoResolver(url: String): List<Video> {
         val embedUrl = url.lowercase()
@@ -201,11 +203,11 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
             embedUrl.contains("filemoon") || embedUrl.contains("moonplayer") -> filemoonExtractor.videosFromUrl(url, prefix = "Filemoon:")
             embedUrl.contains("wishembed") || embedUrl.contains("streamwish") || embedUrl.contains("strwish") || embedUrl.contains("wish") || embedUrl.contains("wishfast") -> streamwishExtractor.videosFromUrl(url, videoNameGen = { "StreamWish:$it" })
             embedUrl.contains("streamtape") || embedUrl.contains("stp") || embedUrl.contains("stape") -> streamTapeExtractor.videosFromUrl(url)
-            embedUrl.contains("doodstream") || embedUrl.contains("dood.") || embedUrl.contains("ds2play") || embedUrl.contains("doods.") -> doodExtractor.videosFromUrl(url, "DoodStream", false)
+            embedUrl.contains("doodstream") || embedUrl.contains("dood.") || embedUrl.contains("ds2play") || embedUrl.contains("doods.") -> doodExtractor.videosFromUrl(url)
             embedUrl.contains("filelions") || embedUrl.contains("lion") -> streamwishExtractor.videosFromUrl(url, videoNameGen = { "FileLions:$it" })
             embedUrl.contains("mp4upload") || embedUrl.contains("mp4") -> mp4uploadExtractor.videosFromUrl(url, headers)
             embedUrl.contains("mix") -> mixdropExtractor.videosFromUrl(url)
-            else -> emptyList()
+            else -> universalExtractor.videosFromUrl(url, headers)
         }
     }
 

@@ -5,36 +5,50 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import okhttp3.Headers
 import okhttp3.OkHttpClient
+import java.net.URI
 
 class DoodExtractor(private val client: OkHttpClient) {
 
     fun videoFromUrl(
         url: String,
-        quality: String? = null,
+        prefix: String? = null,
         redirect: Boolean = true,
         externalSubs: List<Track> = emptyList(),
     ): Video? {
-        val newQuality = quality ?: ("Doodstream" + if (redirect) " mirror" else "")
-
         return runCatching {
             val response = client.newCall(GET(url)).execute()
             val newUrl = if (redirect) response.request.url.toString() else url
 
-            val doodHost = Regex("https://(.*?)/").find(newUrl)!!.groupValues[1]
+            val doodHost = getBaseUrl(newUrl)
             val content = response.body.string()
             if (!content.contains("'/pass_md5/")) return null
-            val md5 = content.substringAfter("'/pass_md5/").substringBefore("',")
+
+            // Obtener la calidad del título de la página
+            val extractedQuality = Regex("\\d{3,4}p")
+                .find(content.substringAfter("<title>").substringBefore("</title>"))
+                ?.groupValues
+                ?.getOrNull(0)
+
+            // Determinar la calidad a usar
+            val newQuality = extractedQuality ?: ( if (redirect) " mirror" else "")
+
+            // Obtener el hash MD5
+            val md5 = doodHost + (Regex("/pass_md5/[^']*").find(content)?.value ?: return null)
             val token = md5.substringAfterLast("/")
-            val randomString = getRandomString()
+            val randomString = createHashTable()
             val expiry = System.currentTimeMillis()
+
+            // Obtener la URL del video
             val videoUrlStart = client.newCall(
                 GET(
-                    "https://$doodHost/pass_md5/$md5",
+                    md5,
                     Headers.headersOf("referer", newUrl),
                 ),
             ).execute().body.string()
-            val videoUrl = "$videoUrlStart$randomString?token=$token&expiry=$expiry"
-            Video(videoUrl, newQuality, videoUrl, headers = doodHeaders(doodHost), subtitleTracks = externalSubs)
+
+            val trueUrl = "$videoUrlStart$randomString?token=$token&expiry=$expiry"
+
+            Video(trueUrl, prefix + "Doodstream " + newQuality , trueUrl, headers = doodHeaders(doodHost), subtitleTracks = externalSubs)
         }.getOrNull()
     }
 
@@ -44,16 +58,27 @@ class DoodExtractor(private val client: OkHttpClient) {
         redirect: Boolean = true,
     ): List<Video> {
         val video = videoFromUrl(url, quality, redirect)
-        return video?.let(::listOf) ?: emptyList<Video>()
+        return video?.let(::listOf) ?: emptyList()
     }
 
-    private fun getRandomString(length: Int = 10): String {
-        val allowedChars = ('A'..'Z') + ('a'..'z') + ('0'..'9')
-        return (1..length)
-            .map { allowedChars.random() }
-            .joinToString("")
+    // Método para generar una cadena aleatoria
+    private fun createHashTable(): String {
+        val alphabet = ('A'..'Z') + ('a'..'z') + ('0'..'9')
+        return buildString {
+            repeat(10) {
+                append(alphabet.random())
+            }
+        }
     }
 
+    // Método para obtener la base de la URL
+    private fun getBaseUrl(url: String): String {
+        return URI(url).let {
+            "${it.scheme}://${it.host}"
+        }
+    }
+
+    // Método para obtener headers personalizados
     private fun doodHeaders(host: String) = Headers.Builder().apply {
         add("User-Agent", "Aniyomi")
         add("Referer", "https://$host/")

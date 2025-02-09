@@ -1,7 +1,7 @@
 ext {
     extName = 'AnimeMovil'
     extClass = '.AnimeMovil'
-    extVersionCode = 17
+    extVersionCode = 27
 }
 
 apply from: "$rootDir/common.gradle"
@@ -20,4 +20,5 @@ dependencies {
     implementation(project(':lib:streamtape-extractor'))
     implementation(project(':lib:playlist-utils'))
     implementation(project(':lib:streamlare-extractor'))
+    implementation(project(':lib:universal-extractor'))
 }

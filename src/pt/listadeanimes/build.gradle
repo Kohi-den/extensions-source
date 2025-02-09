@@ -1,0 +1,7 @@
+ext {
+    extName = 'Lista de Animes'
+    extClass = '.ListaDeAnimes'
+    extVersionCode = 2
+}
+
+apply from: "$rootDir/common.gradle"

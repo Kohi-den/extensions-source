@@ -265,7 +265,7 @@ class TurkAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                     AlucardExtractor(client, json, baseUrl).extractVideos(hosterLink, subber)
                 }
                 "DOODSTREAM" -> {
-                    DoodExtractor(client).videosFromUrl(hosterLink, "$subber: DOODSTREAM", redirect = false)
+                    DoodExtractor(client).videosFromUrl(hosterLink, "$subber:")
                 }
                 "EMBEDGRAM" -> {
                     EmbedgramExtractor(client, headers).videosFromUrl(hosterLink, prefix = "$subber: ")
