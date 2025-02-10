@@ -1,7 +1,7 @@
 ext {
     extName = 'Latanime'
     extClass = '.Latanime'
-    extVersionCode = 18
+    extVersionCode = 24
 }
 
 apply from: "$rootDir/common.gradle"
@@ -12,5 +12,6 @@ dependencies {
     implementation(project(':lib:yourupload-extractor'))
     implementation(project(':lib:okru-extractor'))
     implementation(project(':lib:dood-extractor'))
+    implementation(project(':lib:universal-extractor'))
     implementation(libs.jsunpacker)
 }

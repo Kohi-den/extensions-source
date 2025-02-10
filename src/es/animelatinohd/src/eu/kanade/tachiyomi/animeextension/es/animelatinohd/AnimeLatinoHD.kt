@@ -85,21 +85,21 @@ class AnimeLatinoHD : ConfigurableAnimeSource, AnimeHttpSource() {
                 if (url.contains("status=1")) {
                     val latestData = data["data"]!!.jsonArray
                     latestData.forEach { item ->
-                        val animeItem = item!!.jsonObject
+                        val animeItem = item.jsonObject
                         val anime = SAnime.create()
-                        anime.setUrlWithoutDomain(externalOrInternalImg("anime/${animeItem["slug"]!!.jsonPrimitive!!.content}"))
-                        anime.thumbnail_url = "https://image.tmdb.org/t/p/w200${animeItem["poster"]!!.jsonPrimitive!!.content}"
-                        anime.title = animeItem["name"]!!.jsonPrimitive!!.content
+                        anime.setUrlWithoutDomain(externalOrInternalImg("anime/${animeItem["slug"]!!.jsonPrimitive.content}"))
+                        anime.thumbnail_url = "https://image.tmdb.org/t/p/w200${animeItem["poster"]!!.jsonPrimitive.content}"
+                        anime.title = animeItem["name"]!!.jsonPrimitive.content
                         animeList.add(anime)
                     }
                 } else {
                     val popularToday = data["popular_today"]!!.jsonArray
                     popularToday.forEach { item ->
-                        val animeItem = item!!.jsonObject
+                        val animeItem = item.jsonObject
                         val anime = SAnime.create()
-                        anime.setUrlWithoutDomain(externalOrInternalImg("anime/${animeItem["slug"]!!.jsonPrimitive!!.content}"))
-                        anime.thumbnail_url = "https://image.tmdb.org/t/p/w200${animeItem["poster"]!!.jsonPrimitive!!.content}"
-                        anime.title = animeItem["name"]!!.jsonPrimitive!!.content
+                        anime.setUrlWithoutDomain(externalOrInternalImg("anime/${animeItem["slug"]!!.jsonPrimitive.content}"))
+                        anime.thumbnail_url = "https://image.tmdb.org/t/p/w200${animeItem["poster"]!!.jsonPrimitive.content}"
+                        anime.title = animeItem["name"]!!.jsonPrimitive.content
                         animeList.add(anime)
                     }
                 }
@@ -122,12 +122,12 @@ class AnimeLatinoHD : ConfigurableAnimeSource, AnimeHttpSource() {
                 val pageProps = props["pageProps"]!!.jsonObject
                 val data = pageProps["data"]!!.jsonObject
 
-                newAnime.title = data["name"]!!.jsonPrimitive!!.content
-                newAnime.genre = data["genres"]!!.jsonPrimitive!!.content.split(",").joinToString()
-                newAnime.description = data["overview"]!!.jsonPrimitive!!.content
-                newAnime.status = parseStatus(data["status"]!!.jsonPrimitive!!.content)
-                newAnime.thumbnail_url = "https://image.tmdb.org/t/p/w600_and_h900_bestv2${data["poster"]!!.jsonPrimitive!!.content}"
-                newAnime.setUrlWithoutDomain(externalOrInternalImg("anime/${data["slug"]!!.jsonPrimitive!!.content}"))
+                newAnime.title = data["name"]!!.jsonPrimitive.content
+                newAnime.genre = data["genres"]!!.jsonPrimitive.content.split(",").joinToString()
+                newAnime.description = data["overview"]!!.jsonPrimitive.content
+                newAnime.status = parseStatus(data["status"]!!.jsonPrimitive.content)
+                newAnime.thumbnail_url = "https://image.tmdb.org/t/p/w600_and_h900_bestv2${data["poster"]!!.jsonPrimitive.content}"
+                newAnime.setUrlWithoutDomain(externalOrInternalImg("anime/${data["slug"]!!.jsonPrimitive.content}"))
             }
         }
         return newAnime
@@ -144,11 +144,11 @@ class AnimeLatinoHD : ConfigurableAnimeSource, AnimeHttpSource() {
                 val data = pageProps["data"]!!.jsonObject
                 val arrEpisode = data["episodes"]!!.jsonArray
                 arrEpisode.forEach { item ->
-                    val animeItem = item!!.jsonObject
+                    val animeItem = item.jsonObject
                     val episode = SEpisode.create()
-                    episode.setUrlWithoutDomain(externalOrInternalImg("ver/${data["slug"]!!.jsonPrimitive!!.content}/${animeItem["number"]!!.jsonPrimitive!!.content!!.toFloat()}"))
-                    episode.episode_number = animeItem["number"]!!.jsonPrimitive!!.content!!.toFloat()
-                    episode.name = "Episodio ${animeItem["number"]!!.jsonPrimitive!!.content!!.toFloat()}"
+                    episode.setUrlWithoutDomain(externalOrInternalImg("ver/${data["slug"]!!.jsonPrimitive.content}/${animeItem["number"]!!.jsonPrimitive.content.toFloat()}"))
+                    episode.episode_number = animeItem["number"]!!.jsonPrimitive.content.toFloat()
+                    episode.name = "Episodio ${animeItem["number"]!!.jsonPrimitive.content.toFloat()}"
                     episodeList.add(episode)
                 }
             }
@@ -158,7 +158,7 @@ class AnimeLatinoHD : ConfigurableAnimeSource, AnimeHttpSource() {
 
     private fun parseJsonArray(json: JsonElement?): List<JsonElement> {
         val list = mutableListOf<JsonElement>()
-        json!!.jsonObject!!.entries!!.forEach { list.add(it.value) }
+        json!!.jsonObject.entries.forEach { list.add(it.value) }
         return list
     }
 
@@ -178,11 +178,11 @@ class AnimeLatinoHD : ConfigurableAnimeSource, AnimeHttpSource() {
                 val pageProps = props["pageProps"]!!.jsonObject
                 val data = pageProps["data"]!!.jsonObject
                 val playersElement = data["players"]
-                val players = if (playersElement !is JsonArray) JsonArray(parseJsonArray(playersElement)) else playersElement!!.jsonArray
+                val players = if (playersElement !is JsonArray) JsonArray(parseJsonArray(playersElement)) else playersElement.jsonArray
                 players.forEach { player ->
-                    val servers = player!!.jsonArray
+                    val servers = player.jsonArray
                     servers.forEach { server ->
-                        val item = server!!.jsonObject
+                        val item = server.jsonObject
                         val request = client.newCall(
                             GET(
                                 url = "https://api.animelatinohd.com/stream/${item["id"]!!.jsonPrimitive.content}",
@@ -193,9 +193,9 @@ class AnimeLatinoHD : ConfigurableAnimeSource, AnimeHttpSource() {
                                     .build(),
                             ),
                         ).execute()
-                        val locationsDdh = request!!.networkResponse.toString()
+                        val locationsDdh = request.networkResponse.toString()
                         fetchUrls(locationsDdh).map { url ->
-                            val language = if (item["languaje"]!!.jsonPrimitive!!.content == "1") "[LAT]" else "[SUB]"
+                            val language = if (item["languaje"]!!.jsonPrimitive.content == "1") "[LAT]" else "[SUB]"
                             val embedUrl = url.lowercase()
                             if (embedUrl.contains("filemoon")) {
                                 val vidHeaders = headers.newBuilder()
@@ -211,7 +211,7 @@ class AnimeLatinoHD : ConfigurableAnimeSource, AnimeHttpSource() {
                                 StreamTapeExtractor(client).videoFromUrl(url, "$language Streamtape")?.let { videoList.add(it) }
                             }
                             if (embedUrl.contains("dood")) {
-                                DoodExtractor(client).videoFromUrl(url, "$language DoodStream")?.let { videoList.add(it) }
+                                DoodExtractor(client).videoFromUrl(url, language)?.let { videoList.add(it) }
                             }
                             if (embedUrl.contains("okru") || embedUrl.contains("ok.ru")) {
                                 OkruExtractor(client).videosFromUrl(url, language).also(videoList::addAll)
@@ -281,11 +281,11 @@ class AnimeLatinoHD : ConfigurableAnimeSource, AnimeHttpSource() {
                 val data = pageProps["data"]!!.jsonObject
                 val arrData = data["data"]!!.jsonArray
                 arrData.forEach { item ->
-                    val animeItem = item!!.jsonObject
+                    val animeItem = item.jsonObject
                     val anime = SAnime.create()
-                    anime.setUrlWithoutDomain(externalOrInternalImg("anime/${animeItem["slug"]!!.jsonPrimitive!!.content}"))
-                    anime.thumbnail_url = "https://image.tmdb.org/t/p/w200${animeItem["poster"]!!.jsonPrimitive!!.content}"
-                    anime.title = animeItem["name"]!!.jsonPrimitive!!.content
+                    anime.setUrlWithoutDomain(externalOrInternalImg("anime/${animeItem["slug"]!!.jsonPrimitive.content}"))
+                    anime.thumbnail_url = "https://image.tmdb.org/t/p/w200${animeItem["poster"]!!.jsonPrimitive.content}"
+                    anime.title = animeItem["name"]!!.jsonPrimitive.content
                     animeList.add(anime)
                 }
             }

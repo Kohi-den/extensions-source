@@ -5,12 +5,14 @@ import android.content.SharedPreferences
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
+import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
+import eu.kanade.tachiyomi.lib.dailymotionextractor.DailymotionExtractor
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
 import eu.kanade.tachiyomi.lib.streamlareextractor.StreamlareExtractor
@@ -20,6 +22,7 @@ import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.vudeoextractor.VudeoExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
+import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.util.asJsoup
 import okhttp3.Headers
 import okhttp3.MediaType.Companion.toMediaType
@@ -38,7 +41,7 @@ class EnNovelas : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "EnNovelas"
 
-    override val baseUrl = "https://u.ennovelas.net"
+    override val baseUrl = "https://tv.ennovelas.net/"
 
     override val lang = "es"
 
@@ -50,7 +53,7 @@ class EnNovelas : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun popularAnimeSelector(): String = ".block-post"
 
-    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/telenovelas/page/$page")
+    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/category/novelas-completas/page/$page")
 
     override fun popularAnimeFromElement(element: Element): SAnime {
         val anime = SAnime.create()
@@ -146,7 +149,7 @@ class EnNovelas : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             .add("upgrade-insecure-requests", "1")
             .build()
 
-        client.newCall(POST(urlRequest, headers, body)).execute().asJsoup().select(".serversList li").map {
+        client.newCall(POST(urlRequest, headers, body)).execute().asJsoup().select(".serversList li").map { it ->
             val frameString = it.attr("abs:data-server")
             val link = frameString.substringAfter("src='").substringBefore("'")
                 .replace("https://api.mycdn.moe/sblink.php?id=", "https://streamsb.net/e/")
@@ -188,7 +191,12 @@ class EnNovelas : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             }
             if (link.contains("streamlare")) {
                 try {
-                    StreamlareExtractor(client).videosFromUrl(link)?.let { videoList.addAll(it) }
+                    StreamlareExtractor(client).videosFromUrl(link).let { videoList.addAll(it) }
+                } catch (_: Exception) {}
+            }
+            if (link.contains("dailymotion")) {
+                try {
+                    DailymotionExtractor(client, headers).videosFromUrl(link).let { videoList.addAll(it) }
                 } catch (_: Exception) {}
             }
         }
@@ -219,13 +227,6 @@ class EnNovelas : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         return this
     }
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        return when {
-            query.isNotBlank() -> GET("$baseUrl/search/$query/page/$page/")
-            else -> popularAnimeRequest(page)
-        }
-    }
-
     override fun searchAnimeParse(response: Response): AnimesPage {
         val document = response.asJsoup()
         val animeList = mutableListOf<SAnime>()
@@ -242,9 +243,48 @@ class EnNovelas : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
         return AnimesPage(animeList, hasNextPage)
     }
-    override fun searchAnimeFromElement(element: Element): SAnime = throw UnsupportedOperationException()
-    override fun searchAnimeNextPageSelector(): String = throw UnsupportedOperationException()
-    override fun searchAnimeSelector(): String = throw UnsupportedOperationException()
+
+    // =============================== Search ===============================
+    override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
+        return if (query.startsWith(PREFIX_SEARCH)) { // URL intent handler
+            val id = query.removePrefix(PREFIX_SEARCH)
+            client.newCall(GET("$baseUrl/search/$id", headers))
+                .awaitSuccess()
+                .use(::searchAnimeByIdParse)
+        } else {
+            super.getSearchAnime(page, query, filters)
+        }
+    }
+
+    private fun searchAnimeByIdParse(response: Response): AnimesPage {
+        val details = animeDetailsParse(response.asJsoup())
+            .apply {
+                setUrlWithoutDomain(response.request.url.toString())
+                initialized = true
+            }
+        return AnimesPage(listOf(details), false)
+    }
+
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+        val filterList = if (filters.isEmpty()) getFilterList() else filters
+        val genreFilter = filterList.find { it is GenreFilter } as GenreFilter
+        val yearFilter = filterList.find { it is YearFilter } as YearFilter
+        val typeFilter = filterList.find { it is TypeFilter } as TypeFilter
+        return when {
+            query.isNotBlank() -> GET("$baseUrl/search/$query/page/$page/")
+            genreFilter.state != 0 -> GET("$baseUrl/${genreFilter.toUriPart()}/page/$page/")
+            yearFilter.state != 0 -> GET("$baseUrl/${yearFilter.toUriPart()}/page/$page/")
+            typeFilter.state != 0 -> GET("$baseUrl/${typeFilter.toUriPart()}/page/$page/")
+
+            else -> popularAnimeRequest(page)
+        }
+    }
+
+    override fun searchAnimeFromElement(element: Element) = popularAnimeFromElement(element)
+
+    override fun searchAnimeNextPageSelector(): String = popularAnimeNextPageSelector()
+
+    override fun searchAnimeSelector(): String = popularAnimeSelector()
 
     override fun animeDetailsParse(document: Document): SAnime {
         val anime = SAnime.create()
@@ -267,6 +307,62 @@ class EnNovelas : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
     }
 
+    override fun getFilterList(): AnimeFilterList = AnimeFilterList(
+        AnimeFilter.Header("La búsqueda por texto ignora el filtro"),
+        GenreFilter(),
+        YearFilter(),
+        TypeFilter(),
+    )
+
+    private class GenreFilter : UriPartFilter(
+        "Categorías",
+        arrayOf(
+            Pair("Seleccionar", ""),
+            Pair("Novelas Mexicanas", "genre/novelas-mexicanas"),
+            Pair("Novelas Colombianas", "genre/novelas-colombianas"),
+            Pair("Series Y Novelas Turcas", "genre/series-y-novelas-turcas"),
+            Pair("Novelas Brasileñas", "genre/novelas-brasilenas"),
+            Pair("Novelas Americanas", "genre/novelas-americanas"),
+            Pair("Novelas Españolas", "genre/novelas-espanolas"),
+            Pair("Novelas Chilenas", "genre/telenovelas-chilenas"),
+            Pair("Novelas Peruanas", "genre/novelas-peruanas"),
+            Pair("Novelas Venezolanas", "genre/novelas-venezolanas"),
+            Pair("Novelas Reino Unido", "genre/novelas-reino-unido"),
+            Pair("Novelas Argentinas", "genre/novelas-argentinas"),
+            Pair("Novelas Filipinas", "genre/novelas-filipinas"),
+            Pair("Novelas Indias", "genre/novelas-indias"),
+        ),
+    )
+
+    private class YearFilter : UriPartFilter(
+        "Años",
+        arrayOf(
+            Pair("Seleccionar", ""),
+            Pair("2024", "years/2024"),
+            Pair("2023", "years/2023"),
+            Pair("2022", "years/2022"),
+            Pair("2021", "years/2021"),
+            Pair("2020", "years/2020"),
+            Pair("2019", "years/2019"),
+            Pair("2018", "years/2018"),
+            Pair("2017", "years/2017"),
+            Pair("2016", "years/2016"),
+            Pair("2015", "years/2015"),
+        ),
+    )
+    private class TypeFilter : UriPartFilter(
+        "Tipo",
+        arrayOf(
+            Pair("Seleccionar", ""),
+            Pair("Peliculas", "movies"),
+        ),
+    )
+
+    private open class UriPartFilter(displayName: String, val vals: Array<Pair<String, String>>) :
+        AnimeFilter.Select<String>(displayName, vals.map { it.first }.toTypedArray()) {
+        fun toUriPart() = vals[state].second
+    }
+
     override fun latestUpdatesNextPageSelector() = popularAnimeNextPageSelector()
 
     override fun latestUpdatesFromElement(element: Element) = popularAnimeFromElement(element)
@@ -274,6 +370,10 @@ class EnNovelas : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun latestUpdatesRequest(page: Int) = popularAnimeRequest(page)
 
     override fun latestUpdatesSelector() = popularAnimeSelector()
+
+    companion object {
+        const val PREFIX_SEARCH = "id:"
+    }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         val qualities = arrayOf(

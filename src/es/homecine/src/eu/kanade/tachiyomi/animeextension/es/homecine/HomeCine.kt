@@ -1,3 +1,4 @@
+
 package eu.kanade.tachiyomi.animeextension.es.homecine
 
 import android.app.Application

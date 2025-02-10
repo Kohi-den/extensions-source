@@ -18,14 +18,14 @@ class ProteaExtractor() {
         val videoList = mutableListOf<Video>()
         runCatching {
             val document = Jsoup.connect(url).headers(headers.toMap()).ignoreContentType(true).method(Connection.Method.POST).execute()
-            if (document!!.body()!!.isNotEmpty()) {
+            if (document.body().isNotEmpty()) {
                 val responseString = document.body().removePrefix("[").removeSuffix("]")
                 val jObject = json.decodeFromString<JsonObject>(responseString)
                 val sources = jObject["source"]!!.jsonArray
-                sources!!.forEach { source ->
-                    var item = source!!.jsonObject
+                sources.forEach { source ->
+                    var item = source.jsonObject
                     var quality = "$qualityPrefix:${ item["label"]!!.jsonPrimitive.content }"
-                    var urlVideo = item["file"]!!.jsonPrimitive!!.content.removePrefix("//")
+                    var urlVideo = item["file"]!!.jsonPrimitive.content.removePrefix("//")
                     var newHeaders = Headers.Builder()
                         .set("authority", "www.nemonicplayer.xyz")
                         .set("accept", "*/*")

@@ -1,7 +1,7 @@
 ext {
     extName = 'Cine24h'
     extClass = '.Cine24h'
-    extVersionCode = 4
+    extVersionCode = 11
 }
 
 apply from: "$rootDir/common.gradle"
@@ -12,4 +12,5 @@ dependencies {
     implementation(project(':lib:filemoon-extractor'))
     implementation(project(':lib:voe-extractor'))
     implementation(project(':lib:vidguard-extractor'))
+    implementation(project(':lib:universal-extractor'))
 }

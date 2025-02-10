@@ -1,7 +1,7 @@
 ext {
     extName = 'TioanimeH'
     extClass = '.TioanimeHFactory'
-    extVersionCode = 21
+    extVersionCode = 25
 }
 
 apply from: "$rootDir/common.gradle"
@@ -12,4 +12,5 @@ dependencies {
     implementation(project(':lib:voe-extractor'))
     implementation(project(':lib:mixdrop-extractor'))
     implementation(project(':lib:vidguard-extractor'))
+    implementation(project(':lib:universal-extractor'))
 }

@@ -1,7 +1,7 @@
 ext {
     extName = 'Hackstore'
     extClass = '.Hackstore'
-    extVersionCode = 15
+    extVersionCode = 25
 }
 
 apply from: "$rootDir/common.gradle"
@@ -13,4 +13,6 @@ dependencies {
     implementation(project(':lib:streamwish-extractor'))
     implementation(project(':lib:dood-extractor'))
     implementation(project(':lib:vidhide-extractor'))
+    implementation(project(':lib:goodstream-extractor'))
+    implementation(project(':lib:universal-extractor'))
 }

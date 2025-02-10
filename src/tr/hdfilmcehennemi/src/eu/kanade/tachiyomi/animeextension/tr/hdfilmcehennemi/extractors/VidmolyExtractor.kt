@@ -10,7 +10,7 @@ import okhttp3.OkHttpClient
 class VidmolyExtractor(private val client: OkHttpClient, private val headers: Headers) {
     private val playlistUtils by lazy { PlaylistUtils(client, headers) }
 
-    suspend fun videosFromUrl(url: String): List<Video> {
+    suspend fun videosFromUrl(url: String, name: String): List<Video> {
         val body = client.newCall(GET(url, headers)).await()
             .body.string()
 
@@ -18,6 +18,6 @@ class VidmolyExtractor(private val client: OkHttpClient, private val headers: He
             .takeIf(String::isNotBlank)
             ?: return emptyList()
 
-        return playlistUtils.extractFromHls(playlistUrl, url, videoNameGen = { "Vidmoly - $it" })
+        return playlistUtils.extractFromHls(playlistUrl, url, videoNameGen = { "$name - $it" })
     }
 }

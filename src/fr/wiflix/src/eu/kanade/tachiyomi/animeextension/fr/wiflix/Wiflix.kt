@@ -83,7 +83,7 @@ class Wiflix : DataLifeEngine(
                     contains("uqload.co") -> UqloadExtractor(client).videosFromUrl(this)
                     contains("waaw1.tv") -> emptyList()
                     contains("vudeo.co") -> VudeoExtractor(client).videosFromUrl(this)
-                    contains("streamvid.net") -> StreamHideVidExtractor(client).videosFromUrl(this)
+                    contains("streamvid.net") -> StreamHideVidExtractor(client, headers).videosFromUrl(this)
                     contains("upstream.to") -> UpstreamExtractor(client).videosFromUrl(this)
                     contains("streamdav.com") -> StreamDavExtractor(client).videosFromUrl(this)
                     contains("voe.sx") -> VoeExtractor(client).videosFromUrl(this)

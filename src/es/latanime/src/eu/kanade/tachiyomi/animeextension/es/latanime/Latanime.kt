@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
 import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
@@ -302,6 +303,10 @@ class Latanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 }
                 url.contains("yourupload") -> {
                     val videos = YourUploadExtractor(client).videoFromUrl(url, headers = headers, name = "Original", prefix = prefix)
+                    videoList.addAll(videos)
+                }
+                else -> {
+                    val videos = UniversalExtractor(client).videosFromUrl(url, headers)
                     videoList.addAll(videos)
                 }
             }

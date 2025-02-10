@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
 import eu.kanade.tachiyomi.lib.sendvidextractor.SendvidExtractor
 import eu.kanade.tachiyomi.lib.streamhidevidextractor.StreamHideVidExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
@@ -73,25 +74,35 @@ class Hentaila : ConfigurableAnimeSource, AnimeHttpSource() {
         }
     }
 
-    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/directorio?filter=popular&p=$page", headers)
+    override fun popularAnimeRequest(page: Int) = GET(baseUrl, headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val document = response.asJsoup()
-        val elements = document.select(".hentais .hentai")
-        val nextPage = document.select(".pagination .fa-arrow-right").any()
-        val animeList = elements.map { element ->
+        val elements = document.select("section.latest-hentais div.slider > div.item")
+        val animes = elements.map { element ->
             SAnime.create().apply {
-                setUrlWithoutDomain(element.select("a").attr("abs:href"))
-                title = element.selectFirst(".h-header .h-title")!!.text()
-                thumbnail_url = element.selectFirst(".h-thumb img")!!.attr("abs:src").replace("/fondos/", "/portadas/")
+                setUrlWithoutDomain(element.select("h2.h-title a").attr("abs:href"))
+                title = element.selectFirst("h2.h-title a")!!.text()
+                thumbnail_url = element.selectFirst("figure.bg img")!!.attr("abs:src").replace("/fondos/", "/portadas/")
             }
         }
-        return AnimesPage(animeList, nextPage)
+        return AnimesPage(animes, false)
     }
 
-    override fun latestUpdatesRequest(page: Int) = GET("$baseUrl/directorio?filter=recent&p=$page", headers)
+    override fun latestUpdatesRequest(page: Int) = GET(baseUrl, headers)
 
-    override fun latestUpdatesParse(response: Response) = popularAnimeParse(response)
+    override fun latestUpdatesParse(response: Response): AnimesPage {
+        val document = response.asJsoup()
+        val elements = document.select("section.episodes div.grid article.hentai")
+        val animes = elements.map { element ->
+            SAnime.create().apply {
+                setUrlWithoutDomain(element.select("a").attr("abs:href").replace("/ver/", "/hentai-").substringBeforeLast("-"))
+                title = element.selectFirst("h2.h-title")!!.text()
+                thumbnail_url = element.selectFirst("img")!!.attr("abs:src").replace("/thumbs/", "/portadas/")
+            }
+        }
+        return AnimesPage(animes.distinctBy { it.url }, false)
+    }
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val filterList = if (filters.isEmpty()) getFilterList() else filters
@@ -188,7 +199,8 @@ class Hentaila : ConfigurableAnimeSource, AnimeHttpSource() {
     private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
     private val burstCloudExtractor by lazy { BurstCloudExtractor(client) }
-    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client) }
+    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client, headers) }
+    private val universalExtractor by lazy { UniversalExtractor(client) }
     private val sendvidExtractor by lazy { SendvidExtractor(client, headers) }
 
     override fun videoListParse(response: Response): List<Video> {
@@ -212,7 +224,7 @@ class Hentaila : ConfigurableAnimeSource, AnimeHttpSource() {
                 "burst" -> burstCloudExtractor.videoFromUrl(urlServer, headers = headers)
                 "vidhide", "streamhide", "guccihide", "streamvid" -> streamHideVidExtractor.videosFromUrl(urlServer)
                 "sendvid" -> sendvidExtractor.videosFromUrl(urlServer)
-                else -> emptyList()
+                else -> universalExtractor.videosFromUrl(urlServer, headers)
             }
         }
     }
@@ -265,8 +277,8 @@ class Hentaila : ConfigurableAnimeSource, AnimeHttpSource() {
             Pair("Chikan", "chikan"),
             Pair("Ecchi", "ecchi"),
             Pair("Enfermeras", "enfermeras"),
-            Pair("Escolares", "escolares"),
             Pair("Futanari", "futanari"),
+            Pair("Escolares", "escolares"),
             Pair("Gore", "gore"),
             Pair("Hardcore", "hardcore"),
             Pair("Harem", "harem"),

@@ -14,7 +14,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 
 class CloseloadExtractor(private val client: OkHttpClient, private val headers: Headers) {
-    suspend fun videosFromUrl(url: String): List<Video> {
+    suspend fun videosFromUrl(url: String, name: String): List<Video> {
         val doc = client.newCall(GET(url, headers)).await().asJsoup()
         val script = doc.selectFirst("script:containsData(eval):containsData(PlayerInit)")?.data()
             ?: return emptyList()
@@ -38,7 +38,9 @@ class CloseloadExtractor(private val client: OkHttpClient, private val headers: 
             Track(it.absUrl("src"), it.attr("label").ifEmpty { it.attr("srclang") })
         }
 
-        return listOf(Video(playlistUrl, "Closeload", playlistUrl, videoHeaders, subtitleTracks = subtitles))
+        return listOf(
+            Video(playlistUrl, name, playlistUrl, videoHeaders, subtitleTracks = subtitles),
+        )
     }
 
     private suspend fun tryAjaxPost(script: String, hostUrl: String) {

@@ -116,7 +116,7 @@ class FanPelis : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             }
             if (embedUrl.contains("doodstream") || embedUrl.contains("dood")) {
                 val video = try {
-                    DoodExtractor(client).videoFromUrl(url, "DoodStream", true)
+                    DoodExtractor(client).videoFromUrl(url, "DoodStream")
                 } catch (e: Exception) {
                     null
                 }

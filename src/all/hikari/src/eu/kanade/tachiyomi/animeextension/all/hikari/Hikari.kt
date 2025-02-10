@@ -208,11 +208,17 @@ class Hikari : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     override fun episodeListSelector() = "a[class~=ep-item]"
 
     override fun episodeFromElement(element: Element): SEpisode {
-        val ep = element.selectFirst(".ssli-order")!!.text()
+        val epText = element.selectFirst(".ssli-order")?.text()?.trim()
+            ?: element.attr("data-number").trim()
+        val ep = epText.toFloatOrNull() ?: 0F
+
+        val nameText = element.selectFirst(".ep-name")?.text()?.trim()
+            ?: element.attr("title").replace("Episode-", "Ep. ") ?: ""
+
         return SEpisode.create().apply {
             setUrlWithoutDomain(element.attr("abs:href"))
-            episode_number = ep.toFloat()
-            name = "Ep. $ep - ${element.selectFirst(".ep-name")?.text() ?: ""}"
+            episode_number = ep
+            name = "Ep. $ep - $nameText"
         }
     }
 

@@ -1,7 +1,7 @@
 ext {
     extName = 'Megaflix'
     extClass = '.Megaflix'
-    extVersionCode = 22
+    extVersionCode = 23
     isNsfw = true
 }
 

@@ -1,7 +1,7 @@
 ext {
     extName = 'Doramasyt'
     extClass = '.Doramasyt'
-    extVersionCode = 17
+    extVersionCode = 20
 }
 
 apply from: "$rootDir/common.gradle"
@@ -15,4 +15,5 @@ dependencies {
     implementation(project(':lib:streamwish-extractor'))
     implementation(project(':lib:dood-extractor'))
     implementation(project(':lib:mixdrop-extractor'))
+    implementation(project(':lib:universal-extractor'))
 }

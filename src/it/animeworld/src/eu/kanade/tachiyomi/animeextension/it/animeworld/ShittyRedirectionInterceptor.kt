@@ -26,7 +26,8 @@ class ShittyRedirectionInterceptor(private val client: OkHttpClient) : Intercept
     }
 
     private fun loadCookies(request: Request, response: Response): Request {
-        val (cookieString) = """document\.cookie="([^"]+)""".toRegex().find(response.body.string())!!.destructured
+        val (cookieString) = """document\.cookie="([^"]+)""".toRegex()
+            .find(response.body.string())!!.destructured
         val cookie = Cookie.parse(request.url, cookieString)!!
 
         client.cookieJar.saveFromResponse(request.url, listOf(cookie))

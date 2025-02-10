@@ -20,6 +20,7 @@ import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
@@ -180,34 +181,47 @@ class CuevanaEu(override val name: String, override val baseUrl: String) : Confi
     private fun loadExtractor(url: String, prefix: String = ""): List<Video> {
         val videoList = mutableListOf<Video>()
         val embedUrl = url.lowercase()
-        if (embedUrl.contains("yourupload")) {
-            val videos = YourUploadExtractor(client).videoFromUrl(url, headers = headers)
-            videoList.addAll(videos)
+        return when {
+            embedUrl.contains("yourupload") -> {
+                val videos = YourUploadExtractor(client).videoFromUrl(url, headers = headers)
+                videoList.addAll(videos)
+                videoList
+            }
+            embedUrl.contains("doodstream") || embedUrl.contains("dood.") -> {
+                DoodExtractor(client).videoFromUrl(url, "$prefix DoodStream")
+                    ?.let { videoList.add(it) }
+                videoList
+            }
+            embedUrl.contains("okru") || embedUrl.contains("ok.ru") -> {
+                OkruExtractor(client).videosFromUrl(url, prefix, true).also(videoList::addAll)
+                videoList
+            }
+            embedUrl.contains("voe") -> {
+                VoeExtractor(client).videosFromUrl(url, prefix).also(videoList::addAll)
+                videoList
+            }
+            embedUrl.contains("streamtape") -> {
+                StreamTapeExtractor(client).videoFromUrl(url, "$prefix StreamTape")?.let { videoList.add(it) }
+                videoList
+            }
+            embedUrl.contains("wishembed") || embedUrl.contains("streamwish") || embedUrl.contains("wish") -> {
+                StreamWishExtractor(client, headers).videosFromUrl(url) { "$prefix StreamWish:$it" }
+                    .also(videoList::addAll)
+                videoList
+            }
+            embedUrl.contains("filemoon") || embedUrl.contains("moonplayer") -> {
+                FilemoonExtractor(client).videosFromUrl(url, "$prefix Filemoon:").also(videoList::addAll)
+                videoList
+            }
+            embedUrl.contains("filelions") || embedUrl.contains("lion") -> {
+                StreamWishExtractor(client, headers).videosFromUrl(url, videoNameGen = { "$prefix FileLions:$it" }).also(videoList::addAll)
+                videoList
+            }
+            else -> {
+                UniversalExtractor(client).videosFromUrl(url, headers, prefix = prefix).also(videoList::addAll)
+                videoList
+            }
         }
-        if (embedUrl.contains("doodstream") || embedUrl.contains("dood.")) {
-            DoodExtractor(client).videoFromUrl(url, "$prefix DoodStream", false)
-                ?.let { videoList.add(it) }
-        }
-        if (embedUrl.contains("okru") || embedUrl.contains("ok.ru")) {
-            OkruExtractor(client).videosFromUrl(url, prefix, true).also(videoList::addAll)
-        }
-        if (embedUrl.contains("voe")) {
-            VoeExtractor(client).videosFromUrl(url, prefix).also(videoList::addAll)
-        }
-        if (embedUrl.contains("streamtape")) {
-            StreamTapeExtractor(client).videoFromUrl(url, "$prefix StreamTape")?.let { videoList.add(it) }
-        }
-        if (embedUrl.contains("wishembed") || embedUrl.contains("streamwish") || embedUrl.contains("wish")) {
-            StreamWishExtractor(client, headers).videosFromUrl(url) { "$prefix StreamWish:$it" }
-                .also(videoList::addAll)
-        }
-        if (embedUrl.contains("filemoon") || embedUrl.contains("moonplayer")) {
-            FilemoonExtractor(client).videosFromUrl(url, "$prefix Filemoon:").also(videoList::addAll)
-        }
-        if (embedUrl.contains("filelions") || embedUrl.contains("lion")) {
-            StreamWishExtractor(client, headers).videosFromUrl(url, videoNameGen = { "$prefix FileLions:$it" }).also(videoList::addAll)
-        }
-        return videoList
     }
 
     override fun videoListSelector() = throw UnsupportedOperationException()

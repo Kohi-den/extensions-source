@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.mixdropextractor.MixDropExtractor
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.vidguardextractor.VidGuardExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
@@ -94,6 +95,7 @@ open class TioanimeH(override val name: String, override val baseUrl: String) : 
     private val okruExtractor by lazy { OkruExtractor(client) }
     private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
     private val mixDropExtractor by lazy { MixDropExtractor(client) }
+    private val universalExtractor by lazy { UniversalExtractor(client) }
 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
@@ -112,7 +114,7 @@ open class TioanimeH(override val name: String, override val baseUrl: String) : 
                 "okru" -> okruExtractor.videosFromUrl(serverUrl)
                 "yourupload" -> yourUploadExtractor.videoFromUrl(serverUrl, headers = headers)
                 "mixdrop" -> mixDropExtractor.videosFromUrl(serverUrl)
-                else -> emptyList()
+                else -> universalExtractor.videosFromUrl(serverUrl, headers)
             }
         }
     }

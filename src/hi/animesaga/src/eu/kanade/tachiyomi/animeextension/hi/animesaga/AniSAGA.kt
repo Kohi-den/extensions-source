@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.hi.animesaga
+package eu.kanade.tachiyomi.animeextension.hi.anisaga
 
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.chillxextractor.ChillxExtractor
@@ -9,12 +9,12 @@ import okhttp3.FormBody
 import okhttp3.Response
 import org.jsoup.nodes.Element
 
-class AnimeSAGA : DooPlay(
+class AniSAGA : DooPlay(
     "hi",
-    "AnimeSAGA",
-    "https://www.animesaga.in",
+    "AniSAGA",
+    "https://www.anisaga.org",
 ) {
-    private val videoHost = "https://cdn.animesaga.in"
+    private val videoHost = "https://cdn.anisaga.org"
 
     // ============================== Popular ===============================
     override fun popularAnimeSelector() = "div.top-imdb-list > div.top-imdb-item"
