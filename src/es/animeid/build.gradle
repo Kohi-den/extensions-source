@@ -1,7 +1,7 @@
 ext {
     extName = 'AnimeID'
     extClass = '.AnimeID'
-    extVersionCode = 10
+    extVersionCode = 16
 }
 
 apply from: "$rootDir/common.gradle"
@@ -9,4 +9,5 @@ apply from: "$rootDir/common.gradle"
 dependencies {
     implementation(project(':lib:streamtape-extractor'))
     implementation(project(':lib:streamwish-extractor'))
+    implementation(project(':lib:universal-extractor'))
 }

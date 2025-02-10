@@ -99,13 +99,13 @@ class Wcofun : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun episodeFromElement(element: Element) = SEpisode.create().apply {
         setUrlWithoutDomain(element.attr("href"))
-        val epName = element.ownText()
-        val season = epName.substringAfter("Season ")
-        val ep = epName.substringAfter("Episode ")
-        val seasonNum = season.substringBefore(" ").toIntOrNull() ?: 1
-        val epNum = ep.substringBefore(" ").toIntOrNull() ?: 1
-        episode_number = (seasonNum * 100 + epNum).toFloat()
-        name = "Season $seasonNum - Episode $epNum"
+        val title = element.attr("title")
+        val season = title.substringAfter("Season ").substringBefore(" ")
+        val episode = title.substringAfter("Episode ").substringBefore(" ")
+        val seasonNum = season.toIntOrNull() ?: 1
+        val episodeNum = episode.toIntOrNull() ?: 1
+        episode_number = ((seasonNum - 1) * 100 + episodeNum).toFloat()
+        name = "Season $seasonNum - Episode $episodeNum"
     }
 
     // ============================ Video Links =============================

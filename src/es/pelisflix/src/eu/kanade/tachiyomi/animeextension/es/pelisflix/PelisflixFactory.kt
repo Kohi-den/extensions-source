@@ -54,7 +54,7 @@ class SeriesflixClass : Pelisflix("Seriesflix", "https://seriesflix.video") {
         fetchUrls(urlResponse).map { serverUrl ->
             Log.i("bruh url", serverUrl)
             if (serverUrl.contains("doodstream")) {
-                val video = DoodExtractor(client).videoFromUrl(serverUrl.replace("https://doodstream.com", "https://dood.wf"), lang + "DoodStream", false)
+                val video = DoodExtractor(client).videoFromUrl(serverUrl.replace("https://doodstream.com", "https://dood.wf"), lang + "DoodStream")
                 if (video != null) videoList.add(video)
             }
             if (serverUrl.contains("streamtape")) {

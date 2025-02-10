@@ -1,0 +1,7 @@
+ext {
+    extName = 'AnimeFlix'
+    extClass = '.AnimeFlix'
+    extVersionCode = 7
+}
+
+apply from: "$rootDir/common.gradle"

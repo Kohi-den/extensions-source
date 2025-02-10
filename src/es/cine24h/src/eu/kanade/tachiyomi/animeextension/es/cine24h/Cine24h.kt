@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
 import eu.kanade.tachiyomi.lib.fastreamextractor.FastreamExtractor
 import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.vidguardextractor.VidGuardExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.network.GET
@@ -155,6 +156,7 @@ open class Cine24h : ConfigurableAnimeSource, AnimeHttpSource() {
     private val doodExtractor by lazy { DoodExtractor(client) }
     private val voeExtractor by lazy { VoeExtractor(client) }
     private val vidGuardExtractor by lazy { VidGuardExtractor(client) }
+    private val universalExtractor by lazy { UniversalExtractor(client) }
 
     private fun serverVideoResolver(url: String): List<Video> {
         val embedUrl = url.lowercase()
@@ -167,7 +169,7 @@ open class Cine24h : ConfigurableAnimeSource, AnimeHttpSource() {
             arrayOf("voe").any(url) -> voeExtractor.videosFromUrl(url)
             arrayOf("doodstream", "dood.", "ds2play", "doods.").any(url) -> doodExtractor.videosFromUrl(url)
             arrayOf("vembed", "guard", "listeamed", "bembed", "vgfplay").any(url) -> vidGuardExtractor.videosFromUrl(url)
-            else -> emptyList()
+            else -> universalExtractor.videosFromUrl(url, headers)
         }
     }
 

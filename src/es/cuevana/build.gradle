@@ -1,7 +1,7 @@
 ext {
     extName = 'Cuevana'
     extClass = '.CuevanaFactory'
-    extVersionCode = 36
+    extVersionCode = 46
 }
 
 apply from: "$rootDir/common.gradle"
@@ -22,5 +22,6 @@ dependencies {
     implementation(project(':lib:burstcloud-extractor'))
     implementation(project(':lib:fastream-extractor'))
     implementation(project(':lib:upstream-extractor'))
+    implementation(project(':lib:universal-extractor'))
     implementation(libs.jsunpacker)
 }

@@ -1,7 +1,7 @@
 ext {
     extName = 'CineCalidad'
     extClass = '.CineCalidad'
-    extVersionCode = 5
+    extVersionCode = 17
 }
 
 apply from: "$rootDir/common.gradle"
@@ -23,4 +23,6 @@ dependencies {
     implementation(project(':lib:fastream-extractor'))
     implementation(project(':lib:upstream-extractor'))
     implementation(project(':lib:streamhidevid-extractor'))
+    implementation(project(':lib:goodstream-extractor'))
+    implementation(project(':lib:universal-extractor'))
 }

@@ -3,7 +3,7 @@ ext {
     extClass = '.Multimovies'
     themePkg = 'dooplay'
     baseUrl = 'https://multimovies.art'
-    overrideVersionCode = 19
+    overrideVersionCode = 20
 }
 
 apply from: "$rootDir/common.gradle"

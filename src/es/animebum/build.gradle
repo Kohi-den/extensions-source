@@ -1,0 +1,17 @@
+ext {
+    extName = 'AnimeBum'
+    extClass = '.AnimeBum'
+    extVersionCode = 5
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:okru-extractor'))
+    implementation(project(':lib:streamwish-extractor'))
+    implementation(project(':lib:universal-extractor'))
+    implementation(project(':lib:streamhidevid-extractor'))
+    implementation(project(':lib:vidguard-extractor'))
+    implementation(project(':lib:filemoon-extractor'))
+    implementation(project(':lib:gdriveplayer-extractor'))
+}

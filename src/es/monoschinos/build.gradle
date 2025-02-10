@@ -1,7 +1,7 @@
 ext {
     extName = 'MonosChinos'
     extClass = '.MonosChinos'
-    extVersionCode = 32
+    extVersionCode = 35
 }
 
 apply from: "$rootDir/common.gradle"
@@ -16,4 +16,5 @@ dependencies {
     implementation(project(':lib:streamwish-extractor'))
     implementation(project(':lib:mixdrop-extractor'))
     implementation(project(':lib:dood-extractor'))
+    implementation(project(':lib:universal-extractor'))
 }

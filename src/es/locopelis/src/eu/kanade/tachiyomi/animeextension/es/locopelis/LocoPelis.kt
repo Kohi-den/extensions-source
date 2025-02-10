@@ -95,10 +95,10 @@ class LocoPelis : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                     contains("streamtape") || contains("stp") || contains("stape")
                     -> StreamTapeExtractor(client).videosFromUrl(this, quality = "StreamTape")
                     contains("doodstream") || contains("dood.") || contains("d000d") || contains("ds2play") || contains("doods.")
-                    -> DoodExtractor(client).videosFromUrl(this, "DoodStream", true)
+                    -> DoodExtractor(client).videosFromUrl(this, "DoodStream")
                     contains("ok.ru") || contains("okru") -> OkruExtractor(client).videosFromUrl(this)
                     contains("vidhide") || contains("streamhide") || contains("guccihide") || contains("streamvid")
-                    -> StreamHideVidExtractor(client).videosFromUrl(this)
+                    -> StreamHideVidExtractor(client, headers).videosFromUrl(this)
                     else -> emptyList()
                 }
             }

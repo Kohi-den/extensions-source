@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.lib.streamhidevidextractor.StreamHideVidExtractor
 import eu.kanade.tachiyomi.lib.streamlareextractor.StreamlareExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.upstreamextractor.UpstreamExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
@@ -182,7 +183,7 @@ class Gnula : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             }
             embedUrl.contains("doodstream") || embedUrl.contains("dood.") || embedUrl.contains("ds2play") || embedUrl.contains("doods.") -> {
                 val url2 = url.replace("https://doodstream.com/e/", "https://dood.to/e/")
-                listOf(DoodExtractor(client).videoFromUrl(url2, "$prefix DoodStream", false)!!)
+                listOf(DoodExtractor(client).videosFromUrl(url2, quality = prefix, redirect = false)).flatten()
             }
             embedUrl.contains("streamlare") -> StreamlareExtractor(client).videosFromUrl(url, prefix = prefix)
             embedUrl.contains("yourupload") || embedUrl.contains("upload") -> YourUploadExtractor(client).videoFromUrl(url, headers = headers, prefix = prefix)
@@ -190,8 +191,8 @@ class Gnula : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             embedUrl.contains("fastream") -> FastreamExtractor(client, headers).videosFromUrl(url, prefix = "$prefix Fastream:")
             embedUrl.contains("upstream") -> UpstreamExtractor(client).videosFromUrl(url, prefix = prefix)
             embedUrl.contains("streamtape") || embedUrl.contains("stp") || embedUrl.contains("stape") -> listOf(StreamTapeExtractor(client).videoFromUrl(url, quality = "$prefix StreamTape")!!)
-            embedUrl.contains("ahvsh") || embedUrl.contains("streamhide") || embedUrl.contains("guccihide") || embedUrl.contains("streamvid") -> StreamHideVidExtractor(client).videosFromUrl(url, "$prefix StreamHide")
-            else -> emptyList()
+            embedUrl.contains("ahvsh") || embedUrl.contains("streamhide") || embedUrl.contains("guccihide") || embedUrl.contains("streamvid") -> StreamHideVidExtractor(client, headers).videosFromUrl(url, videoNameGen = { "$prefix StreamHideVid:$it" })
+            else -> UniversalExtractor(client).videosFromUrl(url, headers, prefix = prefix)
         }
     }
 

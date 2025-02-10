@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.lib.chillxextractor
 
+import android.util.Log
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.cryptoaes.CryptoAES
@@ -51,6 +52,7 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
         val subtitleList = buildList {
             val subtitles = REGEX_SUBS.findAll(decryptedScript)
             subtitles.forEach {
+                Log.d("ChillxExtractor", "Found subtitle: ${it.groupValues}")
                 add(Track(it.groupValues[1], decodeUnicodeEscape(it.groupValues[2])))
             }
         }

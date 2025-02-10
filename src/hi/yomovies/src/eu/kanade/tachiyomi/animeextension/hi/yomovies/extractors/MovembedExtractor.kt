@@ -39,7 +39,7 @@ class MovembedExtractor(private val client: OkHttpClient, private val headers: H
                     listOf(Track(t, url.queryParameter("c1_label") ?: "English"))
                 } ?: emptyList()
 
-                DoodExtractor(client).videoFromUrl(iframeUrl, "(movembed) Dood", externalSubs = subtitleList)?.let(::listOf) ?: emptyList()
+                DoodExtractor(client).videoFromUrl(iframeUrl, "(movembed)", externalSubs = subtitleList)?.let(::listOf) ?: emptyList()
             }
             else -> emptyList()
         }

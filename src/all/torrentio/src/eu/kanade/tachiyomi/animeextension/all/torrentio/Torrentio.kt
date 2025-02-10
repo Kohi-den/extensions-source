@@ -22,7 +22,6 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -60,7 +59,12 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
         {"query": "${query.replace("\n", "")}", "variables": $variables}
         """.trimIndent().toRequestBody("application/json; charset=utf-8".toMediaType())
 
-        return POST("https://apis.justwatch.com/graphql", headers = headers, body = requestBody)
+        val request = Request.Builder()
+            .url("https://apis.justwatch.com/graphql")
+            .post(requestBody)
+            .build()
+
+        return request
     }
 
     // ============================== JustWatch Api Query ======================
@@ -135,7 +139,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
                 val content = node.content ?: return@mapNotNull null
 
                 SAnime.create().apply {
-                    url = "${content.externalIds?.imdbId ?: ""},${node.objectType ?: ""},${content.fullPath ?: ""}"
+                    url = "${content.externalIds?.imdbId ?: ""},${if (node.objectType == "SHOW") "series" else node.objectType ?: ""},${content.fullPath ?: ""}"
                     title = content.title ?: ""
                     thumbnail_url = "https://images.justwatch.com${content.posterUrl?.replace("{profile}", "s276")?.replace("{format}", "webp")}"
                     description = content.shortDescription ?: ""
@@ -155,7 +159,31 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
 
     // ============================== Popular ===============================
     override fun popularAnimeRequest(page: Int): Request {
-        return searchAnimeRequest(page, "", AnimeFilterList())
+        val country = preferences.getString(PREF_REGION_KEY, PREF_REGION_DEFAULT)
+        val language = preferences.getString(PREF_JW_LANG_KEY, PREF_JW_LANG_DEFAULT)
+        val perPage = 40
+        val packages = ""
+        val year = 0
+        val objectTypes = ""
+        val variables = """
+            {
+              "first": $perPage,
+              "offset": ${(page - 1) * perPage},
+              "platform": "WEB",
+              "country": "$country",
+              "language": "$language",
+              "searchQuery": "",
+              "packages": [$packages],
+              "objectTypes": [$objectTypes],
+              "popularTitlesSortBy": "TRENDING",
+              "releaseYear": {
+                "min": $year,
+                "max": $year
+              }
+            }
+        """.trimIndent()
+
+        return makeGraphQLRequest(justWatchQuery(), variables)
     }
 
     override fun popularAnimeParse(response: Response): AnimesPage {
@@ -171,7 +199,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
     override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
         return if (query.startsWith(PREFIX_SEARCH)) { // URL intent handler
             val id = query.removePrefix(PREFIX_SEARCH)
-            client.newCall(GET("$baseUrl/anime/$id", headers))
+            client.newCall(GET("$baseUrl/anime/$id"))
                 .awaitSuccess()
                 .use(::searchAnimeByIdParse)
         } else {
@@ -198,7 +226,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
               "platform": "WEB",
               "country": "$country",
               "language": "$language",
-              "searchQuery": "${query.replace(searchQueryRegex, "").trim()}",
+              "searchQuery": "${query.replace(Regex("[^A-Za-z0-9 ]"), "").trim()}",
               "packages": [$packages],
               "objectTypes": [$objectTypes],
               "popularTitlesSortBy": "TRENDING",
@@ -210,10 +238,6 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
         """.trimIndent()
 
         return makeGraphQLRequest(justWatchQuery(), variables)
-    }
-
-    private val searchQueryRegex by lazy {
-        Regex("[^A-Za-z0-9 ]")
     }
 
     override fun searchAnimeParse(response: Response) = popularAnimeParse(response)
@@ -288,18 +312,18 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
         val responseString = response.body.string()
         val episodeList = json.decodeFromString<EpisodeList>(responseString)
         return when (episodeList.meta?.type) {
-            "show" -> {
+            "series" -> {
                 episodeList.meta.videos
                     ?.let { videos ->
-                        if (preferences.getBoolean(UPCOMING_EP_KEY, UPCOMING_EP_DEFAULT)) { videos } else { videos.filter { video -> (video.firstAired?.let { parseDate(it) } ?: 0L) <= System.currentTimeMillis() } }
+                        if (preferences.getBoolean(UPCOMING_EP_KEY, UPCOMING_EP_DEFAULT)) { videos } else { videos.filter { video -> (video.released?.let { parseDate(it) } ?: 0L) <= System.currentTimeMillis() } }
                     }
                     ?.map { video ->
                         SEpisode.create().apply {
                             episode_number = "${video.season}.${video.number}".toFloat()
                             url = "/stream/series/${video.id}.json"
-                            date_upload = video.firstAired?.let { parseDate(it) } ?: 0L
-                            name = "S${video.season.toString().trim()}:E${video.number} - ${video.name}"
-                            scanlator = (video.firstAired?.let { parseDate(it) } ?: 0L)
+                            date_upload = video.released?.let { parseDate(it) } ?: 0L
+                            name = "S${video.season.toString().trim()}:E${video.number} - ${video.title}"
+                            scanlator = (video.released?.let { parseDate(it) } ?: 0L)
                                 .takeIf { it > System.currentTimeMillis() }
                                 ?.let { "Upcoming" }
                                 ?: ""
@@ -402,7 +426,8 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
             udp://tracker.tiny-vps.com:6969/announce,
             udp://tracker.torrent.eu.org:451/announce,
             udp://valakas.rollo.dnsabr.com:2710/announce,
-            udp://www.torrent.eu.org:451/announce
+            udp://www.torrent.eu.org:451/announce,
+             ${fetchTrackers().split("\n").joinToString(",")}
         """.trimIndent()
 
         return streamList.streams?.map { stream ->
@@ -426,6 +451,17 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
                 { isEfficient && !arrayOf("hevc", "265", "av1").any { q -> it.quality.contains(q, true) } },
             ),
         )
+    }
+
+    private fun fetchTrackers(): String {
+        val request = Request.Builder()
+            .url("https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt")
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw Exception("Unexpected code $response")
+            return response.body.string().trim()
+        }
     }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
@@ -652,7 +688,10 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
             "🇫🇷 Torrent9",
             "🇪🇸 MejorTorrent",
             "🇲🇽 Cinecalidad",
+            "🇮🇹 ilCorsaroNero",
+            "🇪🇸 Wolfmax4k",
         )
+
         private val PREF_PROVIDERS_VALUE = arrayOf(
             "yts",
             "eztv",
@@ -673,6 +712,8 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
             "torrent9",
             "mejortorrent",
             "cinecalidad",
+            "ilcorsaronero",
+            "wolfmax4k",
         )
 
         private val PREF_DEFAULT_PROVIDERS_VALUE = arrayOf(
@@ -691,12 +732,15 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
         )
         private val PREF_PROVIDERS_DEFAULT = PREF_DEFAULT_PROVIDERS_VALUE.toSet()
 
-        // Qualities/Resolutions
+        // / Qualities/Resolutions
         private const val PREF_QUALITY_KEY = "quality_selection"
         private val PREF_QUALITY = arrayOf(
             "BluRay REMUX",
             "HDR/HDR10+/Dolby Vision",
             "Dolby Vision",
+            "Dolby Vision + HDR",
+            "3D",
+            "Non 3D (DO NOT SELECT IF NOT SURE)",
             "4k",
             "1080p",
             "720p",
@@ -706,10 +750,14 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
             "Cam",
             "Unknown",
         )
+
         private val PREF_QUALITY_VALUE = arrayOf(
             "brremux",
             "hdrall",
             "dolbyvision",
+            "dolbyvisionwithhdr",
+            "threed",
+            "nonthreed",
             "4k",
             "1080p",
             "720p",
@@ -832,7 +880,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
         private val PREF_LANG_DEFAULT = setOf<String>()
 
         private const val UPCOMING_EP_KEY = "upcoming_ep"
-        private const val UPCOMING_EP_DEFAULT = true
+        private const val UPCOMING_EP_DEFAULT = false
 
         private const val IS_DUB_KEY = "dubbed"
         private const val IS_DUB_DEFAULT = false

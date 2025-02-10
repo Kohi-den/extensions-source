@@ -1,7 +1,7 @@
 ext {
     extName = 'VerAnimes'
     extClass = '.VerAnimes'
-    extVersionCode = 6
+    extVersionCode = 10
 }
 
 apply from: "$rootDir/common.gradle"
@@ -13,4 +13,5 @@ dependencies {
     implementation(project(':lib:voe-extractor'))
     implementation(project(':lib:yourupload-extractor'))
     implementation(project(':lib:vidguard-extractor'))
+    implementation(project(':lib:universal-extractor'))
 }

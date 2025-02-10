@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.es.animemovil
 
 import android.app.Application
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -20,6 +21,7 @@ import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
 import eu.kanade.tachiyomi.lib.streamlareextractor.StreamlareExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.upstreamextractor.UpstreamExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
@@ -233,50 +235,57 @@ class AnimeMovil : ConfigurableAnimeSource, AnimeHttpSource() {
         val videoList = mutableListOf<Video>()
         val embedUrl = url.lowercase()
         try {
-            if (embedUrl.contains("voe")) {
-                VoeExtractor(client).videosFromUrl(url).also(videoList::addAll)
+            return when {
+                embedUrl.contains("voe") -> {
+                    VoeExtractor(client).videosFromUrl(url).also(videoList::addAll)
+                }
+                embedUrl.contains("filemoon") || embedUrl.contains("moonplayer") -> {
+                    FilemoonExtractor(client).videosFromUrl(url, prefix = "Filemoon:").also(videoList::addAll)
+                }
+                embedUrl.contains("uqload") -> {
+                    UqloadExtractor(client).videosFromUrl(url).also(videoList::addAll)
+                }
+                embedUrl.contains("mp4upload") -> {
+                    val newHeaders = headers.newBuilder().add("referer", "https://re.animepelix.net/").build()
+                    Mp4uploadExtractor(client).videosFromUrl(url, newHeaders).also(videoList::addAll)
+                }
+                embedUrl.contains("wishembed") || embedUrl.contains("streamwish") || embedUrl.contains("wish") -> {
+                    val docHeaders = headers.newBuilder()
+                        .add("Referer", "$baseUrl/")
+                        .build()
+                    StreamWishExtractor(client, docHeaders).videosFromUrl(url, videoNameGen = { "StreamWish:$it" }).also(videoList::addAll)
+                }
+                embedUrl.contains("doodstream") || embedUrl.contains("dood.") -> {
+                    DoodExtractor(client).videosFromUrl(url, "DoodStream").also(videoList::addAll)
+                }
+                embedUrl.contains("streamlare") -> {
+                    StreamlareExtractor(client).videosFromUrl(url).also(videoList::addAll)
+                }
+                embedUrl.contains("yourupload") -> {
+                    YourUploadExtractor(client).videoFromUrl(url, headers = headers).also(videoList::addAll)
+                }
+                embedUrl.contains("burstcloud") || embedUrl.contains("burst") -> {
+                    BurstCloudExtractor(client).videoFromUrl(url, headers = headers).also(videoList::addAll)
+                }
+                embedUrl.contains("fastream") -> {
+                    FastreamExtractor(client, headers).videosFromUrl(url).also(videoList::addAll)
+                }
+                embedUrl.contains("upstream") -> {
+                    UpstreamExtractor(client).videosFromUrl(url).also(videoList::addAll)
+                }
+                embedUrl.contains("streamtape") -> {
+                    StreamTapeExtractor(client).videosFromUrl(url).also(videoList::addAll)
+                }
+                embedUrl.contains("filelions") || embedUrl.contains("lion") -> {
+                    StreamWishExtractor(client, headers).videosFromUrl(url, videoNameGen = { "FileLions:$it" }).also(videoList::addAll)
+                }
+                else -> {
+                    UniversalExtractor(client).videosFromUrl(url, headers).also(videoList::addAll)
+                }
             }
-            if (embedUrl.contains("filemoon") || embedUrl.contains("moonplayer")) {
-                FilemoonExtractor(client).videosFromUrl(url, prefix = "Filemoon:").also(videoList::addAll)
-            }
-            if (embedUrl.contains("uqload")) {
-                UqloadExtractor(client).videosFromUrl(url).also(videoList::addAll)
-            }
-            if (embedUrl.contains("mp4upload")) {
-                val newHeaders = headers.newBuilder().add("referer", "https://re.animepelix.net/").build()
-                Mp4uploadExtractor(client).videosFromUrl(url, newHeaders).also(videoList::addAll)
-            }
-            if (embedUrl.contains("wishembed") || embedUrl.contains("streamwish") || embedUrl.contains("wish")) {
-                val docHeaders = headers.newBuilder()
-                    .add("Referer", "$baseUrl/")
-                    .build()
-                StreamWishExtractor(client, docHeaders).videosFromUrl(url, videoNameGen = { "StreamWish:$it" }).also(videoList::addAll)
-            }
-            if (embedUrl.contains("doodstream") || embedUrl.contains("dood.")) {
-                DoodExtractor(client).videoFromUrl(url, "DoodStream", false)?.let { videoList.add(it) }
-            }
-            if (embedUrl.contains("streamlare")) {
-                StreamlareExtractor(client).videosFromUrl(url).also(videoList::addAll)
-            }
-            if (embedUrl.contains("yourupload")) {
-                YourUploadExtractor(client).videoFromUrl(url, headers = headers).also(videoList::addAll)
-            }
-            if (embedUrl.contains("burstcloud") || embedUrl.contains("burst")) {
-                BurstCloudExtractor(client).videoFromUrl(url, headers = headers).also(videoList::addAll)
-            }
-            if (embedUrl.contains("fastream")) {
-                FastreamExtractor(client, headers).videosFromUrl(url).also(videoList::addAll)
-            }
-            if (embedUrl.contains("upstream")) {
-                UpstreamExtractor(client).videosFromUrl(url).also(videoList::addAll)
-            }
-            if (embedUrl.contains("streamtape")) {
-                StreamTapeExtractor(client).videoFromUrl(url)?.also(videoList::add)
-            }
-            if (embedUrl.contains("filelions") || embedUrl.contains("lion")) {
-                StreamWishExtractor(client, headers).videosFromUrl(url, videoNameGen = { "FileLions:$it" }).also(videoList::addAll)
-            }
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+            Log.e("AnimeMovil", "Error: Server not supported")
+        }
         return videoList
     }
 
