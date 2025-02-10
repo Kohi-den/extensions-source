@@ -20,6 +20,7 @@ typealias BigIntegerJson =
 
 @OptIn(ExperimentalSerializationApi::class)
 private object BigIntegerSerializer : KSerializer<BigInteger> {
+
     override val descriptor = PrimitiveSerialDescriptor("java.math.BigInteger", PrimitiveKind.LONG)
 
     override fun deserialize(decoder: Decoder): BigInteger =

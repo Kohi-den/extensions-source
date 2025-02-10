@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.SharedPreferences
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
-import eu.kanade.tachiyomi.animeextension.fr.otakufr.extractors.UpstreamExtractor
 import eu.kanade.tachiyomi.animeextension.fr.otakufr.extractors.VidbmExtractor
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
@@ -18,6 +17,7 @@ import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
 import eu.kanade.tachiyomi.lib.sendvidextractor.SendvidExtractor
 import eu.kanade.tachiyomi.lib.sibnetextractor.SibnetExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.upstreamextractor.UpstreamExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
@@ -37,7 +37,7 @@ class OtakuFR : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "OtakuFR"
 
-    override val baseUrl = "https://otakufr.co"
+    override val baseUrl = "https://otakufr.cc"
 
     override val lang = "fr"
 
@@ -145,7 +145,7 @@ class OtakuFR : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val streamwishExtractor by lazy { StreamWishExtractor(client, headers) }
     private val vidbmExtractor by lazy { VidbmExtractor(client, headers) }
     private val sendvidExtractor by lazy { SendvidExtractor(client, headers) }
-    private val upstreamExtractor by lazy { UpstreamExtractor(client, headers) }
+    private val upstreamExtractor by lazy { UpstreamExtractor(client) }
     private val okruExtractor by lazy { OkruExtractor(client) }
     private val doodExtractor by lazy { DoodExtractor(client) }
     private val voeExtractor by lazy { VoeExtractor(client) }
@@ -155,31 +155,28 @@ class OtakuFR : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val document = response.asJsoup()
 
         val serversList = document.select("div.tab-content iframe[src]").mapNotNull {
-            val url = it.attr("abs:src")
+            val url = it.attr("abs:data-src")
 
             if (url.contains("parisanime.com")) {
                 val docHeaders = headers.newBuilder().apply {
-                    add("Accept", "*/*")
-                    add("Host", url.toHttpUrl().host)
-                    add("Referer", url)
-                    add("X-Requested-With", "XMLHttpRequest")
+                    set("X-Requested-With", "XMLHttpRequest")
                 }.build()
-
                 val newDoc = client.newCall(
                     GET(url, headers = docHeaders),
                 ).execute().asJsoup()
-                newDoc.selectFirst("div[data-url]")?.attr("data-url")
+                val resUrl = newDoc.selectFirst("div[data-url]")?.attr("data-url")
+                if (resUrl!!.startsWith("//")) "https:$resUrl" else resUrl
             } else {
                 url
             }
         }
-
         return serversList.parallelCatchingFlatMapBlocking(::getHosterVideos)
     }
 
     private fun getHosterVideos(host: String): List<Video> {
         return when {
-            host.startsWith("https://doo") -> doodExtractor.videosFromUrl(host, quality = "Doodstream")
+            host.startsWith("https://doo") || host.contains("d0000d")
+            -> doodExtractor.videosFromUrl(host, quality = "Doodstream")
             host.contains("streamwish") -> streamwishExtractor.videosFromUrl(host)
             host.contains("sibnet.ru") -> sibnetExtractor.videosFromUrl(host)
             host.contains("vadbam") -> vidbmExtractor.videosFromUrl(host)

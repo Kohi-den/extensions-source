@@ -1,7 +1,7 @@
 ext {
     extName = 'FrAnime'
     extClass = '.FrAnime'
-    extVersionCode = 13
+    extVersionCode = 16
     isNsfw = true
 }
 apply from: "$rootDir/common.gradle"
@@ -11,5 +11,5 @@ dependencies {
     implementation(project(':lib:vk-extractor'))
     implementation(project(':lib:sendvid-extractor'))
     implementation(project(':lib:sibnet-extractor'))
-    implementation project(':lib:vidmoly-extractor')
+    implementation(project(':lib:vidmoly-extractor'))
 }

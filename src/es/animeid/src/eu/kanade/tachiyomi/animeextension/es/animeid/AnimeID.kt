@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import kotlinx.serialization.json.Json
@@ -120,6 +121,7 @@ class AnimeID : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     // ============================ Video Links =============================
     private val streamwishExtractor by lazy { StreamWishExtractor(client, headers) }
     private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
+    private val universalExtractor by lazy { UniversalExtractor(client) }
 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
@@ -128,11 +130,10 @@ class AnimeID : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             val jsonString = script.attr("data")
             val jsonUnescape = unescapeJava(jsonString)!!.replace("\\", "")
             val url = fetchUrls(jsonUnescape).firstOrNull()?.replace("\\\\", "\\") ?: ""
-            if (url.contains("streamtape") || url.contains("tape") || url.contains("stp")) {
-                streamtapeExtractor.videosFromUrl(url).also(videoList::addAll)
-            }
-            if (url.contains("wish") || url.contains("fviplions") || url.contains("obeywish")) {
-                streamwishExtractor.videosFromUrl(url, videoNameGen = { "StreamWish:$it" }).also(videoList::addAll)
+            return when {
+                url.contains("streamtape") || url.contains("tape") || url.contains("stp") -> streamtapeExtractor.videosFromUrl(url)
+                url.contains("wish") || url.contains("fviplions") || url.contains("obeywish") -> streamwishExtractor.videosFromUrl(url, videoNameGen = { "StreamWish:$it" })
+                else -> universalExtractor.videosFromUrl(url, headers)
             }
         }
         return videoList

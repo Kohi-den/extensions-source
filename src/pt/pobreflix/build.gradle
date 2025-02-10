@@ -3,7 +3,7 @@ ext {
     extClass = '.Pobreflix'
     themePkg = 'dooplay'
     baseUrl = 'https://pobreflix.global'
-    overrideVersionCode = 15
+    overrideVersionCode = 16
     isNsfw = true
 }
 
@@ -11,7 +11,7 @@ apply from: "$rootDir/common.gradle"
 
 dependencies {
     implementation(project(":lib:filemoon-extractor"))
-    implementation(project(":lib:fireplayer-extractor"))
+    implementation(project(':lib:fireplayer-extractor'))
     implementation(project(":lib:streamwish-extractor"))
     implementation(project(":lib:streamtape-extractor"))
     implementation(project(":lib:playlist-utils"))

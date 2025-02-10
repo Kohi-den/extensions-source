@@ -51,7 +51,7 @@ class Hds : DooPlay(
     data class VideoLinkDTO(@SerialName("embed_url") val url: String)
 
     private val fileMoonExtractor by lazy { FilemoonExtractor(client) }
-    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client) }
+    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client, headers) }
 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()

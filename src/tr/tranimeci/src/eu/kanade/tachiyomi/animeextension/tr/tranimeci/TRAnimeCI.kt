@@ -69,6 +69,7 @@ class TRAnimeCI : AnimeStream(
             .addIfNotBlank("season[]", params.season)
             .addIfNotBlank("format[]", params.type)
             .addIfNotBlank("studio[]", params.studio)
+            .addIfNotBlank("name", query)
             .build()
 
         return GET(url.toString(), headers)
@@ -99,6 +100,7 @@ class TRAnimeCI : AnimeStream(
     // =========================== Anime Details ============================
     override val animeDetailsSelector = "div.infox"
     override val animeStatusText = "Durum"
+    override val animeTitleSelector = ".entry-title"
 
     override fun parseStatus(statusString: String?): Int {
         return when (statusString?.trim()?.lowercase()) {

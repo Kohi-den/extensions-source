@@ -183,7 +183,7 @@ class AniSama : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     private val voeExtractor by lazy { VoeExtractor(client) }
     private val vidCdnExtractor by lazy { VidCdnExtractor(client) }
     private val doodExtractor by lazy { DoodExtractor(client) }
-    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client) }
+    private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client, headers) }
 
     override fun videoListRequest(episode: SEpisode) = GET(
         "$baseUrl${episode.url}",
@@ -210,7 +210,7 @@ class AniSama : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
                         contains("sendvid.com") -> sendvidExtractor.videosFromUrl(this, prefix)
                         contains("voe.sx") -> voeExtractor.videosFromUrl(this, prefix)
                         contains(Regex("(d000d|dood)")) -> doodExtractor.videosFromUrl(this, "${prefix}DoodStream")
-                        contains("vidhide") -> streamHideVidExtractor.videosFromUrl(this, prefix)
+                        contains("vidhide") -> streamHideVidExtractor.videosFromUrl(this, videoNameGen = { "$prefix$it StreamHideVid" })
                         else -> emptyList()
                     }
                 }

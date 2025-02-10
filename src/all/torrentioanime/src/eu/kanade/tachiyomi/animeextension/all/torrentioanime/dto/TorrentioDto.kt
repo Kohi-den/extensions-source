@@ -73,7 +73,11 @@ data class AnilistMedia(
     val status: String? = null,
     val tags: List<AnilistTag>? = null,
     val genres: List<String>? = null,
+    val episodes: Int? = null,
+    val format: String? = null,
     val studios: AnilistStudios? = null,
+    val season: String? = null,
+    val seasonYear: Int? = null,
     val countryOfOrigin: String? = null,
     val isAdult: Boolean = false,
 )

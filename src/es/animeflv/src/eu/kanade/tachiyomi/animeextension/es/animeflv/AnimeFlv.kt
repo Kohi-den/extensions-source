@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
@@ -57,7 +58,7 @@ class AnimeFlv : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun popularAnimeSelector(): String = "div.Container ul.ListAnimes li article"
 
-    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/browse?order=rating&page=$page")
+    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/browse?order=rating&page=$page", headers)
 
     override fun popularAnimeFromElement(element: Element): SAnime {
         val anime = SAnime.create()
@@ -108,18 +109,19 @@ class AnimeFlv : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val okruExtractor by lazy { OkruExtractor(client) }
     private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
     private val streamWishExtractor by lazy { StreamWishExtractor(client, headers.newBuilder().add("Referer", "$baseUrl/").build()) }
+    private val universalExtractor by lazy { UniversalExtractor(client) }
 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
         val jsonString = document.selectFirst("script:containsData(var videos = {)")?.data() ?: return emptyList()
         val responseString = jsonString.substringAfter("var videos =").substringBefore(";").trim()
-        return json.decodeFromString<ServerModel>(responseString).sub.parallelCatchingFlatMapBlocking {
+        return json.decodeFromString<ServerModel>(responseString).sub.parallelCatchingFlatMapBlocking { it ->
             when (it.title) {
                 "Stape" -> listOf(streamTapeExtractor.videoFromUrl(it.url ?: it.code)!!)
                 "Okru" -> okruExtractor.videosFromUrl(it.url ?: it.code)
                 "YourUpload" -> yourUploadExtractor.videoFromUrl(it.url ?: it.code, headers = headers)
                 "SW" -> streamWishExtractor.videosFromUrl(it.url ?: it.code, videoNameGen = { "StreamWish:$it" })
-                else -> emptyList()
+                else -> universalExtractor.videosFromUrl(it.url ?: it.code, headers)
             }
         }
     }
@@ -132,7 +134,6 @@ class AnimeFlv : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val params = AnimeFlvFilters.getSearchParameters(filters)
-
         return when {
             query.isNotBlank() -> GET("$baseUrl/browse?q=$query&page=$page")
             params.filter.isNotBlank() -> GET("$baseUrl/browse${params.getQuery()}&page=$page")
@@ -166,13 +167,19 @@ class AnimeFlv : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
     }
 
-    override fun latestUpdatesNextPageSelector() = popularAnimeNextPageSelector()
+    override fun latestUpdatesRequest(page: Int) = GET(baseUrl, headers)
 
-    override fun latestUpdatesFromElement(element: Element) = popularAnimeFromElement(element)
+    override fun latestUpdatesNextPageSelector() = null
 
-    override fun latestUpdatesRequest(page: Int) = GET("$baseUrl/browse?order=added&page=$page")
+    override fun latestUpdatesSelector() = "div.Container ul.ListEpisodios li a.fa-play"
 
-    override fun latestUpdatesSelector() = popularAnimeSelector()
+    override fun latestUpdatesFromElement(element: Element): SAnime {
+        val anime = SAnime.create()
+        anime.setUrlWithoutDomain(element.select("a").attr("abs:href").replace("/ver/", "/anime/").substringBeforeLast("-"))
+        anime.title = element.select("strong.Title").text()
+        anime.thumbnail_url = element.select("span.Image img").attr("abs:src").replace("thumbs", "covers")
+        return anime
+    }
 
     override fun List<Video>.sort(): List<Video> {
         val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
