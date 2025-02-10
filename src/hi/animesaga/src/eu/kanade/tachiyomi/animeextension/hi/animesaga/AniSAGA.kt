@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.hi.anisaga
+package eu.kanade.tachiyomi.animeextension.hi.animesaga
 
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.chillxextractor.ChillxExtractor
