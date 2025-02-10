@@ -4,7 +4,7 @@ ext {
     extVersionCode = 15.6
     themePkg = 'dooplay'
     baseUrl = 'https://www.anisaga.org'
-    overrideVersionCode = 14.2
+    overrideVersionCode = 15
     isNsfw = false
 }
 
