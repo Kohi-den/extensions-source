@@ -12,8 +12,6 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.cdaextractor.CdaPlExtractor
 import eu.kanade.tachiyomi.lib.dailymotionextractor.DailymotionExtractor
-import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
-import eu.kanade.tachiyomi.lib.lycorisextractor.LycorisCafeExtractor
 import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
 import eu.kanade.tachiyomi.lib.sibnetextractor.SibnetExtractor
 import eu.kanade.tachiyomi.lib.vkextractor.VkExtractor
@@ -59,7 +57,7 @@ class OgladajAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // ============================== Popular ===============================
     override fun popularAnimeRequest(page: Int): Request {
-        return GET("$baseUrl/search/page/$page", apiHeaders)
+        return GET("$baseUrl/search/page/$page", headers)
     }
     override fun popularAnimeSelector(): String = "div#anime_main div.card.bg-white"
 
@@ -74,7 +72,7 @@ class OgladajAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // =============================== Latest ===============================
 
-    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/search/new/$page", apiHeaders)
+    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/search/new/$page", headers)
 
     override fun latestUpdatesSelector(): String = popularAnimeSelector()
 
@@ -84,7 +82,7 @@ class OgladajAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // =============================== Search ===============================
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request = GET("$baseUrl/search/name/$query", apiHeaders)
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request = GET("$baseUrl/search/name/$query", headers)
 
     override fun searchAnimeFromElement(element: Element): SAnime = popularAnimeFromElement(element)
 
@@ -178,8 +176,6 @@ class OgladajAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
     private val dailymotionExtractor by lazy { DailymotionExtractor(client, headers) }
     private val sibnetExtractor by lazy { SibnetExtractor(client) }
-    private val doodExtractor by lazy { DoodExtractor(client) }
-    private val lycorisExtractor by lazy { LycorisCafeExtractor(client) }
 
     override fun videoListParse(response: Response): List<Video> {
         val jsonResponse = json.decodeFromString<ApiResponse>(response.body.string())
@@ -209,7 +205,7 @@ class OgladajAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 }
             }
 
-            if (player.url !in listOf("vk", "cda", "mp4upload", "sibnet", "dailymotion", "dood", "lycoris")) {
+            if (player.url !in listOf("vk", "cda", "mp4upload", "sibnet", "dailymotion")) {
                 return@mapNotNull null
             }
             val url = getPlayerUrl(player.id)
@@ -232,12 +228,6 @@ class OgladajAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 }
                 serverUrl.contains("sibnet.ru") -> {
                     sibnetExtractor.videosFromUrl(serverUrl, prefix)
-                }
-                serverUrl.contains("dood") -> {
-                    doodExtractor.videosFromUrl(serverUrl, "$prefix Dood")
-                }
-                serverUrl.contains("lycoris.cafe") -> {
-                    lycorisExtractor.getVideosFromUrl(serverUrl, headers, prefix)
                 }
                 else -> emptyList()
             }
