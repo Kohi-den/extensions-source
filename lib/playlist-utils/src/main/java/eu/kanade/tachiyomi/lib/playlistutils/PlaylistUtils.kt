@@ -336,7 +336,7 @@ class PlaylistUtils(private val client: OkHttpClient, private val headers: Heade
     // ============================= Utilities ==============================
 
     private fun stnQuality(quality: String): String {
-        val intQuality = quality.toInt()
+        val intQuality = quality.trim().toInt()
         val standardQualities = listOf(144, 240, 360, 480, 720, 1080)
         val result =  standardQualities.minByOrNull { abs(it - intQuality) } ?: quality
         return "${result}p"
