@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.lib.cdaextractor.CdaPlExtractor
 import eu.kanade.tachiyomi.lib.dailymotionextractor.DailymotionExtractor
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
+import eu.kanade.tachiyomi.lib.googledriveextractor.GoogleDriveExtractor
 import eu.kanade.tachiyomi.lib.luluextractor.LuluExtractor
 import eu.kanade.tachiyomi.lib.lycorisextractor.LycorisCafeExtractor
 import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
@@ -137,6 +138,7 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
     private val doodExtractor by lazy { DoodExtractor(client) }
     private val lycorisExtractor by lazy { LycorisCafeExtractor(client) }
     private val luluExtractor by lazy { LuluExtractor(client) }
+    private val googledriveExtractor by lazy { GoogleDriveExtractor(client, headers) }
 
     override fun videoListParse(response: Response): List<Video> {
         val videolist: List<VideoList> = json.decodeFromString(response.body.string())
@@ -160,10 +162,13 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
                     "dood",
                     "lycoris.cafe",
                     "lulustream",
+                    "gdrive",
+                    "google drive",
                 )
             ) {
                 return@mapNotNull null
             }
+
             Pair(player.player, prefix)
         }
         // Jeśli dodadzą opcje z mozliwością edytowania mpv to zrobić tak ze jak bedą odwrócone kolory to ustawia dane do mkv <3
@@ -196,8 +201,15 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
                 serverUrl.contains("lycoris.cafe") -> {
                     lycorisExtractor.getVideosFromUrl(serverUrl, headers, prefix)
                 }
+
                 serverUrl.contains("luluvdo.com") -> {
                     luluExtractor.videosFromUrl(serverUrl, prefix)
+                }
+
+                serverUrl.contains("drive.google.com") -> {
+                    val regex = Regex("/d/([a-zA-Z0-9_-]+)")
+                    val id = regex.find(serverUrl)?.groupValues?.get(1).toString()
+                    googledriveExtractor.videosFromUrl(id, "${prefix}Gdrive -")
                 }
 
                 else -> emptyList()
