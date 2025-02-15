@@ -7,11 +7,3 @@ ext {
 
 apply from: "$rootDir/common.gradle"
 
-dependencies {
-    implementation(project(':lib:dailymotion-extractor'))
-    implementation(project(':lib:mp4upload-extractor'))
-    implementation(project(':lib:sibnet-extractor'))
-    implementation(project(':lib:vk-extractor'))
-    implementation(project(':lib:googledrive-extractor'))
-    implementation(project(':lib:cda-extractor'))
-}
