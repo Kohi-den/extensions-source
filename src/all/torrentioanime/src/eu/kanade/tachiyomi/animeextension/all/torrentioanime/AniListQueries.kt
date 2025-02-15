@@ -72,7 +72,7 @@ fun anilistLatestQuery() = """
                 airingAt_lesser: ${System.currentTimeMillis() / 1000 - 10000},
                 sort: %sort
             ) {
-                media(isAdult: false) {
+                media {
                     id
                     title {
                         romaji
