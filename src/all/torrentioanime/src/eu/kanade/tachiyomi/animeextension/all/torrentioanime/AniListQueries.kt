@@ -29,7 +29,8 @@ fun anilistQuery() = """
                 startDate_like: %year,
                 seasonYear: %seasonYear,
                 season: %season,
-                format_in: %format
+                format_in: %format,
+                isAdult: false
             ) {
                 id
                 title {
@@ -71,7 +72,7 @@ fun anilistLatestQuery() = """
                 airingAt_lesser: ${System.currentTimeMillis() / 1000 - 10000},
                 sort: %sort
             ) {
-                media {
+                media(isAdult: false) {
                     id
                     title {
                         romaji
@@ -103,7 +104,7 @@ fun anilistLatestQuery() = """
 
 fun getDetailsQuery() = """
 query media(%id: Int) {
-  Media(id: %id) {
+  Media(id: %id, isAdult: false) {
     id
     title {
         romaji
@@ -134,26 +135,6 @@ query media(%id: Int) {
           name
         }
     }
-  }
-}
-""".toQuery()
-
-fun getEpisodeQuery() = """
-query media(%id: Int, %type: MediaType) {
-  Media(id: %id, type: %type) {
-    episodes
-    nextAiringEpisode {
-      episode
-    }
-  }
-}
-""".toQuery()
-
-fun getMalIdQuery() = """
-query media(%id: Int, %type: MediaType) {
-  Media(id: %id, type: %type) {
-    idMal
-    id
   }
 }
 """.toQuery()
