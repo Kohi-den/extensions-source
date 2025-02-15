@@ -1,0 +1,20 @@
+ext {
+    extName = 'Docchi'
+    extClass = '.Docchi'
+    extVersionCode = 2
+    isNsfw = true
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:dailymotion-extractor'))
+    implementation(project(':lib:mp4upload-extractor'))
+    implementation(project(':lib:sibnet-extractor'))
+    implementation(project(':lib:vk-extractor'))
+    implementation(project(':lib:googledrive-extractor'))
+    implementation(project(':lib:cda-extractor'))
+    implementation(project(':lib:dood-extractor'))
+    implementation(project(':lib:lycoris-extractor'))
+    implementation(project(':lib:lulu-extractor'))
+}
