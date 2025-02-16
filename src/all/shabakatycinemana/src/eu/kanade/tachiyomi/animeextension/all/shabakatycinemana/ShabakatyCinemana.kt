@@ -268,7 +268,7 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
 
         var url = apiBaseUrl.toHttpUrl()
         if (isBrowsing) {
-            if (languageFilter.state != 0) {
+            if (languageFilter.state != 0 && mainCategory.isNotBlank()) {
                 url = url.newBuilder()
                     .addPathSegment("videosByCategoryAndLanguage")
                     .addQueryParameter("language_id", language)
