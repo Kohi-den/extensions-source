@@ -430,7 +430,6 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
         SingleSelectFilter(
             KIND_FILTER_NAME,
             KINDS_LIST,
-            KINDS_LIST.map { it.first }.indexOf(preferences.getString(PREF_LATEST_KIND_KEY, PREF_LATEST_KIND_KEY)!!),
         ),
         MultipleSelectFilter(
             MAIN_CATEGORY_FILTER_NAME,
