@@ -136,9 +136,8 @@ class Xfani : AnimeHttpSource(), ConfigurableAnimeSource {
             SEpisode.create().apply {
                 name = it.text()
                 url = it.attr("href")
-                episode_number = numberRegex.find(name)?.value?.toFloat() ?: -1F
             }
-        }.sortedByDescending { it.episode_number }
+        }.reversed()
     }
 
     override fun videoListParse(response: Response): List<Video> {
@@ -155,9 +154,11 @@ class Xfani : AnimeHttpSource(), ConfigurableAnimeSource {
         val currentEpisodeName = allEpisodeElements.firstNotNullOfOrNull { elements ->
             elements.firstOrNull { it.attr("href") == currentPath }?.select("span")?.text()
         }
-        val targetEpisodeNumber = currentEpisodeName?.let { numberRegex.find(it)?.value?.toIntOrNull() } ?: -1
+        val targetEpisodeNumber =
+            currentEpisodeName?.let { numberRegex.find(it)?.value?.toIntOrNull() } ?: -1
         val sourceList = allEpisodeElements.map { elements ->
-            elements.findSourceOrNull { name, _ -> numberRegex.find(name)?.value?.toIntOrNull() == targetEpisodeNumber }
+            elements.findSourceOrNull { name, _ -> name == currentEpisodeName }
+                ?: elements.findSourceOrNull { name, _ -> numberRegex.find(name)?.value?.toIntOrNull() == targetEpisodeNumber }
                 ?: elements.findSourceOrNull { _, url -> url.endsWith(currentEpisodePathName) }
         }
         val sourceNameList = document.select(".anthology-tab .swiper-wrapper a").map {
