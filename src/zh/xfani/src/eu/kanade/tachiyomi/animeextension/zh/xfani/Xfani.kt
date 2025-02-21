@@ -154,7 +154,8 @@ class Xfani : AnimeHttpSource(), ConfigurableAnimeSource {
         val currentEpisodeName = allEpisodeElements.firstNotNullOfOrNull { elements ->
             elements.firstOrNull { it.attr("href") == currentPath }?.select("span")?.text()
         }
-        val targetEpisodeNumber = currentEpisodeName?.let { numberRegex.find(it)?.value?.toIntOrNull() } ?: -1
+        val targetEpisodeNumber =
+            currentEpisodeName?.let { numberRegex.find(it)?.value?.toIntOrNull() } ?: -1
         val sourceList = allEpisodeElements.map { elements ->
             elements.findSourceOrNull { name, _ -> name == currentEpisodeName }
                 ?: elements.findSourceOrNull { name, _ -> numberRegex.find(name)?.value?.toIntOrNull() == targetEpisodeNumber }
