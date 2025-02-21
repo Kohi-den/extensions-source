@@ -30,10 +30,14 @@ class AnitubeExtractor(
 
     private fun checkVideoExists(url: String): VideoExists {
         try {
+            val newHeaders = headers.newBuilder()
+                .set("Connection", "close")
+                .build()
+
             val request = Request.Builder()
                 .head()
                 .url(url)
-                .headers(headers)
+                .headers(newHeaders)
                 .build()
 
             val response = client.newCall(request).execute()
@@ -44,6 +48,8 @@ class AnitubeExtractor(
             if (e.message?.contains("Unexpected status line") == true) {
                 return VideoExists(true, 200)
             }
+        } catch (e: Exception) {
+            Log.d(tag, "Failed to check video, error: ${e.message}")
         }
 
         return VideoExists(false, 404)
@@ -108,7 +114,7 @@ class AnitubeExtractor(
                 .body.string()
 
             val adsUrl = body.let {
-                Regex("""urlToFetch\s*=\s*['"]([^'"]+)['"]""")
+                Regex("""(?:urlToFetch|ADS_URL)\s*=\s*['"]([^'"]+)['"]""")
                     .find(it)?.groups?.get(1)?.value
                     ?: ""
             }
@@ -123,7 +129,7 @@ class AnitubeExtractor(
 
         // Try default url
         Log.e(tag, "Failed to get the ADS URL, trying the default")
-        return "https://s4.cdnpc.net/vite-bundle/main.css?version=v93"
+        return "https://widgets.outbrain.com/outbrain.js"
     }
 
     private fun getAuthCode(serverUrl: String, thumbUrl: String, link: String): String {
@@ -212,6 +218,7 @@ class AnitubeExtractor(
         val serverUrl = doc.selectFirst("meta[itemprop=contentURL]")!!
             .attr("content")
             .replace("cdn1", "cdn3")
+            .replace("cdn80", "cdn8")
         val thumbUrl = doc.selectFirst("meta[itemprop=thumbnailUrl]")!!
             .attr("content")
         val type = serverUrl.split("/").get(3)
@@ -249,7 +256,7 @@ class AnitubeExtractor(
 
     companion object {
         private const val PREF_AUTHCODE_KEY = "authcode"
-        private const val ADS_URL = "https://ads.anitube.vip/adblock.php"
+        private const val ADS_URL = "https://ads.anitube.vip/adblockturbo.php"
         private const val SITE_URL = "https://www.anitube.vip/playerricas.php"
     }
 }
