@@ -335,7 +335,7 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
                     { it.name.split(SEASON_EPISODE_DELIMITER).first().parseAs<Int>() },
                     { it.name.split(SEASON_EPISODE_DELIMITER).last().parseAs<Int>() },
                 ),
-            )
+            ).reversed()
         } else {
             return listOf(
                 SEpisode.create().apply {
