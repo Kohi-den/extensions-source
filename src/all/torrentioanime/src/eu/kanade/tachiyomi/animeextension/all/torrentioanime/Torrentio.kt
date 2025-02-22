@@ -10,10 +10,10 @@ import androidx.preference.ListPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
+import eu.kanade.tachiyomi.animeextension.all.torrentioanime.dto.AniZipResponse
 import eu.kanade.tachiyomi.animeextension.all.torrentioanime.dto.AnilistMeta
 import eu.kanade.tachiyomi.animeextension.all.torrentioanime.dto.AnilistMetaLatest
 import eu.kanade.tachiyomi.animeextension.all.torrentioanime.dto.DetailsById
-import eu.kanade.tachiyomi.animeextension.all.torrentioanime.dto.EpisodeList
 import eu.kanade.tachiyomi.animeextension.all.torrentioanime.dto.StreamDataTorrent
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -66,6 +66,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
             .add("query", query)
             .add("variables", variables)
             .build()
+
         return POST("https://graphql.anilist.co", body = requestBody)
     }
 
@@ -148,7 +149,8 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val jsonData = response.body.string()
-        return parseSearchJson(jsonData) }
+        return parseSearchJson(jsonData)
+    }
 
     // =============================== Latest ===============================
     override fun latestUpdatesRequest(page: Int): Request {
@@ -300,41 +302,55 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
 
     // ============================== Episodes ==============================
     override fun episodeListRequest(anime: SAnime): Request {
-        return GET("https://anime-kitsu.strem.fun/meta/series/anilist%3A${anime.url}.json")
+        return GET("https://api.ani.zip/mappings?anilist_id=${anime.url}")
     }
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val responseString = response.body.string()
-        val episodeList = json.decodeFromString<EpisodeList>(responseString)
+        val aniZipResponse = json.decodeFromString<AniZipResponse>(responseString)
 
-        return when (episodeList.meta?.type) {
-            "series" -> {
-                episodeList.meta.videos
-                    ?.let { videos ->
-                        if (preferences.getBoolean(UPCOMING_EP_KEY, UPCOMING_EP_DEFAULT)) { videos } else { videos.filter { video -> (video.released?.let { parseDate(it) } ?: 0L) <= System.currentTimeMillis() } }
+        return when (aniZipResponse.mappings?.type) {
+            "TV" -> {
+                aniZipResponse.episodes
+                    ?.let { episodes ->
+                        if (preferences.getBoolean(UPCOMING_EP_KEY, UPCOMING_EP_DEFAULT)) {
+                            episodes
+                        } else {
+                            episodes.filter { (_, episode) -> (episode?.airDate?.let { parseDate(it) } ?: 0L) <= System.currentTimeMillis() }
+                        }
                     }
-                    ?.map { video ->
+                    ?.mapNotNull { (_, episode) ->
+                        val episodeNumber = runCatching { episode?.episode?.toFloat() }.getOrNull()
+
+                        if (episodeNumber == null) {
+                            return@mapNotNull null
+                        }
+
+                        val title = episode?.title?.get("en")
+
                         SEpisode.create().apply {
-                            episode_number = video.episode?.toFloat() ?: 0.0F
-                            url = "/stream/series/${video.videoId}.json"
-                            date_upload = video.released?.let { parseDate(it) } ?: 0L
-                            name = "Episode ${video.episode} : ${
-                                video.title?.removePrefix("Episode ")
-                                    ?.replaceFirst("\\d+\\s*".toRegex(), "")
-                                    ?.trim()
-                            }"
-                            scanlator = (video.released?.let { parseDate(it) } ?: 0L).takeIf { it > System.currentTimeMillis() }?.let { "Upcoming" } ?: ""
+                            episode_number = episodeNumber
+                            url = "/stream/series/kitsu:${aniZipResponse.mappings.kitsuId}:${String.format(Locale.ENGLISH, "%.0f", episodeNumber)}.json"
+                            date_upload = episode?.airDate?.let { parseDate(it) } ?: 0L
+                            name = if (title == null) "Episode ${episode?.episode}" else "Episode ${episode.episode}: $title"
+                            scanlator = (episode?.airDate?.let { parseDate(it) } ?: 0L).takeIf { it > System.currentTimeMillis() }?.let { "Upcoming" } ?: ""
                         }
                     }.orEmpty().reversed()
             }
 
-            "movie" -> {
-                // Handle movie response
+            "MOVIE" -> {
+                val dateUpload = if (!aniZipResponse.episodes.isNullOrEmpty()) {
+                    aniZipResponse.episodes["1"]?.airDate?.let { parseDate(it) } ?: 0L
+                } else {
+                    0L
+                }
+
                 listOf(
                     SEpisode.create().apply {
                         episode_number = 1.0F
-                        url = "/stream/movie/${episodeList.meta.kitsuId}.json"
+                        url = "/stream/movie/kitsu:${aniZipResponse.mappings.kitsuId}.json"
                         name = "Movie"
+                        date_upload = dateUpload
                     },
                 ).reversed()
             }
@@ -342,6 +358,12 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
             else -> emptyList()
         }
     }
+
+    private fun parseDateTime(dateStr: String): Long {
+        return runCatching { DATE_TIME_FORMATTER.parse(dateStr)?.time }
+            .getOrNull() ?: 0L
+    }
+
     private fun parseDate(dateStr: String): Long {
         return runCatching { DATE_FORMATTER.parse(dateStr)?.time }
             .getOrNull() ?: 0L
@@ -421,6 +443,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
             udp://www.torrent.eu.org:451/announce,
             ${fetchTrackers().split("\n").joinToString(",")}
         """.trimIndent()
+
         return streamList.streams?.map { stream ->
             val urlOrHash =
                 if (debridProvider == "none") {
@@ -875,8 +898,12 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
         private const val IS_EFFICIENT_KEY = "efficient"
         private const val IS_EFFICIENT_DEFAULT = false
 
-        private val DATE_FORMATTER by lazy {
+        private val DATE_TIME_FORMATTER by lazy {
             SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ENGLISH)
+        }
+
+        private val DATE_FORMATTER by lazy {
+            SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
         }
     }
 }
