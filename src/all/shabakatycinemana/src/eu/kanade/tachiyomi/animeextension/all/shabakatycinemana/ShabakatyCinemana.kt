@@ -233,7 +233,6 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
         val kind = KINDS_LIST.first { it.first == kindPref }.second
 
         val url = "$apiBaseUrl/video/V/2/itemsPerPage/$POPULAR_ITEMS_PER_PAGE/level/0/videoKind/$kind/sortParam/desc/pageNumber/${page - 1}"
-        println(url)
         return GET(url, headers)
     }
 
@@ -291,7 +290,6 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
                 .addQueryParameter("orderby", browseResultSort)
                 .build()
 
-            println(url)
             val resp = client.newCall(GET(url, headers)).execute()
             // Todo: remove SAnimeWithInfo data class if no longer needed
             val animeListWithInfo = resp.asModel(SAnimeWithInfoDeserializer)
@@ -317,10 +315,8 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
                     .build()
             }
 
-            println(url)
             val resp = client.newCall(GET(url, headers)).execute()
             val animeList = resp.asModelList(SAnimeDeserializer)
-            println("search has next page: ${animeList.size} == $SEARCH_ITEMS_PER_PAGE ${animeList.size == SEARCH_ITEMS_PER_PAGE}")
             return AnimesPage(animeList, animeList.size == SEARCH_ITEMS_PER_PAGE)
         }
     }
