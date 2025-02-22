@@ -225,7 +225,7 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun latestUpdatesParse(response: Response): AnimesPage {
         val animeList = response.asModelList(SAnimeDeserializer)
-        return AnimesPage(animeList, animeList.size < LATEST_ITEMS_PER_PAGE)
+        return AnimesPage(animeList, animeList.size == LATEST_ITEMS_PER_PAGE)
     }
 
     override fun popularAnimeRequest(page: Int): Request {
@@ -233,13 +233,12 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
         val kind = KINDS_LIST.first { it.first == kindPref }.second
 
         val url = "$apiBaseUrl/video/V/2/itemsPerPage/$POPULAR_ITEMS_PER_PAGE/level/0/videoKind/$kind/sortParam/desc/pageNumber/${page - 1}"
-        println(url)
         return GET(url, headers)
     }
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val animeList = response.asModelList(SAnimeDeserializer)
-        return AnimesPage(animeList, animeList.size < POPULAR_ITEMS_PER_PAGE)
+        return AnimesPage(animeList, animeList.size == POPULAR_ITEMS_PER_PAGE)
     }
 
     override suspend fun getSearchAnime(
@@ -291,14 +290,14 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
                 .addQueryParameter("orderby", browseResultSort)
                 .build()
 
-            println(url)
             val resp = client.newCall(GET(url, headers)).execute()
             // Todo: remove SAnimeWithInfo data class if no longer needed
             val animeListWithInfo = resp.asModel(SAnimeWithInfoDeserializer)
-            return AnimesPage(animeListWithInfo.animes, animeListWithInfo.animes.isNotEmpty())
+            return AnimesPage(animeListWithInfo.animes, animeListWithInfo.animes.size == POPULAR_ITEMS_PER_PAGE)
         } else {
 //            star=8&year=1900,2025
             url = url.newBuilder()
+                .addQueryParameter("level", "0")
                 .addPathSegment("AdvancedSearch")
                 .addQueryParameter("type", kindName)
                 .addQueryParameter("page", "${page - 1}")
@@ -310,13 +309,15 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
             }
 
             if (query.isNotBlank()) {
-                url = url.newBuilder().addQueryParameter("videoTitle", query).build()
+                url = url.newBuilder()
+                    .addQueryParameter("videoTitle", query)
+                    .addQueryParameter("staffTitle", query)
+                    .build()
             }
 
-            println(url)
             val resp = client.newCall(GET(url, headers)).execute()
             val animeList = resp.asModelList(SAnimeDeserializer)
-            return AnimesPage(animeList, animeList.size < SEARCH_ITEMS_PER_PAGE)
+            return AnimesPage(animeList, animeList.size == SEARCH_ITEMS_PER_PAGE)
         }
     }
 
@@ -335,7 +336,7 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
                     { it.name.split(SEASON_EPISODE_DELIMITER).first().parseAs<Int>() },
                     { it.name.split(SEASON_EPISODE_DELIMITER).last().parseAs<Int>() },
                 ),
-            )
+            ).reversed()
         } else {
             return listOf(
                 SEpisode.create().apply {
