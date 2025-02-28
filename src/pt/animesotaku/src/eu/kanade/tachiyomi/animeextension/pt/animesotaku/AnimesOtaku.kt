@@ -35,7 +35,7 @@ class AnimesOtaku : AnimeHttpSource() {
 
     override val baseUrl = "https://www.animesotaku.cc"
 
-    override val lang = "pt"
+    override val lang = "pt-BR"
 
     override val supportsLatest = true
 
