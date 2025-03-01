@@ -2,7 +2,7 @@
 
 just paste this into your anime repo 
 ```
-https://raw.githubusercontent.com/Kohi-den/extensions/main/index.min.json
+https://raw.githubusercontent.com/Arkai1/extensions/main/index.min.json
 ```
 If your interested in installing just the apks they can be found [Here](https://github.com/Kohi-den/extensions)
 
