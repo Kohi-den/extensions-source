@@ -9,7 +9,7 @@ import okhttp3.FormBody
 import okhttp3.Response
 import org.jsoup.nodes.Element
 
-class AniSAGA : DooPlay(
+class AniSAGA : Chillx(
     "hi",
     "AniSAGA",
     "https://www.anisaga.org",
