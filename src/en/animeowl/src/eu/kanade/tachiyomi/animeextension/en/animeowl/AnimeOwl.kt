@@ -44,8 +44,11 @@ class AnimeOwl : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val supportsLatest = true
 
-    private val json: Json by injectLazy()
-
+    private val json: Json by lazy {
+    Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+    }
     private val preferences: SharedPreferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
