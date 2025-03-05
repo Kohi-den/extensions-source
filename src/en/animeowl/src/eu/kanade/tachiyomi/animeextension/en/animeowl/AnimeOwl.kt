@@ -128,28 +128,35 @@ class AnimeOwl : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
         val sub = document.select("#anime-cover-sub-content .episode-node").mapIndexed { idx, it ->
-            EpisodeResponse.Episode(
-                id = it.text().toDouble(),
-                episodeIndex = idx.toString(),
-                name = it.text(),
-                lang = "Sub",
-                href = it.attr("abs:href"),
-            )
-        }
+    val episodeText = it.text().trim()
+    val episodeNumber = episodeText.toDoubleOrNull() ?: (idx + 1).toDouble()
+
+    EpisodeResponse.Episode(
+        id = episodeNumber,
+        episodeIndex = idx.toString(),
+        name = episodeText,
+        lang = "Sub",
+        href = it.attr("abs:href"),
+    )
+}
+        
         val dub = document.select("#anime-cover-dub-content .episode-node").mapIndexed { idx, it ->
-            EpisodeResponse.Episode(
-                id = it.text().toDouble(),
-                episodeIndex = idx.toString(),
-                name = it.text(),
-                lang = "Dub",
-                href = it.attr("abs:href"),
-            )
-        }
+    val episodeText = it.text().trim()
+    val episodeNumber = episodeText.toDoubleOrNull() ?: (idx + 1).toDouble()
+
+    EpisodeResponse.Episode(
+        id = episodeNumber,
+        episodeIndex = idx.toString(),
+        name = episodeText,
+        lang = "Dub",
+        href = it.attr("abs:href"),
+    )
+}
 
         return listOf(sub, dub).flatten().groupBy { it.name }.map { (epNum, epList) ->
             SEpisode.create().apply {
                 url = LinkData(epList.map { ep -> Link(ep.href!!, ep.lang!!) }).toJsonString()
-                episode_number = epNum.toFloatOrNull() ?: 0F
+                episode_number = epNum.filter { it.isDigit() || it == '.' }.toFloatOrNull() ?: 0F
                 name = "Episode $epNum"
             }
         }.sortedByDescending { it.episode_number }
