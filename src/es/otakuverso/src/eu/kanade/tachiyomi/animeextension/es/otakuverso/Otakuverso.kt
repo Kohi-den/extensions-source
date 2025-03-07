@@ -34,7 +34,6 @@ import eu.kanade.tachiyomi.network.await
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMap
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
-import kotlinx.serialization.json.Json
 import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
@@ -43,7 +42,6 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import uy.kohesive.injekt.injectLazy
 
 class Otakuverso : ConfigurableAnimeSource, AnimeHttpSource() {
 
@@ -150,19 +148,20 @@ class Otakuverso : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val params = OtakuversoFilters.getSearchParameters(filters)
         return when {
-            query.isNotBlank() -> GET("$baseUrl/buscador?q=$query", headers)
-            params.isFiltered() -> searchRequest(params)
+            query.isNotBlank() -> GET("$baseUrl/buscador?q=$query&page=$page", headers)
+            params.isFiltered() -> searchRequest(params, page)
             else -> popularAnimeRequest(page)
         }
     }
 
-    private fun searchRequest(params: OtakuversoFilters.FilterSearchParams): Request {
+    private fun searchRequest(params: OtakuversoFilters.FilterSearchParams, page: Int): Request {
         val formBody = params.body
         val (token, xsrfToken) = getToken()
         val data = FormBody.Builder().apply {
             for (i in 0 until formBody.size) {
                 add(formBody.name(i), formBody.value(i))
             }
+            add("page", "$page")
             add("_token", token)
             add("Cookie", xsrfToken)
         }.build()
