@@ -10,7 +10,6 @@ import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
-import uy.kohesive.injekt.injectLazy
 import java.nio.charset.Charset
 
 class LycorisCafeExtractor(private val client: OkHttpClient) {
@@ -19,7 +18,7 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
 
     private val GETLNKURL = "https://www.lycoris.cafe/api/watch/getLink"
 
-    private val json: Json by injectLazy()
+    private val json = Json { ignoreUnknownKeys = true }
 
     // Credit: https://github.com/skoruppa/docchi-stremio-addon/blob/main/app/players/lycoris.py
     fun getVideosFromUrl(url: String, headers: Headers, prefix: String): List<Video> {
@@ -33,40 +32,17 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
             GET(url, headers = embedHeaders),
         ).execute().asJsoup()
 
-        val scripts = document.select("script")
+        val script = document.select("script[type='application/json']").first()?.data().toString()
 
-        val episodeDataPattern = Regex("episodeInfo\\s*:\\s*(\\{.*?\\}),", RegexOption.DOT_MATCHES_ALL)
-        var episodeData: String? = null
+        val scriptData = json.decodeFromString<ScriptBody>(script)
 
-        for (script in scripts) {
-            val content = script.data()
-            val match = episodeDataPattern.find(content)
+        val data = json.decodeFromString<ScriptEpisode>(scriptData.body)
 
-            if (match != null) {
-                episodeData = match.groupValues[1]
-                break
-            }
-        }
+        var linkList: String? = fetchAndDecodeVideo(client, data.episodeInfo.id.toString(), isSecondary = false).toString()
 
-        val result = mutableMapOf<String, String?>()
-
-        val patterns = listOf(
-            "id" to Regex("id\\s*:\\s*(\\d+)"),
-            "FHD" to Regex("FHD\\s*:\\s*\"([^\"]+)\""),
-            "HD" to Regex("HD\\s*:\\s*\"([^\"]+)\""),
-            "SD" to Regex("SD\\s*:\\s*\"([^\"]+)\"")
-        )
-
-        patterns.forEach { (key, pattern) ->
-            result[key] = episodeData?.let { pattern.find(it)?.groups?.get(1)?.value }
-        }
-
-        var linkList: String? = fetchAndDecodeVideo(client, result["id"].toString(), isSecondary = false).toString()
-
-        val fhdLink = fetchAndDecodeVideo(client, result["FHD"].toString(), isSecondary = true).toString()
-        val sdLink = fetchAndDecodeVideo(client, result["SD"].toString(), isSecondary = true).toString()
-        val hdLink = fetchAndDecodeVideo(client, result["HD"].toString(), isSecondary = true).toString()
-
+        val fhdLink = fetchAndDecodeVideo(client, data.episodeInfo.FHD.toString(), isSecondary = true).toString()
+        val sdLink = fetchAndDecodeVideo(client, data.episodeInfo.SD.toString(), isSecondary = true).toString()
+        val hdLink = fetchAndDecodeVideo(client, data.episodeInfo.HD.toString(), isSecondary = true).toString()
 
         if (linkList.isNullOrBlank() || linkList == "{}") {
             if (fhdLink.isNotEmpty()) {
@@ -78,20 +54,28 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
             if (sdLink.isNotEmpty()) {
                 videos.add(Video(sdLink, "${prefix}lycoris.cafe - 480p", sdLink))
             }
+
         }else {
-            val videoLinks = Json.decodeFromString<VideoLinks>(linkList)
+            val videoLinks = json.decodeFromString<VideoLinksApi>(linkList)
 
             videoLinks.FHD?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 1080p", it))
-            }?: videos.add(Video(fhdLink, "${prefix}lycoris.cafe - 1080p", fhdLink))
+            }?: fhdLink.takeIf { it.contains("https://") }?.let {
+                videos.add(Video(it, "${prefix}lycoris.cafe - 1080p", it))
+            }
 
             videoLinks.HD?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 720p", it))
-            }?: videos.add(Video(hdLink, "${prefix}lycoris.cafe - 720p", hdLink))
+            }?: hdLink.takeIf { it.contains("https://") }?.let {
+                videos.add(Video(it, "${prefix}lycoris.cafe - 720p", it))
+            }
 
             videoLinks.SD?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 480p", it))
-            }?: videos.add(Video(sdLink, "${prefix}lycoris.cafe - 480p", sdLink))
+            }?: sdLink.takeIf { it.contains("https://") }?.let {
+                videos.add(Video(it, "${prefix}lycoris.cafe - 480p", it))
+            }
+
         }
         return videos
 
@@ -146,6 +130,8 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
     }
 
     private fun checkLinks(client: OkHttpClient, link: String): Boolean {
+        if (!link.contains("https://")) return false
+
         client.newCall(GET(link)).execute().use { response ->
             return response.code.toString() == "200"
         }
@@ -208,15 +194,31 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
     }
 
     @Serializable
-    data class VideoLinks(
+    data class ScriptBody(
+        val body: String
+    )
+
+    @Serializable
+    data class ScriptEpisode(
+        val episodeInfo: EpisodeInfo
+    )
+
+    @Serializable
+    data class EpisodeInfo(
+        val id: Int? = null,
+        val FHD: String? = null,
+        val HD: String? = null,
+        val SD: String? = null,
+    )
+
+    @Serializable
+    data class VideoLinksApi(
         val HD: String? = null,
         val SD: String? = null,
         val FHD: String? = null,
         val Source: String? = null,
-        val preview: String? = null,
         val SourceMKV: String? = null
     )
-
 
 }
 
