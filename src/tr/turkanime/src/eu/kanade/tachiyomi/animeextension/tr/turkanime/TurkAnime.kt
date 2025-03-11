@@ -37,6 +37,7 @@ import eu.kanade.tachiyomi.lib.vudeoextractor.VudeoExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.await
+import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import eu.kanade.tachiyomi.util.parallelMapBlocking
@@ -106,13 +107,70 @@ class TurkAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun latestUpdatesNextPageSelector() = popularAnimeNextPageSelector()
 
+    // ============================== Filters ===============================
+    override fun getFilterList(): AnimeFilterList = TurkAnimeFilters.FILTER_LIST
+
     // =============================== Search ===============================
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList) =
-        POST(
-            "$baseUrl/arama?sayfa=$page",
-            headers,
-            FormBody.Builder().add("arama", query).build(),
-        )
+        throw UnsupportedOperationException()
+
+    private fun searchAnimeRequest(
+        page: Int,
+        query: String,
+        filters: TurkAnimeFilters.FilterSearchParams,
+    ): Request {
+        return if (query.isBlank()) {
+            POST(
+                "$baseUrl/ajax/animeler?sayfa=$page",
+                xmlHeader,
+                FormBody.Builder().apply {
+                    filters.type.takeLast(3).forEach {
+                        add("tip[]", it)
+                    }
+                    filters.genre.takeLast(3).forEach {
+                        add("tur[]", it)
+                    }
+                    filters.year.takeLast(2).forEach {
+                        add("yil[]", it)
+                    }
+                    filters.point.takeLast(2).forEach {
+                        add("puan[]", it)
+                    }
+                    filters.like.takeLast(2).forEach {
+                        add("begeni[]", it)
+                    }
+                    filters.producer.takeLast(3).forEach {
+                        add("yapimci[]", it)
+                    }
+                    filters.studio.takeLast(3).forEach {
+                        add("studyo[]", it)
+                    }
+                    add("listele", filters.list)
+                    add("sezon", filters.season)
+                    add("sirala", filters.sort)
+                }.build(),
+            )
+        } else {
+            POST(
+                "$baseUrl/arama?sayfa=$page",
+                headers,
+                FormBody.Builder().add("arama", query).build(),
+            )
+        }
+    }
+
+    override suspend fun getSearchAnime(
+        page: Int,
+        query: String,
+        filters: AnimeFilterList,
+    ): AnimesPage {
+        val params = TurkAnimeFilters.getSearchParameters(filters)
+        return client.newCall(searchAnimeRequest(page, query, params))
+            .awaitSuccess()
+            .let { response ->
+                searchAnimeParse(response)
+            }
+    }
 
     override fun searchAnimeParse(response: Response): AnimesPage {
         val document = response.asJsoup()
