@@ -4,6 +4,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import android.util.Base64
 import eu.kanade.tachiyomi.util.asJsoup
+import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 import okhttp3.Headers
@@ -35,45 +36,45 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
 
         val script = document.select("script[type='application/json']").first()?.data().toString()
 
-        val scriptData = json.decodeFromString<ScriptBody>(script)
+        val scriptData = script.parseAs<ScriptBody>()
 
-        val data = json.decodeFromString<ScriptEpisode>(scriptData.body)
+        val data = scriptData.body.parseAs<ScriptEpisode>()
 
-        var linkList: String? = fetchAndDecodeVideo(client, data.episodeInfo.id.toString(), isSecondary = false).toString()
+        val linkList: String? = fetchAndDecodeVideo(client, data.episodeInfo.id.toString(), isSecondary = false)
 
-        val fhdLink = fetchAndDecodeVideo(client, data.episodeInfo.FHD.toString(), isSecondary = true).toString()
-        val sdLink = fetchAndDecodeVideo(client, data.episodeInfo.SD.toString(), isSecondary = true).toString()
-        val hdLink = fetchAndDecodeVideo(client, data.episodeInfo.HD.toString(), isSecondary = true).toString()
+        val fhdLink = fetchAndDecodeVideo(client, data.episodeInfo.FHD.toString(), isSecondary = true)
+        val sdLink = fetchAndDecodeVideo(client, data.episodeInfo.SD.toString(), isSecondary = true)
+        val hdLink = fetchAndDecodeVideo(client, data.episodeInfo.HD.toString(), isSecondary = true)
 
         if (linkList.isNullOrBlank() || linkList == "{}") {
-            if (fhdLink.isNotEmpty()) {
+            if (!fhdLink.isNullOrBlank()) {
                 videos.add(Video(fhdLink, "${prefix}lycoris.cafe - 1080p", fhdLink))
             }
-            if (hdLink.isNotEmpty()) {
+            if (!hdLink.isNullOrBlank()) {
                 videos.add(Video(hdLink, "${prefix}lycoris.cafe - 720p", hdLink))
             }
-            if (sdLink.isNotEmpty()) {
+            if (!sdLink.isNullOrBlank()) {
                 videos.add(Video(sdLink, "${prefix}lycoris.cafe - 480p", sdLink))
             }
 
-        }else {
+        } else {
             val videoLinks = json.decodeFromString<VideoLinksApi>(linkList)
 
             videoLinks.FHD?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 1080p", it))
-            }?: fhdLink.takeIf { it.contains("https://") }?.let {
+            }?: fhdLink?.takeIf { it.contains("https://") }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 1080p", it))
             }
 
             videoLinks.HD?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 720p", it))
-            }?: hdLink.takeIf { it.contains("https://") }?.let {
+            }?: hdLink?.takeIf { it.contains("https://") }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 720p", it))
             }
 
             videoLinks.SD?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 480p", it))
-            }?: sdLink.takeIf { it.contains("https://") }?.let {
+            }?: sdLink?.takeIf { it.contains("https://") }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 480p", it))
             }
 
@@ -82,7 +83,7 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
 
     }
 
-    private fun decodeVideoLinks(encodedUrl: String?): Any? {
+    private fun decodeVideoLinks(encodedUrl: String?): String? {
         if (encodedUrl.isNullOrEmpty()) {
             return null
         }
@@ -106,7 +107,7 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
         }
     }
 
-    private fun fetchAndDecodeVideo(client: OkHttpClient, episodeId: String, isSecondary: Boolean = false): Any? {
+    private fun fetchAndDecodeVideo(client: OkHttpClient, episodeId: String, isSecondary: Boolean = false): String? {
             val url: HttpUrl
 
             if (isSecondary) {
