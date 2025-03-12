@@ -10,6 +10,7 @@ import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
+import uy.kohesive.injekt.injectLazy
 import java.nio.charset.Charset
 
 class LycorisCafeExtractor(private val client: OkHttpClient) {
@@ -18,7 +19,7 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
 
     private val GETLNKURL = "https://www.lycoris.cafe/api/watch/getLink"
 
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json: Json by injectLazy()
 
     // Credit: https://github.com/skoruppa/docchi-stremio-addon/blob/main/app/players/lycoris.py
     fun getVideosFromUrl(url: String, headers: Headers, prefix: String): List<Video> {
@@ -114,12 +115,12 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
                 val finalText = unicodeEscape.toByteArray(Charsets.ISO_8859_1).toString(Charsets.UTF_8)
 
                 url = GETLNKURL.toHttpUrl().newBuilder()
-                    ?.addQueryParameter("link", finalText)
-                    ?.build() ?: throw IllegalStateException("Invalid URL")
+                    .addQueryParameter("link", finalText)
+                    .build()
             } else {
                 url = GETSECONDARYURL.toHttpUrl().newBuilder()
-                    ?.addQueryParameter("id", episodeId)
-                    ?.build() ?: throw IllegalStateException("Invalid URL")
+                    .addQueryParameter("id", episodeId)
+                    .build()
             }
             client.newCall(GET(url))
                 .execute()
@@ -147,7 +148,7 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
                 """\\u([0-9a-fA-F]{4})|""" +     // \uXXXX
                 """\\x([0-9a-fA-F]{2})|""" +     // \xHH
                 """\\([0-7]{1,3})|""" +          // \OOO (octal)
-                """\\([btnfr"'$\\\\])"""         // \n, \t, itd.
+                """\\([btnfr"'$\\])"""         // \n, \t, itd.
         )
 
         return regex.replace(withoutLineContinuation) { match ->
