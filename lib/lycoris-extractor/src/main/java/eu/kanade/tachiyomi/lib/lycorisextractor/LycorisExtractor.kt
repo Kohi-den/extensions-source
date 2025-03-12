@@ -58,7 +58,7 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
             }
 
         } else {
-            val videoLinks = json.decodeFromString<VideoLinksApi>(linkList)
+            val videoLinks = linkList.parseAs<VideoLinksApi>()
 
             videoLinks.FHD?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 1080p", it))
