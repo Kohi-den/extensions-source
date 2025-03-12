@@ -23,6 +23,16 @@ class HiAnime : ZoroTheme(
 
     override val ajaxRoute = "/v2"
 
+    // Add baseUrl logic here
+    override val baseUrl by lazy {
+        val customDomain = preferences.getString(PREF_CUSTOM_DOMAIN_KEY, null)
+        if (customDomain.isNullOrBlank()) {
+            preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!!
+        } else {
+            customDomain
+        }
+    }
+
     private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
     private val megaCloudExtractor by lazy { MegaCloudExtractor(client, headers, preferences) }
 
