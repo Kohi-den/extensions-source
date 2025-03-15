@@ -129,6 +129,7 @@ class Q1N : DooPlay(
             "mixdrop" in name -> mixDropExtractor.videoFromUrl(url)
             "streamtape" in name -> streamTapeExtractor.videosFromUrl(url)
             "noa" in name -> noaExtractor.videosFromUrl(url)
+            "mdplayer" in name -> noaExtractor.videosFromUrl(url, "MDPLAYER")
             "/player/" in url -> bloggerExtractor.videosFromUrl(url, headers)
             else -> emptyList()
         }
