@@ -248,26 +248,26 @@ class AniWorld : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 					hoster.contains("Filemoon") && hosterSelection.contains(AWConstants.NAME_FLMN) -> {
                         val quality = "Filemoon $language"
                         val url = client.newCall(GET(redirectgs)).execute().request.url.toString()
-                        val video = FilemoonExtractor(client).videoFromUrl(url, quality)
-                        if (video != null) {
+                        val video = FilemoonExtractor(client).videosFromUrl(url, quality)
+                        /*if (video != null) {
                             videoList.add(video)
-                        }
+                        }*/
                     }
 					hoster.contains("Luluvdo") && hosterSelection.contains(AWConstants.NAME_LULU) -> {
                         val quality = "Luluvdo $language"
                         val url = client.newCall(GET(redirectgs)).execute().request.url.toString()
-                        val video = LuluExtractor(client).videoFromUrl(url, quality)
-                        if (video != null) {
+                        val video = LuluExtractor(client).videosFromUrl(url, quality)
+                        /*if (video != null) {
                             videoList.add(video)
-                        }
+                        }*/
                     }
 					hoster.contains("Vidmoly") && hosterSelection.contains(AWConstants.NAME_VIDM) -> {
                         val quality = "Vidmoly $language"
                         val url = client.newCall(GET(redirectgs)).execute().request.url.toString()
-                        val video = VidMolyExtractor(client).videoFromUrl(url, quality)
-                        if (video != null) {
+                        val video = VidMolyExtractor(client).videosFromUrl(url, quality)
+                        /*if (video != null) {
                             videoList.add(video)
-                        }
+                        }*/
                     }
 					
                 }
