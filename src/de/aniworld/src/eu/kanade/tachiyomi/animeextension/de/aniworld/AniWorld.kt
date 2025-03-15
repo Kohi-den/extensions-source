@@ -14,8 +14,10 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
-import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
+import eu.kanade.tachiyomi.lib.FilemoonExtractor
+import eu.kanade.tachiyomi.lib.LuluExtractor
+import eu.kanade.tachiyomi.lib.VidMolyExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.asJsoup
@@ -235,15 +237,6 @@ class AniWorld : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                             videoList.add(video)
                         }
                     }
-
-                    hoster.contains("Streamtape") && hosterSelection.contains(AWConstants.NAME_STAPE) -> {
-                        val quality = "Streamtape $language"
-                        val url = client.newCall(GET(redirectgs)).execute().request.url.toString()
-                        val video = StreamTapeExtractor(client).videoFromUrl(url, quality)
-                        if (video != null) {
-                            videoList.add(video)
-                        }
-                    }
                     hoster.contains("Vidoza") && hosterSelection.contains(AWConstants.NAME_VIZ) -> {
                         val quality = "Vidoza $language"
                         val url = client.newCall(GET(redirectgs)).execute().request.url.toString()
@@ -252,6 +245,31 @@ class AniWorld : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                             videoList.add(video)
                         }
                     }
+					hoster.contains("Filemoon") && hosterSelection.contains(AWConstants.NAME_FLMN) -> {
+                        val quality = "Filemoon $language"
+                        val url = client.newCall(GET(redirectgs)).execute().request.url.toString()
+                        val video = FilemoonExtractor(client).videoFromUrl(url, quality)
+                        if (video != null) {
+                            videoList.add(video)
+                        }
+                    }
+					hoster.contains("Luluvdo") && hosterSelection.contains(AWConstants.NAME_LULU) -> {
+                        val quality = "Luluvdo $language"
+                        val url = client.newCall(GET(redirectgs)).execute().request.url.toString()
+                        val video = LuluExtractor(client).videoFromUrl(url, quality)
+                        if (video != null) {
+                            videoList.add(video)
+                        }
+                    }
+					hoster.contains("Vidmoly") && hosterSelection.contains(AWConstants.NAME_VIDM) -> {
+                        val quality = "Vidmoly $language"
+                        val url = client.newCall(GET(redirectgs)).execute().request.url.toString()
+                        val video = VidMolyExtractor(client).videoFromUrl(url, quality)
+                        if (video != null) {
+                            videoList.add(video)
+                        }
+                    }
+					
                 }
             }
         }
@@ -325,7 +343,7 @@ class AniWorld : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             title = "Standard-Hoster"
             entries = AWConstants.HOSTER_NAMES
             entryValues = AWConstants.HOSTER_URLS
-            setDefaultValue(AWConstants.URL_STAPE)
+            setDefaultValue(AWConstants.URL_VIZ)
             summary = "%s"
 
             setOnPreferenceChangeListener { _, newValue ->
