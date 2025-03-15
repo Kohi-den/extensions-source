@@ -13,7 +13,6 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
-import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
@@ -226,15 +225,6 @@ class Serienstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                         val quality = "Doodstream $language"
                         val url = client.newCall(GET(redirectgs)).execute().request.url.toString()
                         val video = DoodExtractor(client).videoFromUrl(url, quality)
-                        if (video != null) {
-                            videoList.add(video)
-                        }
-                    }
-
-                    hoster.contains("Streamtape") && hosterSelection.contains(SConstants.NAME_STAPE) -> {
-                        val quality = "Streamtape $language"
-                        val url = client.newCall(GET(redirectgs)).execute().request.url.toString()
-                        val video = StreamTapeExtractor(client).videoFromUrl(url, quality)
                         if (video != null) {
                             videoList.add(video)
                         }
