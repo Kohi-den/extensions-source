@@ -15,7 +15,7 @@ class RuplayExtractor(private val client: OkHttpClient) {
             .split(",")
             .map {
                 val videoUrl = it.substringAfter("]")
-                val quality = it.substringAfter("[").substringBefore("]")
+                val quality = it.substringAfter("[", "").substringBefore("]").ifEmpty { "Default" }
                 val headers = Headers.headersOf("Referer", videoUrl)
                 Video(videoUrl, "Ruplay - $quality", videoUrl, headers = headers)
             }

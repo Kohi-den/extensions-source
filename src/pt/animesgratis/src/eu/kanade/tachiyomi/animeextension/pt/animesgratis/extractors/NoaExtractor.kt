@@ -6,7 +6,7 @@ import okhttp3.Headers
 import okhttp3.OkHttpClient
 
 class NoaExtractor(private val client: OkHttpClient, private val headers: Headers) {
-    fun videosFromUrl(url: String): List<Video> {
+    fun videosFromUrl(url: String, name: String = "NOA"): List<Video> {
         val body = client.newCall(GET(url)).execute()
             .body.string()
 
@@ -16,7 +16,7 @@ class NoaExtractor(private val client: OkHttpClient, private val headers: Header
                     .substringAfter(":\"")
                     .substringBefore('"')
                     .replace("\\", "")
-                listOf(Video(videoUrl, "NOA", videoUrl, headers))
+                listOf(Video(videoUrl, name, videoUrl, headers))
             }
 
             "sources:" in body -> {
@@ -31,7 +31,7 @@ class NoaExtractor(private val client: OkHttpClient, private val headers: Header
                             .substringAfter(":\"")
                             .substringBefore('"')
                             .replace("\\", "")
-                        Video(videoUrl, "NOA - $label", videoUrl, headers)
+                        Video(videoUrl, "$name - $label", videoUrl, headers)
                     }
             }
 
