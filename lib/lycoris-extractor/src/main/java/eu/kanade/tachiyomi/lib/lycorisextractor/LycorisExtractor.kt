@@ -34,7 +34,7 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
             GET(url, headers = embedHeaders),
         ).execute().asJsoup()
 
-        val script = document.select("script[type='application/json']").first()?.data().toString()
+        val script = document.select("script[type='application/json']").first()?.data()?.toString() ?: return emptyList()
 
         val scriptData = script.parseAs<ScriptBody>()
 
@@ -77,14 +77,13 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
             }?: sdLink?.takeIf { it.contains("https://") }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 480p", it))
             }
-
         }
         return videos
 
     }
 
-    private fun decodeVideoLinks(encodedUrl: String?): String? {
-        if (encodedUrl.isNullOrEmpty()) {
+    private fun decodeVideoLinks(encodedUrl: String): String? {
+        if (encodedUrl.isBlank()) {
             return null
         }
 
@@ -108,27 +107,27 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
     }
 
     private fun fetchAndDecodeVideo(client: OkHttpClient, episodeId: String, isSecondary: Boolean = false): String? {
-            val url: HttpUrl
+        val url: HttpUrl
 
-            if (isSecondary) {
-                val convertedText = episodeId.toByteArray(Charset.forName("UTF-8")).toString(Charset.forName("ISO-8859-1"))
-                val unicodeEscape = decodePythonEscape(convertedText)
-                val finalText = unicodeEscape.toByteArray(Charsets.ISO_8859_1).toString(Charsets.UTF_8)
+        if (isSecondary) {
+            val convertedText = episodeId.toByteArray(Charset.forName("UTF-8")).toString(Charset.forName("ISO-8859-1"))
+            val unicodeEscape = decodePythonEscape(convertedText)
+            val finalText = unicodeEscape.toByteArray(Charsets.ISO_8859_1).toString(Charsets.UTF_8)
 
-                url = GETLNKURL.toHttpUrl().newBuilder()
-                    .addQueryParameter("link", finalText)
-                    .build()
-            } else {
-                url = GETSECONDARYURL.toHttpUrl().newBuilder()
-                    .addQueryParameter("id", episodeId)
-                    .build()
+            url = GETLNKURL.toHttpUrl().newBuilder()
+                .addQueryParameter("link", finalText)
+                .build()
+        } else {
+            url = GETSECONDARYURL.toHttpUrl().newBuilder()
+                .addQueryParameter("id", episodeId)
+                .build()
+        }
+        client.newCall(GET(url))
+            .execute()
+            .use { response ->
+                val data = response.body.string() ?: ""
+                return decodeVideoLinks(data)
             }
-            client.newCall(GET(url))
-                .execute()
-                .use { response ->
-                    val data = response.body.string() ?: ""
-                    return decodeVideoLinks(data)
-                }
     }
 
     private fun checkLinks(client: OkHttpClient, link: String): Boolean {
