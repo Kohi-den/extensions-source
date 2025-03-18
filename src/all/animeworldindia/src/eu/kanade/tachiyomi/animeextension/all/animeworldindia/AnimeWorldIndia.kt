@@ -29,7 +29,7 @@ class AnimeWorldIndia(
 
     override val name = "AnimeWorld India"
 
-    override val baseUrl = "https://anime-world.in"
+    override val baseUrl = "https://anime-world.co"
 
     override val supportsLatest = true
 

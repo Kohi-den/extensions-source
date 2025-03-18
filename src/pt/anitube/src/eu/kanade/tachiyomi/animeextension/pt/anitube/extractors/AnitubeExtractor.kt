@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.animeextension.pt.anitube.extractors
 
 import android.content.SharedPreferences
+import android.util.Base64
 import android.util.Log
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
@@ -14,6 +15,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.nodes.Document
 import java.net.ProtocolException
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 class AnitubeExtractor(
     private val headers: Headers,
@@ -132,32 +136,86 @@ class AnitubeExtractor(
         return "https://widgets.outbrain.com/outbrain.js"
     }
 
-    private fun getAuthCode(serverUrl: String, thumbUrl: String, link: String): String {
-        var authCode = preferences.getString(PREF_AUTHCODE_KEY, "")!!
+    private fun getAuthCode(serverUrl: String, thumbUrl: String, link: String): String? {
+        try {
+            var authCode = preferences.getString(PREF_AUTHCODE_KEY, "")!!
 
-        if (authCode.isNotBlank()) {
-            Log.d(tag, "AuthCode found in preferences")
+            if (authCode.isNotBlank()) {
+                Log.d(tag, "AuthCode found in preferences")
 
-            val response = checkVideoExists("${serverUrl}$authCode")
+                val authArgs = Base64.decode(authCode.substringAfter("="), Base64.DEFAULT).let(::String)
+                val url = "$serverUrl?$authArgs".toHttpUrl()
 
-            if (response.exists || response.code == 500) {
-                Log.d(tag, "AuthCode is OK")
+                val serverTime =
+                    SimpleDateFormat("M/d/yyyy h:m:s a", Locale.ENGLISH).parse(
+                        url.queryParameter("server_time") ?: "",
+                    )
+
+                val calendar = Calendar.getInstance()
+                serverTime?.let { calendar.setTime(it) }
+
+                url.queryParameter("validminutes")?.toInt()
+                    ?.let { calendar.add(Calendar.MINUTE, it) }
+
+                if (Calendar.getInstance() < calendar) {
+                    Log.d(tag, "AuthCode is OK")
+                    return authCode
+                }
+                Log.d(tag, "AuthCode is invalid")
+            }
+
+            Log.d(tag, "Fetching new authCode")
+
+            val adsUrl = getAdsUrl(serverUrl, thumbUrl, link, headers)
+
+            val adsContent = client.newCall(GET(adsUrl)).execute().body.string()
+
+            val body = FormBody.Builder()
+                .add("category", "client")
+                .add("type", "premium")
+                .add("ad", adsContent)
+                .build()
+
+            val newHeaders = headers.newBuilder()
+                .set("Referer", "https://${SITE_URL.toHttpUrl().host}/")
+                .add("Accept", "*/*")
+                .add("Cache-Control", "no-cache")
+                .add("Pragma", "no-cache")
+                .add("Connection", "keep-alive")
+                .add("Sec-Fetch-Dest", "empty")
+                .add("Sec-Fetch-Mode", "cors")
+                .add("Sec-Fetch-Site", "same-site")
+                .build()
+
+            authCode =
+                client.newCall(POST(ADS_URL, headers = newHeaders, body = body))
+                    .execute()
+                    .body.string()
+                    .substringAfter("\"publicidade\"")
+                    .substringAfter('"')
+                    .substringBefore('"')
+
+            if (authCode.startsWith("?wmsAuthSign=")) {
+                Log.d(tag, "Auth code fetched successfully")
+                preferences.edit().putString(PREF_AUTHCODE_KEY, authCode).commit()
                 return authCode
             }
-            Log.d(tag, "AuthCode is invalid")
+
+            Log.e(
+                tag,
+                "Failed to fetch \"publicidade\" code, the current response: $authCode",
+            )
+        } catch (e: Exception) {
+            Log.e(tag, e.toString())
         }
 
-        Log.d(tag, "Fetching new authCode")
+        preferences.edit().putString(PREF_AUTHCODE_KEY, "").commit()
 
-        val adsUrl = getAdsUrl(serverUrl, thumbUrl, link, headers)
+        return null
+    }
 
-        val adsContent = client.newCall(GET(adsUrl)).execute().body.string()
-
-        val body = FormBody.Builder()
-            .add("category", "client")
-            .add("type", "premium")
-            .add("ad", adsContent)
-            .build()
+    private fun getVideoToken(videoUrl: String, authCode: String?): String {
+        val token = authCode ?: "undefined"
 
         val newHeaders = headers.newBuilder()
             .set("Referer", "https://${SITE_URL.toHttpUrl().host}/")
@@ -170,27 +228,10 @@ class AnitubeExtractor(
             .add("Sec-Fetch-Site", "same-site")
             .build()
 
-        val publicidade =
-            client.newCall(POST(ADS_URL, headers = newHeaders, body = body))
-                .execute()
-                .body.string()
-                .substringAfter("\"publicidade\"")
-                .substringAfter('"')
-                .substringBefore('"')
-
-        if (publicidade.isBlank()) {
-            Log.e(
-                tag,
-                "Failed to fetch \"publicidade\" code, the current response: $publicidade",
-            )
-
-            throw Exception("Por favor, abra o vídeo uma vez no navegador para liberar o IP")
-        }
-
-        authCode =
+        val videoToken =
             client.newCall(
                 GET(
-                    "$ADS_URL?token=$publicidade",
+                    "$ADS_URL?token=$token&url=$videoUrl",
                     headers = newHeaders,
                 ),
             )
@@ -200,25 +241,25 @@ class AnitubeExtractor(
                 .substringAfter('"')
                 .substringBefore('"')
 
-        if (authCode.startsWith("?")) {
-            Log.d(tag, "Auth code fetched successfully")
-            preferences.edit().putString(PREF_AUTHCODE_KEY, authCode).commit()
-        } else {
-            Log.e(
-                tag,
-                "Failed to fetch auth code, the current response: $authCode",
-            )
+        if (videoToken.startsWith("?")) {
+            Log.d(tag, "Video token fetched successfully")
+            return videoToken
         }
 
-        return authCode
+        Log.e(
+            tag,
+            "Failed to fetch video token, the current response: $videoToken",
+        )
+
+        return ""
     }
 
     fun getVideoList(doc: Document): List<Video> {
+        Log.d(tag, "Starting to fetch video list")
+
         val hasFHD = doc.selectFirst("div.abaItem:contains(FULLHD)") != null
         val serverUrl = doc.selectFirst("meta[itemprop=contentURL]")!!
             .attr("content")
-            .replace("cdn1", "cdn3")
-            .replace("cdn80", "cdn8")
         val thumbUrl = doc.selectFirst("meta[itemprop=thumbnailUrl]")!!
             .attr("content")
         val type = serverUrl.split("/").get(3)
@@ -231,6 +272,8 @@ class AnitubeExtractor(
             }
         } + listOf("appfullhd")
 
+        Log.d(tag, "Found ${paths.size} videos")
+
         val firstLink =
             doc.selectFirst("div.video_container > a, div.playerContainer > a")!!.attr("href")
 
@@ -240,16 +283,35 @@ class AnitubeExtractor(
             .mapIndexed { index, quality ->
                 object {
                     var path = paths[index]
-                    var url = serverUrl.replace(type, path) + authCode
+                    var url = serverUrl.replace(type, path)
                     var quality = "$quality - Anitube"
                 }
             }
             .parallelCatchingFlatMapBlocking {
-                if (!checkVideoExists(it.url).exists) {
-                    Log.d(tag, "Video not exists: ${it.url.substringBefore("?")}")
-                    return@parallelCatchingFlatMapBlocking emptyList()
+                if (!authCode.isNullOrBlank() && checkVideoExists(it.url + authCode).exists) {
+                    return@parallelCatchingFlatMapBlocking listOf(
+                        Video(
+                            it.url + authCode,
+                            it.quality,
+                            it.url + authCode,
+                            headers = headers,
+                        ),
+                    )
                 }
-                listOf(Video(it.url, it.quality, it.url, headers = headers))
+                val videoToken = getVideoToken(it.url, authCode)
+                if (videoToken.isNotBlank() && checkVideoExists(it.url + videoToken).exists) {
+                    return@parallelCatchingFlatMapBlocking listOf(
+                        Video(
+                            it.url + videoToken,
+                            it.quality,
+                            it.url + videoToken,
+                            headers = headers,
+                        ),
+                    )
+                }
+
+                Log.d(tag, "Video not exists: ${it.url.substringBefore("?")}")
+                return@parallelCatchingFlatMapBlocking emptyList()
             }
             .reversed()
     }

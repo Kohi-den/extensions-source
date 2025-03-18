@@ -38,7 +38,7 @@ class AnimeOwl : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "AnimeOwl"
 
-    override val baseUrl = "https://animeowl.live"
+    override val baseUrl = "https://animeowl.me"
 
     override val lang = "en"
 

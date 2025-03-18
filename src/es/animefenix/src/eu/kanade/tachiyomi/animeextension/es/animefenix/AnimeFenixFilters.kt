@@ -12,30 +12,6 @@ object AnimeFenixFilters {
         fun toQueryPart(name: String) = vals[state].second.takeIf { it.isNotEmpty() }?.let { "&$name=${vals[state].second}" } ?: run { "" }
     }
 
-    open class CheckBoxFilterList(name: String, values: List<CheckBox>) : AnimeFilter.Group<AnimeFilter.CheckBox>(name, values)
-
-    private class CheckBoxVal(name: String, state: Boolean = false) : AnimeFilter.CheckBox(name, state)
-
-    private inline fun <reified R> AnimeFilterList.parseCheckbox(
-        options: Array<Pair<String, String>>,
-        name: String,
-    ): String {
-        return (this.getFirst<R>() as CheckBoxFilterList).state
-            .mapNotNull { checkbox ->
-                if (checkbox.state) {
-                    options.find { it.first == checkbox.name }!!.second
-                } else {
-                    null
-                }
-            }.joinToString("&$name[]=").let {
-                if (it.isBlank()) {
-                    ""
-                } else {
-                    "&$name[]=$it"
-                }
-            }
-    }
-
     private inline fun <reified R> AnimeFilterList.asQueryPart(name: String): String {
         return (this.getFirst<R>() as QueryPartFilter).toQueryPart(name)
     }
@@ -51,111 +27,118 @@ object AnimeFenixFilters {
     internal fun getSearchParameters(filters: AnimeFilterList): FilterSearchParams {
         if (filters.isEmpty()) return FilterSearchParams()
         return FilterSearchParams(
-            filters.parseCheckbox<GenresFilter>(AnimeFenixFiltersData.GENRES, "genero") +
-                filters.parseCheckbox<YearsFilter>(AnimeFenixFiltersData.YEARS, "year") +
-                filters.parseCheckbox<TypesFilter>(AnimeFenixFiltersData.TYPES, "type") +
-                filters.parseCheckbox<StateFilter>(AnimeFenixFiltersData.STATE, "estado") +
-                filters.asQueryPart<SortFilter>("order"),
+            filters.asQueryPart<StateFilter>("estado") +
+                filters.asQueryPart<TypesFilter>("tipo") +
+                filters.asQueryPart<GenresFilter>("genero") +
+                filters.asQueryPart<YearsFilter>("estreno") +
+                filters.asQueryPart<LangFilter>("idioma"),
         )
     }
 
     val FILTER_LIST get() = AnimeFilterList(
         AnimeFilter.Header("La busqueda por texto ignora el filtro"),
+        StateFilter(),
+        TypesFilter(),
         GenresFilter(),
         YearsFilter(),
-        TypesFilter(),
-        StateFilter(),
-        SortFilter(),
+        LangFilter(),
     )
 
-    class GenresFilter : CheckBoxFilterList("Género", AnimeFenixFiltersData.GENRES.map { CheckBoxVal(it.first, false) })
-
-    class YearsFilter : CheckBoxFilterList("Año", AnimeFenixFiltersData.YEARS.map { CheckBoxVal(it.first, false) })
-
-    class TypesFilter : CheckBoxFilterList("Tipo", AnimeFenixFiltersData.TYPES.map { CheckBoxVal(it.first, false) })
-
-    class StateFilter : CheckBoxFilterList("Estado", AnimeFenixFiltersData.STATE.map { CheckBoxVal(it.first, false) })
-
-    class SortFilter : QueryPartFilter("Orden", AnimeFenixFiltersData.SORT)
+    class StateFilter : QueryPartFilter("Estado", AnimeFenixFiltersData.STATE)
+    class TypesFilter : QueryPartFilter("Tipo", AnimeFenixFiltersData.TYPES)
+    class GenresFilter : QueryPartFilter("Género", AnimeFenixFiltersData.GENRES)
+    class YearsFilter : QueryPartFilter("Año", AnimeFenixFiltersData.YEARS)
+    class LangFilter : QueryPartFilter("Idioma", AnimeFenixFiltersData.LANGUAGE)
 
     private object AnimeFenixFiltersData {
-        val YEARS = (1990..Calendar.getInstance().get(Calendar.YEAR)).map { Pair("$it", "$it") }.reversed().toTypedArray()
+        val STATE = arrayOf(
+            Pair("Todos", ""),
+            Pair("Emisión", "2"),
+            Pair("Finalizado", "1"),
+            Pair("Próximamente", "3"),
+        )
 
         val TYPES = arrayOf(
-            Pair("TV", "tv"),
-            Pair("Película", "movie"),
-            Pair("Especial", "special"),
-            Pair("OVA", "ova"),
-            Pair("DONGHUA", "donghua"),
-        )
-
-        val STATE = arrayOf(
-            Pair("Emisión", "1"),
-            Pair("Finalizado", "2"),
-            Pair("Próximamente", "3"),
-            Pair("En Cuarentena", "4"),
-        )
-
-        val SORT = arrayOf(
-            Pair("Por Defecto", "default"),
-            Pair("Recientemente Actualizados", "updated"),
-            Pair("Recientemente Agregados", "added"),
-            Pair("Nombre A-Z", "title"),
-            Pair("Calificación", "likes"),
-            Pair("Más Vistos", "visits"),
+            Pair("Todos", ""),
+            Pair("TV", "1"),
+            Pair("Película", "2"),
+            Pair("OVA", "3"),
+            Pair("Especial", "4"),
+            Pair("Serie", "9"),
+            Pair("Dorama", "11"),
+            Pair("Corto", "14"),
+            Pair("Donghua", "15"),
+            Pair("ONA", "16"),
+            Pair("Live Action", "17"),
+            Pair("Manhwa", "18"),
+            Pair("Teatral", "19"),
         )
 
         val GENRES = arrayOf(
-            Pair("Acción", "accion"),
-            Pair("Ángeles", "angeles"),
-            Pair("Artes Marciales", "artes-marciales"),
-            Pair("Aventura", "aventura"),
-            Pair("Ciencia Ficción", "Ciencia Ficción"),
-            Pair("Comedia", "comedia"),
-            Pair("Cyberpunk", "cyberpunk"),
-            Pair("Demonios", "demonios"),
-            Pair("Deportes", "deportes"),
-            Pair("Dragones", "dragones"),
-            Pair("Drama", "drama"),
-            Pair("Ecchi", "ecchi"),
-            Pair("Escolares", "escolares"),
-            Pair("Fantasía", "fantasia"),
-            Pair("Gore", "gore"),
-            Pair("Harem", "harem"),
-            Pair("Histórico", "historico"),
-            Pair("Horror", "horror"),
-            Pair("Infantil", "infantil"),
-            Pair("Isekai", "isekai"),
-            Pair("Josei", "josei"),
-            Pair("Juegos", "juegos"),
-            Pair("Magia", "magia"),
-            Pair("Mecha", "mecha"),
-            Pair("Militar", "militar"),
-            Pair("Misterio", "misterio"),
-            Pair("Música", "Musica"),
-            Pair("Ninjas", "ninjas"),
-            Pair("Parodia", "parodia"),
-            Pair("Policía", "policia"),
-            Pair("Psicológico", "psicologico"),
-            Pair("Recuerdos de la vida", "Recuerdos de la vida"),
-            Pair("Romance", "romance"),
-            Pair("Samurai", "samurai"),
-            Pair("Sci-Fi", "sci-fi"),
-            Pair("Seinen", "seinen"),
-            Pair("Shoujo", "shoujo"),
-            Pair("Shoujo Ai", "shoujo-ai"),
-            Pair("Shounen", "shounen"),
-            Pair("Slice of life", "slice-of-life"),
-            Pair("Sobrenatural", "sobrenatural"),
-            Pair("Space", "space"),
-            Pair("Spokon", "spokon"),
-            Pair("Steampunk", "steampunk"),
-            Pair("Superpoder", "superpoder"),
-            Pair("Thriller", "thriller"),
-            Pair("Vampiro", "vampiro"),
-            Pair("Yaoi", "yaoi"),
-            Pair("Yuri", "yuri"),
-            Pair("Zombies", "zombies"),
+            Pair("Todos", ""),
+            Pair("Acción", "1"),
+            Pair("Escolares", "2"),
+            Pair("Romance", "3"),
+            Pair("Shoujo", "4"),
+            Pair("Comedia", "5"),
+            Pair("Drama", "6"),
+            Pair("Seinen", "7"),
+            Pair("Deportes", "8"),
+            Pair("Shounen", "9"),
+            Pair("Recuentos de la vida", "10"),
+            Pair("Ecchi", "11"),
+            Pair("Sobrenatural", "12"),
+            Pair("Fantasía", "13"),
+            Pair("Magia", "14"),
+            Pair("Superpoderes", "15"),
+            Pair("Demencia", "16"),
+            Pair("Misterio", "17"),
+            Pair("Psicológico", "18"),
+            Pair("Suspenso", "19"),
+            Pair("Ciencia Ficción", "20"),
+            Pair("Mecha", "21"),
+            Pair("Militar", "22"),
+            Pair("Aventuras", "23"),
+            Pair("Historico", "24"),
+            Pair("Infantil", "25"),
+            Pair("Artes Marciales", "26"),
+            Pair("Terror", "27"),
+            Pair("Harem", "28"),
+            Pair("Josei", "29"),
+            Pair("Parodia", "30"),
+            Pair("Policía", "31"),
+            Pair("Juegos", "32"),
+            Pair("Carreras", "33"),
+            Pair("Samurai", "34"),
+            Pair("Espacial", "35"),
+            Pair("Música", "36"),
+            Pair("Yuri", "37"),
+            Pair("Demonios", "38"),
+            Pair("Vampiros", "39"),
+            Pair("Yaoi", "40"),
+            Pair("Humor Negro", "41"),
+            Pair("Crimen", "42"),
+            Pair("Hentai", "43"),
+            Pair("Youtuber", "44"),
+            Pair("MaiNess Random", "45"),
+            Pair("Donghua", "46"),
+            Pair("Horror", "47"),
+            Pair("Sin Censura", "48"),
+            Pair("Gore", "49"),
+            Pair("Live Action", "50"),
+            Pair("Isekai", "51"),
+            Pair("Gourmet", "52"),
+            Pair("spokon", "53"),
+            Pair("Zombies", "54"),
+            Pair("Idols", "55"),
         )
+
+        val LANGUAGE = arrayOf(
+            Pair("Todos", ""),
+            Pair("Japonés", "1"),
+            Pair("Latino", "2"),
+        )
+
+        val YEARS = arrayOf(Pair("Todos", "")) + (1967..Calendar.getInstance().get(Calendar.YEAR)).map { Pair("$it", "$it") }.reversed().toTypedArray()
     }
 }
