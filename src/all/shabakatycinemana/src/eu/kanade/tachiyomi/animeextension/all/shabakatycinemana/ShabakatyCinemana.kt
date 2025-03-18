@@ -134,8 +134,17 @@ object SAnimeDeserializer : DeserializationStrategy<SAnime> {
         val nb = jsonObject["nb"]?.jsonPrimitive?.content!!
         val enTitle = jsonObject["en_title"]?.jsonPrimitive?.content ?: "no title"
         val imgObjUrl = jsonObject["imgObjUrl"]?.jsonPrimitive?.content
-        val categories = jsonObject["categories"]?.jsonArray?.map {
+        val categories = jsonObject["categories"]?.jsonArray?.mapNotNull {
             it.jsonObject["en_title"]?.jsonPrimitive?.content
+        }.orEmpty()
+        val language = jsonObject["videoLanguages"]?.jsonObject?.get("en_title")?.jsonPrimitive?.content
+
+        val genreText = (categories + language).joinToString(", ")
+        val directors = jsonObject["directorsInfo"]?.jsonArray?.map {
+            it.jsonObject["name"]?.jsonPrimitive?.content
+        }?.joinToString(", ")
+        val actors = jsonObject["actorsInfo"]?.jsonArray?.map {
+            it.jsonObject["name"]?.jsonPrimitive?.content
         }?.joinToString(", ")
         val enContent = jsonObject["en_content"]?.jsonPrimitive?.content
         val year = jsonObject["year"]?.jsonPrimitive?.content ?: "N/A"
@@ -149,7 +158,9 @@ object SAnimeDeserializer : DeserializationStrategy<SAnime> {
             url = nb
             title = enTitle
             thumbnail_url = imgObjUrl
-            genre = categories
+            genre = genreText
+            author = directors
+            artist = actors
             description = "$year | $starsText | $likes\uD83D\uDC4D  $dislikes\uD83D\uDC4E\n\n$enContent"
         }
     }
@@ -178,7 +189,8 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
         private const val SUB_CATEGORY_FILTER_NAME = "Sub Category"
         private const val LANGUAGE_FILTER_NAME = "Language"
         private const val YEAR_FILTER_NAME = "Year"
-        private const val BROWSE_RESULT_SORT_FILTER = "Browse Sort"
+        private const val BROWSE_RESULT_SORT_FILTER_NAME = "Browse Sort"
+        private const val STAFF_TITLE_FILTER_NAME = "Staff Title"
 
         private const val POPULAR_ITEMS_PER_PAGE = 30
         private const val SEARCH_ITEMS_PER_PAGE = 12
@@ -253,7 +265,8 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
         val subCategoryFilter = filterList.find { it.name == SUB_CATEGORY_FILTER_NAME } as MultipleSelectFilter
         val languageFilter = filterList.find { it.name == LANGUAGE_FILTER_NAME } as SingleSelectFilter
         val yearFilter = filterList.find { it.name == YEAR_FILTER_NAME } as YearFilter
-        val browseResultSortFilter = filterList.find { it.name == BROWSE_RESULT_SORT_FILTER } as BrowseResultSort
+        val staffTitleFilter = filterList.find { it.name == STAFF_TITLE_FILTER_NAME } as StaffTitleFilter
+        val browseResultSortFilter = filterList.find { it.name == BROWSE_RESULT_SORT_FILTER_NAME } as BrowseResultSort
         val isBrowsing = isBrowsingFilter.state
         val kindName = kindFilter.getNameValue()
         val kindNumber = kindFilter.getNumberValue().toString()
@@ -263,6 +276,7 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
         val bothCategory = (selectedMainCategories + selectedSubCategories).joinToString(",")
         val language = languageFilter.getNumberValue().toString()
         val year = yearFilter.getFormatted()
+        val staffTitle = staffTitleFilter.state
         val browseResultSort = browseResultSortFilter.getValue()
 
         var url = apiBaseUrl.toHttpUrl()
@@ -311,7 +325,12 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
             if (query.isNotBlank()) {
                 url = url.newBuilder()
                     .addQueryParameter("videoTitle", query)
-                    .addQueryParameter("staffTitle", query)
+                    .build()
+            }
+
+            if (staffTitle.isNotBlank()) {
+                url = url.newBuilder()
+                    .addQueryParameter("staffTitle", staffTitle)
                     .build()
             }
 
@@ -425,8 +444,10 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
         }
     }
 
+    private open class StaffTitleFilter(displayName: String) : AnimeFilter.Text(displayName)
+
     override fun getFilterList() = AnimeFilterList(
-        AnimeFilter.Header("Filter Search Result"),
+        StaffTitleFilter(STAFF_TITLE_FILTER_NAME),
         CheckBoxFilter(IS_BROWSING_FILTER_NAME, false),
         SingleSelectFilter(
             KIND_FILTER_NAME,
@@ -550,7 +571,7 @@ class ShabakatyCinemana : ConfigurableAnimeSource, AnimeHttpSource() {
                 YearTextFilter("end", Calendar.getInstance().get(Calendar.YEAR).toString()),
         ),
         BrowseResultSort(
-            BROWSE_RESULT_SORT_FILTER,
+            BROWSE_RESULT_SORT_FILTER_NAME,
             arrayOf(
                 Pair("Upload", Pair("asc", "desc")),
                 Pair("Release", Pair("r_asc", "r_desc")),
