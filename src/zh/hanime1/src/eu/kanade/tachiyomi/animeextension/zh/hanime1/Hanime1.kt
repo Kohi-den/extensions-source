@@ -137,7 +137,7 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
                 }
             }
         } else {
-            jsoup.select(".search-videos").map {
+            jsoup.select("a:not([target]) > .search-videos").map {
                 SAnime.create().apply {
                     setUrlWithoutDomain(it.parent()!!.attr("href"))
                     thumbnail_url = it.select("img").attr("src")
