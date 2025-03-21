@@ -100,13 +100,23 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     override fun videoListParse(response: Response): List<Video> {
-        val sourceList = response.asJsoup().select("video source")
+        val doc = response.asJsoup()
+        val sourceList = doc.select("video source")
         val preferQuality = preferences.getString(PREF_KEY_VIDEO_QUALITY, DEFAULT_QUALITY)
         return sourceList.map {
             val quality = it.attr("size")
             val url = it.attr("src")
             Video(url, "${quality}P", videoUrl = url)
-        }.sortedByDescending { preferQuality == it.quality }
+        }.filterNot { it.videoUrl?.startsWith("blob") == true }
+            .sortedByDescending { preferQuality == it.quality }
+            .ifEmpty {
+                // found source from script content
+                val videoUrl = doc.select("script[type=application/ld+json]").first()!!.data().let {
+                    val info = json.decodeFromString<JsonElement>(it).jsonObject
+                    info["contentUrl"]!!.jsonPrimitive.content
+                }
+                listOf(Video(videoUrl, "Raw", videoUrl = videoUrl))
+            }
     }
 
     override fun latestUpdatesParse(response: Response): AnimesPage = searchAnimeParse(response)
