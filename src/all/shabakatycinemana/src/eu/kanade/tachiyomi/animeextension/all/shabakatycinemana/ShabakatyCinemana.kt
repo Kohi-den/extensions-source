@@ -138,14 +138,13 @@ object SAnimeDeserializer : DeserializationStrategy<SAnime> {
             it.jsonObject["en_title"]?.jsonPrimitive?.content
         }.orEmpty()
         val language = jsonObject["videoLanguages"]?.jsonObject?.get("en_title")?.jsonPrimitive?.content
-
-        val genreText = (categories + language).joinToString(", ")
-        val directors = jsonObject["directorsInfo"]?.jsonArray?.map {
+        val genreText = (categories + language).mapNotNull { it }.joinToString()
+        val directors = jsonObject["directorsInfo"]?.jsonArray?.mapNotNull {
             it.jsonObject["name"]?.jsonPrimitive?.content
-        }?.joinToString(", ")
-        val actors = jsonObject["actorsInfo"]?.jsonArray?.map {
+        }?.joinToString()
+        val actors = jsonObject["actorsInfo"]?.jsonArray?.mapNotNull {
             it.jsonObject["name"]?.jsonPrimitive?.content
-        }?.joinToString(", ")
+        }?.joinToString()
         val enContent = jsonObject["en_content"]?.jsonPrimitive?.content
         val year = jsonObject["year"]?.jsonPrimitive?.content ?: "N/A"
         val stars = jsonObject["stars"]?.jsonPrimitive?.content?.parseAs<Float>()?.toInt() ?: 0
@@ -161,7 +160,10 @@ object SAnimeDeserializer : DeserializationStrategy<SAnime> {
             genre = genreText
             author = directors
             artist = actors
-            description = "$year | $starsText | $likes\uD83D\uDC4D  $dislikes\uD83D\uDC4E\n\n$enContent"
+            description = listOfNotNull(
+                "$year | $starsText | $likes\uD83D\uDC4D  $dislikes\uD83D\uDC4E",
+                enContent,
+            ).joinToString("\n\n")
         }
     }
 }
