@@ -111,7 +111,7 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
         }.filterNot { it.videoUrl?.startsWith("blob") == true }
             .sortedByDescending { preferQuality == it.quality }
             .ifEmpty {
-                // found source from script content
+                // Try to find the source from the script content.
                 val videoUrl = doc.select("script[type=application/ld+json]").first()!!.data().let {
                     val info = json.decodeFromString<JsonElement>(it).jsonObject
                     info["contentUrl"]!!.jsonPrimitive.content
