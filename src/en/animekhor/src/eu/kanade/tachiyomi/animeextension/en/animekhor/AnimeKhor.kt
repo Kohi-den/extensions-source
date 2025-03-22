@@ -9,7 +9,7 @@ import eu.kanade.tachiyomi.multisrc.animestream.AnimeStream
 class AnimeKhor : AnimeStream(
     "en",
     "AnimeKhor",
-    "https://animekhor.xyz",
+    "https://animekhor.org",
 ) {
     // ============================ Video Links =============================
 
@@ -29,7 +29,7 @@ class AnimeKhor : AnimeStream(
                 StreamWishExtractor(client, docHeaders).videosFromUrl(url, prefix)
             }
             // TODO: Videos won't play
-//            url.contains("animeabc.xyz") -> {
+//            url.contains("animeabc.org") -> {
 //                AnimeABCExtractor(client, headers).videosFromUrl(url, prefix = prefix)
 //            }
             else -> emptyList()
