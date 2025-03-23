@@ -325,8 +325,16 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         val lang = preferences.getString(PREF_TYPE_KEY, PREF_TYPE_DEFAULT)!!.let(::getTypeName)
         val server = preferences.getString(PREF_SERVER_KEY, PREF_SERVER_DEFAULT)!!.let(::getServerName)
 
+        val lang2 = if ((lang == PREF_TYPE_ENTRIES[1]) or (lang == PREF_TYPE_ENTRIES[3])) {
+            // if preferred language is SoftSub or Dubtitles
+            PREF_TYPE_ENTRIES[PREF_TYPE_ENTRIES.indexOf(lang) - 1]
+        } else {
+            ""
+        }
+
         return sortedWith(
-            compareByDescending<Video> { it.quality.contains(lang) }
+            compareByDescending<Video> { it.quality.split(" - ").contains(lang) }
+                .thenByDescending { it.quality.contains(lang2) }
                 .thenByDescending { it.quality.contains(quality) }
                 .thenByDescending { it.quality.contains(server, true) },
         )
