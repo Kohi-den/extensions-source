@@ -42,7 +42,7 @@ def bump_version(file: Path):
         print(f"\n{file}: ", end="")
         text = VERSION_REGEX.sub(replace_version, f.read())
         # Move the cursor to the start again, to prevent writing at the end
-        f.seek(0) 
+        f.seek(0)
         f.write(text)
 
 def bump_lib_multisrc(theme: str):
