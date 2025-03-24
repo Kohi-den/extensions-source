@@ -1,6 +1,6 @@
 ## Guide
 
-just paste this into your anime repo 
+just paste this into your anime repo
 ```
 https://raw.githubusercontent.com/Kohi-den/extensions/main/index.min.json
 ```
@@ -10,7 +10,7 @@ If your interested in installing just the apks they can be found [Here](https://
 
 Join the [Discord](https://discord.gg/vut4mmXQzU) for updates and announcements
 
-and please check the discord BEFORE making an issue 
+and please check the discord BEFORE making an issue
 
 ## Contributing
 

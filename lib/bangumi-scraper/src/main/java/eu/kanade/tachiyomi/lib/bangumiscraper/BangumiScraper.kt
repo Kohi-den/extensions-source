@@ -121,6 +121,3 @@ object BangumiScraper {
         return responseStr
     }
 }
-
-
-

@@ -40,7 +40,7 @@ for apk in REPO_APK_DIR.iterdir():
     ).decode()
 
     package_info = next(x for x in badging.splitlines() if x.startswith("package: "))
-    package_name = PACKAGE_NAME_REGEX.search(package_info).group(1)    
+    package_name = PACKAGE_NAME_REGEX.search(package_info).group(1)
     application_icon = APPLICATION_ICON_320_REGEX.search(badging).group(1)
 
     with ZipFile(apk) as z, z.open(application_icon) as i, (
