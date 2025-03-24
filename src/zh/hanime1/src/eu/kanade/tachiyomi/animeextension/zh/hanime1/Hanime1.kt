@@ -24,6 +24,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.Request
@@ -100,13 +101,23 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     override fun videoListParse(response: Response): List<Video> {
-        val sourceList = response.asJsoup().select("video source")
+        val doc = response.asJsoup()
+        val sourceList = doc.select("video source")
         val preferQuality = preferences.getString(PREF_KEY_VIDEO_QUALITY, DEFAULT_QUALITY)
         return sourceList.map {
             val quality = it.attr("size")
             val url = it.attr("src")
             Video(url, "${quality}P", videoUrl = url)
-        }.sortedByDescending { preferQuality == it.quality }
+        }.filterNot { it.videoUrl?.startsWith("blob") == true }
+            .sortedByDescending { preferQuality == it.quality }
+            .ifEmpty {
+                // Try to find the source from the script content.
+                val videoUrl = doc.select("script[type=application/ld+json]").first()!!.data().let {
+                    val info = json.decodeFromString<JsonElement>(it).jsonObject
+                    info["contentUrl"]!!.jsonPrimitive.content
+                }
+                listOf(Video(videoUrl, "Raw", videoUrl = videoUrl))
+            }
     }
 
     override fun latestUpdatesParse(response: Response): AnimesPage = searchAnimeParse(response)
@@ -137,7 +148,7 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
                 }
             }
         } else {
-            jsoup.select(".search-videos").map {
+            jsoup.select("a:not([target]) > .search-videos").map {
                 SAnime.create().apply {
                     setUrlWithoutDomain(it.parent()!!.attr("href"))
                     thumbnail_url = it.select("img").attr("src")
@@ -277,25 +288,50 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
-        screen.addPreference(
-            ListPreference(screen.context).apply {
-                key = PREF_KEY_VIDEO_QUALITY
-                title = "設置首選畫質"
-                entries = arrayOf("1080P", "720P", "480P")
-                entryValues = entries
-                setDefaultValue(DEFAULT_QUALITY)
-                summary =
-                    "當前選擇：${preferences.getString(PREF_KEY_VIDEO_QUALITY, DEFAULT_QUALITY)}"
-                setOnPreferenceChangeListener { _, newValue ->
-                    summary = "當前選擇：${newValue as String}"
-                    true
-                }
-            },
-        )
+        screen.apply {
+            addPreference(
+                ListPreference(context).apply {
+                    key = PREF_KEY_VIDEO_QUALITY
+                    title = "設置首選畫質"
+                    entries = arrayOf("1080P", "720P", "480P")
+                    entryValues = entries
+                    setDefaultValue(DEFAULT_QUALITY)
+                    summary =
+                        "當前選擇：${preferences.getString(PREF_KEY_VIDEO_QUALITY, DEFAULT_QUALITY)}"
+                    setOnPreferenceChangeListener { _, newValue ->
+                        summary = "當前選擇：${newValue as String}"
+                        true
+                    }
+                },
+            )
+            addPreference(
+                ListPreference(context).apply {
+                    key = PREF_KEY_LANG
+                    title = "設置首選語言"
+                    summary = "該設置僅影響影片字幕"
+                    entries = arrayOf("繁體中文", "簡體中文")
+                    entryValues = arrayOf("zh-CHT", "zh-CHS")
+                    setOnPreferenceChangeListener { _, newValue ->
+                        val baseHttpUrl = baseUrl.toHttpUrl()
+                        client.cookieJar.saveFromResponse(
+                            baseHttpUrl,
+                            listOf(
+                                Cookie.parse(
+                                    baseHttpUrl,
+                                    "user_lang=${newValue as String}",
+                                )!!,
+                            ),
+                        )
+                        true
+                    }
+                },
+            )
+        }
     }
 
     companion object {
         const val PREF_KEY_VIDEO_QUALITY = "PREF_KEY_VIDEO_QUALITY"
+        const val PREF_KEY_LANG = "PREF_KEY_LANG"
 
         const val PREF_KEY_GENRE_LIST = "PREF_KEY_GENRE_LIST"
         const val PREF_KEY_SORT_LIST = "PREF_KEY_SORT_LIST"
