@@ -536,12 +536,12 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
         private val HEADER_NEXT_ACTION = mapOf(
             PREF_DOMAIN_ENTRY_VALUES[0] to mapOf(
-                "NEXT_ACTION_EPISODE_LIST" to "7f39ceba984fb47350526469339d4fbaa3ec5caa99",
-                "NEXT_ACTION_SOURCES_LIST" to "7f1d4204bc38dac69a6a066b167c7b967bf022a03b",
+                "NEXT_ACTION_EPISODE_LIST" to "7f245562e54103f7dc13b3f89743fe31492ae34d6d",
+                "NEXT_ACTION_SOURCES_LIST" to "7fa64b02d2e6dc6a72c31b915844cb42a729b5e575",
             ),
             PREF_DOMAIN_ENTRY_VALUES[1] to mapOf(
-                "NEXT_ACTION_EPISODE_LIST" to "7f820a70d776d5287c17ce6f39dc10b412994568b6",
-                "NEXT_ACTION_SOURCES_LIST" to "7f5d0fab51d7f06ded42a7a4c7830c48e48ab96b73",
+                "NEXT_ACTION_EPISODE_LIST" to "7f4b13f495ada236e47ada7923680d8264f2601e45",
+                "NEXT_ACTION_SOURCES_LIST" to "7f41e61d8806a49322bbe4746ff28a39e4dc098b6b",
             ),
         )
         private const val PROXY_URL = "https://aniplay-cors.yqizw7.easypanel.host"
