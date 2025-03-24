@@ -5,13 +5,11 @@ import eu.kanade.tachiyomi.network.GET
 import android.util.Base64
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parseAs
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.Serializable
 import okhttp3.Headers
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
-import uy.kohesive.injekt.injectLazy
 import java.nio.charset.Charset
 
 class LycorisCafeExtractor(private val client: OkHttpClient) {
@@ -19,8 +17,6 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
     private val GETSECONDARYURL = "https://www.lycoris.cafe/api/watch/getSecondaryLink"
 
     private val GETLNKURL = "https://www.lycoris.cafe/api/watch/getLink"
-
-    private val json: Json by injectLazy()
 
     // Credit: https://github.com/skoruppa/docchi-stremio-addon/blob/main/app/players/lycoris.py
     fun getVideosFromUrl(url: String, headers: Headers, prefix: String): List<Video> {
@@ -34,17 +30,25 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
             GET(url, headers = embedHeaders),
         ).execute().asJsoup()
 
-        val script = document.select("script[type='application/json']").first()?.data()?.toString() ?: return emptyList()
+        val script = document.selectFirst("script[type='application/json']")?.data() ?: return emptyList()
 
         val scriptData = script.parseAs<ScriptBody>()
 
         val data = scriptData.body.parseAs<ScriptEpisode>()
 
-        val linkList: String? = fetchAndDecodeVideo(client, data.episodeInfo.id.toString(), isSecondary = false)
+        val linkList = data.episodeInfo.id?.let {
+            fetchAndDecodeVideo(client, data.episodeInfo.id.toString(), isSecondary = false)
+        }
 
-        val fhdLink = fetchAndDecodeVideo(client, data.episodeInfo.FHD.toString(), isSecondary = true)
-        val sdLink = fetchAndDecodeVideo(client, data.episodeInfo.SD.toString(), isSecondary = true)
-        val hdLink = fetchAndDecodeVideo(client, data.episodeInfo.HD.toString(), isSecondary = true)
+        val fhdLink = data.episodeInfo.FHD?.let {
+            fetchAndDecodeVideo(client, data.episodeInfo.FHD, isSecondary = true)
+        }
+        val sdLink = data.episodeInfo.SD?.let {
+            fetchAndDecodeVideo(client, data.episodeInfo.SD, isSecondary = true)
+        }
+        val hdLink = data.episodeInfo.HD?.let {
+            fetchAndDecodeVideo(client, data.episodeInfo.HD, isSecondary = true)
+        }
 
         if (linkList.isNullOrBlank() || linkList == "{}") {
             if (!fhdLink.isNullOrBlank()) {
@@ -56,25 +60,24 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
             if (!sdLink.isNullOrBlank()) {
                 videos.add(Video(sdLink, "${prefix}lycoris.cafe - 480p", sdLink))
             }
-
         } else {
             val videoLinks = linkList.parseAs<VideoLinksApi>()
 
             videoLinks.FHD?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 1080p", it))
-            }?: fhdLink?.takeIf { it.contains("https://") }?.let {
+            } ?: fhdLink?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 1080p", it))
             }
 
             videoLinks.HD?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 720p", it))
-            }?: hdLink?.takeIf { it.contains("https://") }?.let {
+            } ?: hdLink?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 720p", it))
             }
 
             videoLinks.SD?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 480p", it))
-            }?: sdLink?.takeIf { it.contains("https://") }?.let {
+            } ?: sdLink?.takeIf { checkLinks(client, it) }?.let {
                 videos.add(Video(it, "${prefix}lycoris.cafe - 480p", it))
             }
         }
@@ -125,7 +128,7 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
         client.newCall(GET(url))
             .execute()
             .use { response ->
-                val data = response.body.string() ?: ""
+                val data = response.body.string()
                 return decodeVideoLinks(data)
             }
     }
@@ -141,6 +144,7 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
     private fun decodePythonEscape(text: String): String {
         // 1. Obsługa kontynuacji linii (backslash + newline)
         val withoutLineContinuation = text.replace("\\\n", "")
+
 
         // 2. Regex do wykrywania wszystkich sekwencji escape
         val regex = Regex(
