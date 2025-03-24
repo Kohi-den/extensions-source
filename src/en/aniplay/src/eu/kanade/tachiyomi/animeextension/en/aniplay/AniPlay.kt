@@ -325,8 +325,16 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         val lang = preferences.getString(PREF_TYPE_KEY, PREF_TYPE_DEFAULT)!!.let(::getTypeName)
         val server = preferences.getString(PREF_SERVER_KEY, PREF_SERVER_DEFAULT)!!.let(::getServerName)
 
+        val lang2 = if ((lang == PREF_TYPE_ENTRIES[1]) or (lang == PREF_TYPE_ENTRIES[3])) {
+            // if preferred language is SoftSub or Dubtitles
+            PREF_TYPE_ENTRIES[PREF_TYPE_ENTRIES.indexOf(lang) - 1]
+        } else {
+            ""
+        }
+
         return sortedWith(
-            compareByDescending<Video> { it.quality.contains(lang) }
+            compareByDescending<Video> { it.quality.split(" - ").contains(lang) }
+                .thenByDescending { it.quality.contains(lang2) }
                 .thenByDescending { it.quality.contains(quality) }
                 .thenByDescending { it.quality.contains(server, true) },
         )
@@ -528,12 +536,12 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
         private val HEADER_NEXT_ACTION = mapOf(
             PREF_DOMAIN_ENTRY_VALUES[0] to mapOf(
-                "NEXT_ACTION_EPISODE_LIST" to "f3422af67c84852f5e63d50e1f51718f1c0225c4",
-                "NEXT_ACTION_SOURCES_LIST" to "5dbcd21c7c276c4d15f8de29d9ef27aef5ea4a5e",
+                "NEXT_ACTION_EPISODE_LIST" to "7f39ceba984fb47350526469339d4fbaa3ec5caa99",
+                "NEXT_ACTION_SOURCES_LIST" to "7f1d4204bc38dac69a6a066b167c7b967bf022a03b",
             ),
             PREF_DOMAIN_ENTRY_VALUES[1] to mapOf(
-                "NEXT_ACTION_EPISODE_LIST" to "56e4151352ded056cbe226d2376c7436cffc9a37",
-                "NEXT_ACTION_SOURCES_LIST" to "8a76af451978c817dde2364326a5e4e45eb43db1",
+                "NEXT_ACTION_EPISODE_LIST" to "7f820a70d776d5287c17ce6f39dc10b412994568b6",
+                "NEXT_ACTION_SOURCES_LIST" to "7f5d0fab51d7f06ded42a7a4c7830c48e48ab96b73",
             ),
         )
         private const val PROXY_URL = "https://aniplay-cors.yqizw7.easypanel.host"
