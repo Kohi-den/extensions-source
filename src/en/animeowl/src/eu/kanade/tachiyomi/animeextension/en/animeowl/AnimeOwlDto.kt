@@ -53,12 +53,13 @@ data class Link(
 
 @Serializable
 data class OwlServers(
-    val kaido: String? = null,
-    val luffy: String? = null,
-    val zoro: String? = null,
+    val kaido: List<Stream>? = null,
+    val luffy: List<Stream>? = null,
+    val zoro: List<Stream>? = null,
 )
 
 @Serializable
 data class Stream(
     val url: String,
+    val resolution: String?,
 )
