@@ -137,7 +137,7 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
     private val sibnetExtractor by lazy { SibnetExtractor(client) }
     private val doodExtractor by lazy { DoodExtractor(client) }
     private val lycorisExtractor by lazy { LycorisCafeExtractor(client) }
-    private val luluExtractor by lazy { LuluExtractor(client) }
+    private val luluExtractor by lazy { LuluExtractor(client, headers) }
     private val googledriveExtractor by lazy { GoogleDriveExtractor(client, headers) }
 
     override fun videoListParse(response: Response): List<Video> {
@@ -203,7 +203,7 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
                 }
 
                 serverUrl.contains("luluvdo.com") -> {
-                    luluExtractor.videosFromUrl(serverUrl, prefix, headers)
+                    luluExtractor.videosFromUrl(serverUrl, prefix)
                 }
 
                 serverUrl.contains("drive.google.com") -> {

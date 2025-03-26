@@ -6,23 +6,24 @@ import okhttp3.Headers
 import okhttp3.OkHttpClient
 import java.util.regex.Pattern
 
-class LuluExtractor(private val client: OkHttpClient) {
-    //Credit: https://github.com/skoruppa/docchi-stremio-addon/blob/main/app/players/lulustream.py
-    fun videosFromUrl(url: String, prefix: String, headers: Headers): List<Video> {
-        val luluHeaders = headers.newBuilder()
-            .add("Referer", "https://luluvdo.com")
-            .add("Origin", "https://luluvdo.com")
-            .build()
+class LuluExtractor(private val client: OkHttpClient, headers: Headers) {
 
+    private val headers = headers.newBuilder()
+        .add("Referer", "https://luluvdo.com")
+        .add("Origin", "https://luluvdo.com")
+        .build()
+
+    //Credit: https://github.com/skoruppa/docchi-stremio-addon/blob/main/app/players/lulustream.py
+    fun videosFromUrl(url: String, prefix: String): List<Video> {
         val videos = mutableListOf<Video>()
 
         try {
-            val html = client.newCall(GET(url, luluHeaders)).execute().use { it.body.string() }
+            val html = client.newCall(GET(url, headers)).execute().use { it.body.string() }
             val m3u8Url = extractM3u8Url(html) ?: return emptyList()
             val fixedUrl = fixM3u8Link(m3u8Url)
-            val quality = getResolution(fixedUrl, luluHeaders)
+            val quality = getResolution(fixedUrl, headers)
 
-            videos.add(Video(fixedUrl, "${prefix}Lulu - $quality", fixedUrl, luluHeaders))
+            videos.add(Video(fixedUrl, "${prefix}Lulu - $quality", fixedUrl, headers))
         } catch (e: Exception) {
             e.printStackTrace()
         }
