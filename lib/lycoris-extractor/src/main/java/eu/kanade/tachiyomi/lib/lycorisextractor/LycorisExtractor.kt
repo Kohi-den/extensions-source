@@ -18,6 +18,16 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
 
     private val GETLNKURL = "https://www.lycoris.cafe/api/watch/getLink"
 
+    private val wordsRegex by lazy {
+        Regex(
+        """\\U([0-9a-fA-F]{8})|""" +     // \UXXXXXXXX
+            """\\u([0-9a-fA-F]{4})|""" +     // \uXXXX
+            """\\x([0-9a-fA-F]{2})|""" +     // \xHH
+            """\\([0-7]{1,3})|""" +          // \OOO (octal)
+            """\\([btnfr"'$\\])"""         // \n, \t, itd.
+        )
+    }
+
     // Credit: https://github.com/skoruppa/docchi-stremio-addon/blob/main/app/players/lycoris.py
     fun getVideosFromUrl(url: String, headers: Headers, prefix: String): List<Video> {
 
@@ -145,17 +155,7 @@ class LycorisCafeExtractor(private val client: OkHttpClient) {
         // 1. Obsługa kontynuacji linii (backslash + newline)
         val withoutLineContinuation = text.replace("\\\n", "")
 
-
-        // 2. Regex do wykrywania wszystkich sekwencji escape
-        val regex = Regex(
-            """\\U([0-9a-fA-F]{8})|""" +     // \UXXXXXXXX
-                """\\u([0-9a-fA-F]{4})|""" +     // \uXXXX
-                """\\x([0-9a-fA-F]{2})|""" +     // \xHH
-                """\\([0-7]{1,3})|""" +          // \OOO (octal)
-                """\\([btnfr"'$\\])"""         // \n, \t, itd.
-        )
-
-        return regex.replace(withoutLineContinuation) { match ->
+        return wordsRegex.replace(withoutLineContinuation) { match ->
             val (u8, u4, x2, octal, simple) = match.destructured
             when {
                 u8.isNotEmpty() -> handleUnicode8(u8)

@@ -203,7 +203,7 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
                 }
 
                 serverUrl.contains("luluvdo.com") -> {
-                    luluExtractor.videosFromUrl(serverUrl, prefix)
+                    luluExtractor.videosFromUrl(serverUrl, prefix, headers)
                 }
 
                 serverUrl.contains("drive.google.com") -> {
