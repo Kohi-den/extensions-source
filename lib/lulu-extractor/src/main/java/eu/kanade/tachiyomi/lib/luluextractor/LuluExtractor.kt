@@ -104,26 +104,27 @@ class LuluExtractor(private val client: OkHttpClient) {
 
 object JavaScriptUnpacker {
     private val UNPACK_REGEX by lazy {
-        Regex("""\}\('(.*)', *(\d+), *(\d+), *'(.*?)'\.split\('\|'\)""")
+        Regex("""\}\('(.*)', *(\d+), *(\d+), *'(.*?)'\.split\('\|'\)""",
+            RegexOption.DOT_MATCHES_ALL)
     }
     fun unpack(encodedJs: String): String? {
-            val match = UNPACK_REGEX.find(encodedJs) ?: return null
-            val (payload, radixStr, countStr, symtabStr) = match.destructured
+        val match = UNPACK_REGEX.find(encodedJs) ?: return null
+        val (payload, radixStr, countStr, symtabStr) = match.destructured
 
-            val radix = radixStr.toIntOrNull() ?: return null
-            val count = countStr.toIntOrNull() ?: return null
-            val symtab = symtabStr.split('|')
+        val radix = radixStr.toIntOrNull() ?: return null
+        val count = countStr.toIntOrNull() ?: return null
+        val symtab = symtabStr.split('|')
 
-            if (symtab.size != count) throw IllegalArgumentException("Invalid symtab size")
+        if (symtab.size != count) throw IllegalArgumentException("Invalid symtab size")
 
-            val baseDict = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                .take(radix)
-                .withIndex()
-                .associate { it.value to it.index }
+        val baseDict = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            .take(radix)
+            .withIndex()
+            .associate { it.value to it.index }
 
-            return Regex("""\b\w+\b""").replace(payload) { mr ->
-                symtab.getOrNull(unbase(mr.value, radix, baseDict)) ?: mr.value
-            }.replace("\\", "")
+        return Regex("""\b\w+\b""").replace(payload) { mr ->
+            symtab.getOrNull(unbase(mr.value, radix, baseDict)) ?: mr.value
+        }.replace("\\", "")
 
     }
     private fun unbase(value: String, radix: Int, dict: Map<Char, Int>): Int {
