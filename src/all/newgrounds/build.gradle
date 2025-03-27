@@ -1,0 +1,7 @@
+ext {
+    extName = 'Newgrounds'
+    extClass = '.NewGrounds'
+    extVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
