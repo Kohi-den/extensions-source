@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import androidx.preference.ListPreference
+import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
@@ -31,7 +32,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.regex.Pattern
 
-private const val SEARCH_PAGE_SIZE = 20
+private const val PAGE_SIZE = 20
 private val MOVIE_ID_PATTERN = Pattern.compile("""data-movie-id=\\"(\d+)\\"""", Pattern.MULTILINE)
 
 class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
@@ -63,7 +64,7 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     private val latestSection = preferences.getString("LATEST", PREF_SECTIONS["Latest"])!!
 
     override fun latestUpdatesRequest(page: Int): Request {
-        val offset = (page - 1) * SEARCH_PAGE_SIZE
+        val offset = (page - 1) * PAGE_SIZE
         return GET("$baseUrl/$latestSection?offset=$offset", headers)
     }
 
@@ -85,7 +86,7 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     private val popularSection = preferences.getString("POPULAR", PREF_SECTIONS["Popular"])!!
 
     override fun popularAnimeRequest(page: Int): Request {
-        val offset = (page - 1) * SEARCH_PAGE_SIZE
+        val offset = (page - 1) * PAGE_SIZE
         return GET("$baseUrl/$popularSection?offset=$offset", headers)
     }
 
@@ -146,11 +147,15 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             ?.findInstance<BeforeDateFilter>().ifFilterSet {
                 searchUrl.addQueryParameter("before", it.state)
             }
-//        filters.findInstance<RatingFilter>().ifFilterSet {
-//            searchUrl.addQueryParameter("", "")
-//        }
         filters.findInstance<SortingFilter>().ifFilterSet {
-            searchUrl.addQueryParameter("sort", SORTING.values.elementAt(it.state))
+            if (it.state?.index != 0) {
+                val sortOption = SORTING.values.elementAt(it.state?.index ?: return@ifFilterSet)
+                val direction = if (it.state?.ascending == true) "asc" else "desc"
+                searchUrl.addQueryParameter(
+                    "sort",
+                    "$sortOption-$direction",
+                )
+            }
         }
         filters.findInstance<TagsFilter>().ifFilterSet {
             searchUrl.addQueryParameter("tags", it.state)
@@ -203,13 +208,34 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             return "👀 $views | ❤️ $faves | 👍 $votes"
         }
 
+        fun prepareDescription(): String {
+            val descriptionElements = preferences.getStringSet("DESCRIPTION_ELEMENTS", setOf("short"))
+                ?: return ""
+
+            val shortDescription = document.selectFirst("meta[itemprop=\"description\"]")?.attr("content")
+            val longDescription = document.selectFirst("#author_comments")?.wholeText()
+            val statsSummary = "${getAdultRating()} | ${getStarRating()} | ${getStats()}"
+
+            val description = StringBuilder()
+
+            if (descriptionElements.contains("short")) {
+                description.append(shortDescription)
+            }
+
+            if (descriptionElements.contains("long")) {
+                description.append("\n\n" + longDescription)
+            }
+
+            if (descriptionElements.contains("stats") || preferences.getBoolean("STATS_SUMMARY", false)) {
+                description.append("\n\n" + statsSummary)
+            }
+
+            return description.toString()
+        }
+
         return SAnime.create().apply {
             title = document.selectFirst("h2[itemprop=\"name\"]")!!.text()
-            description = """
-                ${document.selectFirst("meta[itemprop=\"description\"]")?.attr("content")}
-
-                ${getAdultRating()} | ${getStarRating()} | ${getStats()}
-            """.trimIndent()
+            description = prepareDescription()
             author = document.selectFirst(".authorlinks > div:first-of-type .item-details-main")?.text()
             artist = document.select(".authorlinks > div:not(:first-of-type) .item-details-main").joinToString {
                 it.text()
@@ -290,16 +316,17 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     // ============================== Filters ===============================
 
     override fun getFilterList(): AnimeFilterList = AnimeFilterList(
+        SortingFilter(),
         MatchAgainstFilter(),
         TuningFilterGroup(),
-        AuthorFilter(),
         GenreFilter(),
-        LengthFilterGroup(),
-        FrontpagedFilter(),
-        DateFilterGroup(),
+        AuthorFilter(),
         TagsFilter(),
-//        RatingFilter(),
-        SortingFilter(),
+        LengthFilterGroup(),
+        DateFilterGroup(),
+        FrontpagedFilter(),
+        AnimeFilter.Separator(),
+        AnimeFilter.Header("Age rating: to change age rating open WebView and in Movies tab click on 🟩🟦🟪🟥 icons on the right. Then refresh search."), // uses ng_user0 cookie
     )
 
     // ============================ Preferences =============================
@@ -340,6 +367,21 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
                 val selected = newValue as String
                 Toast.makeText(screen.context, "Restart app to apply new setting.", Toast.LENGTH_LONG).show()
                 preferences.edit().putString(key, selected).commit()
+            }
+        }.also(screen::addPreference)
+
+        MultiSelectListPreference(screen.context).apply {
+            key = "DESCRIPTION_ELEMENTS"
+            title = "Description elements"
+            entries = arrayOf("Short description", "Long description (author comments)", "Stats (score, favs, views)")
+            entryValues = arrayOf("short", "long", "stats")
+            setDefaultValue(setOf("short", "stats"))
+            summary = "Elements to be included in description"
+
+            setOnPreferenceChangeListener { _, newValue ->
+                val selectedItems = newValue as Set<*>
+                preferences.edit().putStringSet(key, selectedItems as Set<String>).apply()
+                true
             }
         }.also(screen::addPreference)
     }

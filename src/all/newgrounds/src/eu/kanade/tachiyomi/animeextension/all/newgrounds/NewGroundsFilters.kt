@@ -40,9 +40,8 @@ class DateFilterGroup : AnimeFilter.Group<AnimeFilter.Text>(
     ),
 )
 
-// class RatingFilter() : AnimeFilter.Select<String>("Ratings (unused)", arrayOf("Everyone", "Ages 13+", "Ages 17+", "Adults Only"), 0)
-
-class SortingFilter() : AnimeFilter.Select<String>("Sort by", SORTING.keys.toTypedArray())
+// class SortingFilter() : AnimeFilter.Select<String>("Sort by", SORTING.keys.toTypedArray())
+class SortingFilter() : AnimeFilter.Sort("Sort by", SORTING.keys.toTypedArray(), Selection(0, true))
 
 class TagsFilter() : AnimeFilter.Text("Tags (comma separated)")
 
@@ -70,12 +69,8 @@ val GENRE = mapOf(
 )
 
 val SORTING = mapOf(
-    "Default" to "",
-    "Relevance" to "relevance",
-    "Date (Descending)" to "date-desc",
-    "Date (Ascending)" to "date-asc",
-    "Score (Descending)" to "score-desc",
-    "Score (Ascending)" to "score-asc",
-    "Views (Descending)" to "views-desc",
-    "Views (Ascending)" to "views-asc",
+    "Default (Relevance)" to "relevance",
+    "Date" to "date",
+    "Score" to "score",
+    "Views" to "views",
 )
