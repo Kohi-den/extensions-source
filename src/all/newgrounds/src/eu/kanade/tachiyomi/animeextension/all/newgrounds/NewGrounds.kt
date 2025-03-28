@@ -1,19 +1,23 @@
 package eu.kanade.tachiyomi.animeextension.all.newgrounds
 
 import android.app.Application
-import android.util.Log
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
+import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
+import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
@@ -28,6 +32,7 @@ import java.util.Locale
 import java.util.regex.Pattern
 
 private const val SEARCH_PAGE_SIZE = 20
+private val MOVIE_ID_PATTERN = Pattern.compile("""data-movie-id=\\"(\d+)\\"""", Pattern.MULTILINE)
 
 class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
@@ -41,6 +46,9 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     private val preferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
+
+    private val context = Injekt.get<Application>()
+    private val handler by lazy { Handler(Looper.getMainLooper()) }
 
     private val videoListHeaders by lazy {
         headers.newBuilder()
@@ -61,6 +69,11 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     override fun latestUpdatesNextPageSelector(): String = "#load-more-items a"
 
+    override fun latestUpdatesParse(response: Response): AnimesPage {
+        checkAdultContentFiltered(response.headers)
+        return super.latestUpdatesParse(response)
+    }
+
     override fun latestUpdatesSelector(): String = animeSelector(latestSection)
 
     override fun latestUpdatesFromElement(element: Element): SAnime {
@@ -77,6 +90,11 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     override fun popularAnimeNextPageSelector(): String = "#load-more-items a"
+
+    override fun popularAnimeParse(response: Response): AnimesPage {
+        checkAdultContentFiltered(response.headers)
+        return super.popularAnimeParse(response)
+    }
 
     override fun popularAnimeSelector(): String = animeSelector(popularSection)
 
@@ -138,14 +156,17 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             searchUrl.addQueryParameter("tags", it.state)
         }
 
-        Log.d("Tst", "$searchUrl")
-
         return GET(searchUrl.build(), headers)
     }
 
     override fun searchAnimeNextPageSelector(): String = "#results-load-more"
 
-    override fun searchAnimeSelector(): String = "ul.itemlist li a"
+    override fun searchAnimeParse(response: Response): AnimesPage {
+        checkAdultContentFiltered(response.headers)
+        return super.searchAnimeParse(response)
+    }
+
+    override fun searchAnimeSelector(): String = "ul.itemlist li:not(#results-load-more) a"
 
     override fun searchAnimeFromElement(element: Element): SAnime = animeFromListElement(element)
 
@@ -197,6 +218,7 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             genre = document.select(".tags li a").joinToString { it.text() }
             status = SAnime.COMPLETED
             setUrlWithoutDomain(document.selectFirst("meta[itemprop=\"url\"]")!!.absUrl("content"))
+            update_strategy = AnimeUpdateStrategy.ONLY_FETCH_ONCE
         }
     }
 
@@ -205,12 +227,8 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     override fun episodeFromElement(element: Element): SEpisode = throw UnsupportedOperationException("Not Used")
 
     private fun extractEpisodeIdFromScript(element: Element?): String? {
-        val regex = """data-movie-id=\\"(\d+)\\""""
         val scriptContent = element!!.html().toString()
-
-        val pattern = Pattern.compile(regex, Pattern.MULTILINE)
-        val matcher = pattern.matcher(scriptContent)
-
+        val matcher = MOVIE_ID_PATTERN.matcher(scriptContent)
         return if (matcher.find()) {
             matcher.group(1)
         } else {
@@ -328,8 +346,6 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     // ========================== Helper Functions ==========================
 
-    private fun creatorUrl(username: String) = baseUrl.replaceFirst("www", username)
-
     /**
      * Chooses an extraction technique for anime information, based on section selected in Preferences
      */
@@ -385,13 +401,25 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
-    private fun isAdultContentFiltered(document: Document): Boolean {
-        return document.selectFirst("li:has(.suitable-a)")?.attr("data-disabled") != null
+    /**
+     * Checks if cookie with username is present in response headers.
+     * If cookie is missing: displays a toast with information
+     */
+    private fun checkAdultContentFiltered(headers: Headers) {
+        val usernameCookie = headers.values("Set-Cookie").any { it.startsWith("NG_GG_username=") }
+
+        if (!usernameCookie) {
+            handler.post {
+                context.let {
+                    Toast.makeText(it, "Adult content was filtered. Log in via WebView.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     private inline fun <reified T> Iterable<*>.findInstance() = find { it is T } as? T
 
-    inline fun <T> T?.ifFilterSet(action: (T) -> Unit) where T : AnimeFilter<*> {
+    private inline fun <T> T?.ifFilterSet(action: (T) -> Unit) where T : AnimeFilter<*> {
         val state = this?.state
         if (this != null && state != null && state != "" && state != 0 && state != false) {
             action(this)
