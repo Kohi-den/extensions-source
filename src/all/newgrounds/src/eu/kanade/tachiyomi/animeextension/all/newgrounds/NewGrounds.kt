@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.animeextension.all.newgrounds
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.widget.Toast
 import androidx.preference.CheckBoxPreference
 import androidx.preference.ListPreference
@@ -27,7 +26,6 @@ import okhttp3.Response
 import org.json.JSONObject
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import rx.Observable
 import tryParse
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -236,31 +234,22 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             return description.toString()
         }
 
-        val shouldCheckPlaylist = preferences.getBoolean("CHECK_COLLECTION", false)
         val relatedPlaylistElement = document.selectFirst("div[id^=\"related_playlists\"] ")
         val relatedPlaylistUrl = relatedPlaylistElement?.selectFirst("a:not([id^=\"related_playlists\"])")?.absUrl("href")
         val relatedPlaylistName = relatedPlaylistElement?.selectFirst(".detail-title h4")?.text()
-
-        val animeTitle: String = relatedPlaylistName.takeIf { shouldCheckPlaylist }
-            ?: document.selectFirst("h2[itemprop=\"name\"]")!!.text()
-
-        val animeUrl: String = relatedPlaylistUrl.takeIf { shouldCheckPlaylist }
-            ?: document.selectFirst("meta[itemprop=\"url\"]")!!.absUrl("content")
-
-        Log.d("Tst", "anime/playlist utL: $animeUrl")
+        val isPartOfSeries = relatedPlaylistUrl?.startsWith("$baseUrl/series") ?: false
 
         return SAnime.create().apply {
-            title = animeTitle
+            title = relatedPlaylistName.takeIf { isPartOfSeries }
+                ?: document.selectFirst("h2[itemprop=\"name\"]")!!.text()
             description = prepareDescription()
             author = document.selectFirst(".authorlinks > div:first-of-type .item-details-main")?.text()
             artist = document.select(".authorlinks > div:not(:first-of-type) .item-details-main").joinToString {
                 it.text()
             }
             thumbnail_url = document.selectFirst("meta[itemprop=\"thumbnailUrl\"]")?.absUrl("content")
-            genre = document.select(".tags li a").joinToString { it.text() }
-            status = SAnime.COMPLETED
-            setUrlWithoutDomain(animeUrl)
-//            update_strategy = AnimeUpdateStrategy.ONLY_FETCH_ONCE
+            genre = document.select(".tags li a").joinToString { it.text() } + document.selectFirst("div[id^=\"genre-view\"] dt")?.text()
+            status = SAnime.ONGOING.takeIf { isPartOfSeries } ?: SAnime.COMPLETED
         }
     }
 
@@ -268,55 +257,27 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     override fun episodeFromElement(element: Element): SEpisode = throw UnsupportedOperationException("Not Used")
 
-    private fun extractEpisodeIdFromScript(element: Element?): String? {
-        val scriptContent = element!!.html().toString()
-        val matcher = MOVIE_ID_PATTERN.matcher(scriptContent)
-        return if (matcher.find()) {
-            matcher.group(1)
-        } else {
-            null
-        }
-    }
-
-    override fun episodeListRequest(anime: SAnime): Request {
-        // episodeListParse and animeDetailsParse are started at the same time? so episodeListRequest uses old SAnime.url value
-
-        // get animeDetails page again
-        val response = client.newCall(GET("${baseUrl}${anime.url}")).execute()
+    override suspend fun getEpisodeList(anime: SAnime): List<SEpisode> {
+        val response = client.newCall(GET("${baseUrl}${anime.url}", headers)).execute()
         val document = response.asJsoup()
+        val relatedSeriesUrl = document.selectFirst("div[id^=\"related_playlists\"] a:not([id^=\"related_playlists\"])")?.absUrl("href")
 
-        // check and return playlist url
-        val shouldCheckPlaylist = preferences.getBoolean("CHECK_COLLECTION", false)
-        val relatedPlaylistElement = document.selectFirst("div[id^=\"related_playlists\"] ")
-        val relatedPlaylistUrl = relatedPlaylistElement?.selectFirst("a:not([id^=\"related_playlists\"])")?.absUrl("href")
-        val relatedPlaylistName = relatedPlaylistElement?.selectFirst(".detail-title h4")?.text()
-        val animeUrl: String = relatedPlaylistUrl.takeIf { shouldCheckPlaylist }
-            ?: document.selectFirst("meta[itemprop=\"url\"]")!!.absUrl("content")
-        val animeTitle: String = relatedPlaylistName.takeIf { shouldCheckPlaylist }
-            ?: document.selectFirst("h2[itemprop=\"name\"]")!!.text()
-
-
-        // set new anime url
-        anime.title = animeTitle
-        anime.setUrlWithoutDomain(animeUrl)
-        Log.d("Tst", "new url: ${anime.url}")
-        return super.episodeListRequest(anime)
-    }
-
-    override fun episodeListParse(response: Response): List<SEpisode> {
-        val document = response.asJsoup()
-        val hasMultipleEpisodes = response.request.url.toString().startsWith("$baseUrl/series/")
-
-        Log.d("Tst", "multi? $hasMultipleEpisodes : ${response.request.url}")
-
-        return if (!hasMultipleEpisodes) {
-            parseSingleEpisodeList(document)
+        val episodes = if (relatedSeriesUrl != null) {
+            val response2 = client.newCall(GET(relatedSeriesUrl, headers)).execute()
+            val document2 = response2.asJsoup()
+            parseEpisodeList(document2)
         } else {
-            parseMultiEpisodeList(document)
+            parseSingleEpisode(document)
         }
+
+        return episodes
     }
 
-    private fun parseSingleEpisodeList(document: Document): List<SEpisode> {
+    override fun episodeListRequest(anime: SAnime): Request = throw UnsupportedOperationException()
+
+    override fun episodeListParse(response: Response): List<SEpisode> = throw UnsupportedOperationException()
+
+    private fun parseSingleEpisode(document: Document): List<SEpisode> {
         val episodeIdScript = document.selectFirst("#ng-global-video-player script")
         val episodeId = extractEpisodeIdFromScript(episodeIdScript)
         val dateString = document.selectFirst("#sidestats  > dl:nth-of-type(2) > dd:first-of-type")?.text()
@@ -331,7 +292,17 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
         )
     }
 
-    private fun parseMultiEpisodeList(document: Document): List<SEpisode> {
+    private fun extractEpisodeIdFromScript(element: Element?): String? {
+        val scriptContent = element!!.html().toString()
+        val matcher = MOVIE_ID_PATTERN.matcher(scriptContent)
+        return if (matcher.find()) {
+            matcher.group(1)
+        } else {
+            null
+        }
+    }
+
+    private fun parseEpisodeList(document: Document): List<SEpisode> {
         val ids = document.select("li.visual-link-container").map { it.attr("data-visual-link") }
         val formBody = FormBody.Builder()
             .add("ids", ids.toString())
@@ -350,7 +321,6 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             }
             .build()
 
-//        val client = OkHttpClient()
         val response = client.newCall(request).execute()
 
         val jsonObject = JSONObject(response.body.string())
@@ -363,17 +333,13 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
             for (episodeKey in subObject.keys()) {
                 val episodeData = subObject.getJSONObject(episodeKey)
-
-                val title = episodeData.getString("title")
-                val url = episodeData.getString("url")
-                val user = episodeData.getJSONObject("user")
-                val userName = user.getString("user_name")
+                val uploaderData = episodeData.getJSONObject("user")
 
                 val episode = SEpisode.create().apply {
                     episode_number = index.toFloat()
-                    name = title
-                    scanlator = userName
-                    setUrlWithoutDomain(url)
+                    name = episodeData.getString("title")
+                    scanlator = uploaderData.getString("user_name")
+                    setUrlWithoutDomain(episodeData.getString("url"))
                 }
 
                 episodes.add(episode)
@@ -492,10 +458,10 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
         }.also(screen::addPreference)
 
         CheckBoxPreference(screen.context).apply {
-            key = "CHECK_COLLECTION"
-            title = "Try to find associated collections"
-            setDefaultValue(false)
-            summary = "If video is associated with playlist from the same author it will fetch episodes from this playlist"
+            key = "PROMPT_CONTENT_FILTERED"
+            title = "Prompt to log in"
+            setDefaultValue(true)
+            summary = "Show toast when user is not logged in and therefore adult content is not accessible"
         }.also(screen::addPreference)
     }
 
@@ -513,7 +479,7 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     /**
-     * Extracts anime information from element of list typical for /popular, /browse or /featured
+     * Extracts anime information from element of grid-like list typical for /popular, /browse or /featured
      */
     private fun animeFromGridElement(element: Element): SAnime = SAnime.create().apply {
         title = element.selectFirst(".card-title h4")!!.text()
@@ -535,7 +501,7 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     /**
-     * Extracts anime information from element of list typical for /search or /collection
+     * Extracts anime information from element of list typical for /search or /series
      */
     private fun animeFromListElement(element: Element): SAnime = SAnime.create().apply {
         title = element.selectFirst(".detail-title > h4")!!.text()
@@ -558,15 +524,18 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     /**
      * Checks if cookie with username is present in response headers.
-     * If cookie is missing: displays a toast with information
+     * If cookie is missing: displays a toast with information.
      */
     private fun checkAdultContentFiltered(headers: Headers) {
+        val shouldCheck = preferences.getBoolean("PROMPT_CONTENT_FILTERED", true)
+        if (!shouldCheck) return
+
         val usernameCookie = headers.values("Set-Cookie").any { it.startsWith("NG_GG_username=") }
 
         if (!usernameCookie) {
             handler.post {
                 context.let {
-                    Toast.makeText(it, "Adult content was filtered. Log in via WebView.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(it, "Log in via WebView to include adult content", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -574,6 +543,11 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     private inline fun <reified T> Iterable<*>.findInstance() = find { it is T } as? T
 
+    /**
+     * Executes the given [action] if the filter is set to a meaningful value.
+     *
+     *  @param action A function to execute if the filter is set.
+     */
     private inline fun <T> T?.ifFilterSet(action: (T) -> Unit) where T : AnimeFilter<*> {
         val state = this?.state
         if (this != null && state != null && state != "" && state != 0 && state != false) {
@@ -587,7 +561,6 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             "Latest" to "movies/browse",
             "Popular" to "movies/popular",
             "Your Feed" to "social/feeds/show/favorite-artists-movies",
-//            "Under Judgment" to "movies/browse?interval=all&artist-type=unjudged",
         )
     }
 }
