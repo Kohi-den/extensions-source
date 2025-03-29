@@ -3,14 +3,15 @@ package eu.kanade.tachiyomi.animeextension.all.newgrounds
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
+import androidx.preference.CheckBoxPreference
 import androidx.preference.ListPreference
 import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
-import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -18,6 +19,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
+import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
@@ -25,6 +27,7 @@ import okhttp3.Response
 import org.json.JSONObject
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import rx.Observable
 import tryParse
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -233,8 +236,21 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             return description.toString()
         }
 
+        val shouldCheckPlaylist = preferences.getBoolean("CHECK_COLLECTION", false)
+        val relatedPlaylistElement = document.selectFirst("div[id^=\"related_playlists\"] ")
+        val relatedPlaylistUrl = relatedPlaylistElement?.selectFirst("a:not([id^=\"related_playlists\"])")?.absUrl("href")
+        val relatedPlaylistName = relatedPlaylistElement?.selectFirst(".detail-title h4")?.text()
+
+        val animeTitle: String = relatedPlaylistName.takeIf { shouldCheckPlaylist }
+            ?: document.selectFirst("h2[itemprop=\"name\"]")!!.text()
+
+        val animeUrl: String = relatedPlaylistUrl.takeIf { shouldCheckPlaylist }
+            ?: document.selectFirst("meta[itemprop=\"url\"]")!!.absUrl("content")
+
+        Log.d("Tst", "anime/playlist utL: $animeUrl")
+
         return SAnime.create().apply {
-            title = document.selectFirst("h2[itemprop=\"name\"]")!!.text()
+            title = animeTitle
             description = prepareDescription()
             author = document.selectFirst(".authorlinks > div:first-of-type .item-details-main")?.text()
             artist = document.select(".authorlinks > div:not(:first-of-type) .item-details-main").joinToString {
@@ -243,8 +259,8 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             thumbnail_url = document.selectFirst("meta[itemprop=\"thumbnailUrl\"]")?.absUrl("content")
             genre = document.select(".tags li a").joinToString { it.text() }
             status = SAnime.COMPLETED
-            setUrlWithoutDomain(document.selectFirst("meta[itemprop=\"url\"]")!!.absUrl("content"))
-            update_strategy = AnimeUpdateStrategy.ONLY_FETCH_ONCE
+            setUrlWithoutDomain(animeUrl)
+//            update_strategy = AnimeUpdateStrategy.ONLY_FETCH_ONCE
         }
     }
 
@@ -262,8 +278,45 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
+    override fun episodeListRequest(anime: SAnime): Request {
+        // episodeListParse and animeDetailsParse are started at the same time? so episodeListRequest uses old SAnime.url value
+
+        // get animeDetails page again
+        val response = client.newCall(GET("${baseUrl}${anime.url}")).execute()
+        val document = response.asJsoup()
+
+        // check and return playlist url
+        val shouldCheckPlaylist = preferences.getBoolean("CHECK_COLLECTION", false)
+        val relatedPlaylistElement = document.selectFirst("div[id^=\"related_playlists\"] ")
+        val relatedPlaylistUrl = relatedPlaylistElement?.selectFirst("a:not([id^=\"related_playlists\"])")?.absUrl("href")
+        val relatedPlaylistName = relatedPlaylistElement?.selectFirst(".detail-title h4")?.text()
+        val animeUrl: String = relatedPlaylistUrl.takeIf { shouldCheckPlaylist }
+            ?: document.selectFirst("meta[itemprop=\"url\"]")!!.absUrl("content")
+        val animeTitle: String = relatedPlaylistName.takeIf { shouldCheckPlaylist }
+            ?: document.selectFirst("h2[itemprop=\"name\"]")!!.text()
+
+
+        // set new anime url
+        anime.title = animeTitle
+        anime.setUrlWithoutDomain(animeUrl)
+        Log.d("Tst", "new url: ${anime.url}")
+        return super.episodeListRequest(anime)
+    }
+
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
+        val hasMultipleEpisodes = response.request.url.toString().startsWith("$baseUrl/series/")
+
+        Log.d("Tst", "multi? $hasMultipleEpisodes : ${response.request.url}")
+
+        return if (!hasMultipleEpisodes) {
+            parseSingleEpisodeList(document)
+        } else {
+            parseMultiEpisodeList(document)
+        }
+    }
+
+    private fun parseSingleEpisodeList(document: Document): List<SEpisode> {
         val episodeIdScript = document.selectFirst("#ng-global-video-player script")
         val episodeId = extractEpisodeIdFromScript(episodeIdScript)
         val dateString = document.selectFirst("#sidestats  > dl:nth-of-type(2) > dd:first-of-type")?.text()
@@ -276,6 +329,59 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
                 setUrlWithoutDomain("$baseUrl/portal/video/$episodeId")
             },
         )
+    }
+
+    private fun parseMultiEpisodeList(document: Document): List<SEpisode> {
+        val ids = document.select("li.visual-link-container").map { it.attr("data-visual-link") }
+        val formBody = FormBody.Builder()
+            .add("ids", ids.toString())
+            .add("component_params[include_author]", "1")
+            .add("include_all_suitabilities", "0")
+            .add("isAjaxRequest", "1")
+            .build()
+
+        val request = Request.Builder()
+            .url("$baseUrl/visual-links-fetch")
+            .post(formBody)
+            .apply {
+                headers.forEach { (key, value) ->
+                    addHeader(key, value)
+                }
+            }
+            .build()
+
+//        val client = OkHttpClient()
+        val response = client.newCall(request).execute()
+
+        val jsonObject = JSONObject(response.body.string())
+        val episodes = mutableListOf<SEpisode>()
+
+        val simples = jsonObject.getJSONObject("simples")
+        var index = 1
+        for (key in simples.keys()) {
+            val subObject = simples.getJSONObject(key)
+
+            for (episodeKey in subObject.keys()) {
+                val episodeData = subObject.getJSONObject(episodeKey)
+
+                val title = episodeData.getString("title")
+                val url = episodeData.getString("url")
+                val user = episodeData.getJSONObject("user")
+                val userName = user.getString("user_name")
+
+                val episode = SEpisode.create().apply {
+                    episode_number = index.toFloat()
+                    name = title
+                    scanlator = userName
+                    setUrlWithoutDomain(url)
+                }
+
+                episodes.add(episode)
+                index++
+            }
+        }
+
+        return episodes.reversed()
     }
 
     override fun videoListRequest(episode: SEpisode): Request = GET("$baseUrl${episode.url}", videoListHeaders)
@@ -383,6 +489,13 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
                 preferences.edit().putStringSet(key, selectedItems as Set<String>).apply()
                 true
             }
+        }.also(screen::addPreference)
+
+        CheckBoxPreference(screen.context).apply {
+            key = "CHECK_COLLECTION"
+            title = "Try to find associated collections"
+            setDefaultValue(false)
+            summary = "If video is associated with playlist from the same author it will fetch episodes from this playlist"
         }.also(screen::addPreference)
     }
 
