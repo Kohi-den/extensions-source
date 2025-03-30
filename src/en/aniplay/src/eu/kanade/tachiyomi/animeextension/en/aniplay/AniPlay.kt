@@ -263,7 +263,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
     private fun getProxiedUrl(originalUrl: String, serverName: String, referer: String?): String {
         return when (serverName) {
             "Yuki" -> "$PROXY_URL/yukiprox?url=$originalUrl"
-            "Maze" -> "$PROXY_URL/fetch?url=$originalUrl?ref=$referer"
+            "Pahe" -> "$PROXY_URL/fetch?url=$originalUrl?ref=$referer"
             else -> return originalUrl
         }
     }
