@@ -33,14 +33,13 @@ class FrontpagedFilter : AnimeFilter.CheckBox("Frontpaged?", false)
 class AfterDateFilter : AnimeFilter.Text("On, or after")
 class BeforeDateFilter : AnimeFilter.Text("Before")
 class DateFilterGroup : AnimeFilter.Group<AnimeFilter.Text>(
-    "Dates (YYYY-MM-DD)",
+    "Date (YYYY-MM-DD)",
     listOf(
         AfterDateFilter(),
         BeforeDateFilter(),
     ),
 )
 
-// class SortingFilter() : AnimeFilter.Select<String>("Sort by", SORTING.keys.toTypedArray())
 class SortingFilter() : AnimeFilter.Sort("Sort by", SORTING.keys.toTypedArray(), Selection(0, true))
 
 class TagsFilter() : AnimeFilter.Text("Tags (comma separated)")
