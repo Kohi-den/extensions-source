@@ -278,7 +278,7 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
         val genres: List<String>,
         val broadcast_day: String?,
         val aired_from: String?,
-        val episodes: Int,
+        val episodes: Int?,
         val season: String,
         val season_year: Int,
         val series_type: String,

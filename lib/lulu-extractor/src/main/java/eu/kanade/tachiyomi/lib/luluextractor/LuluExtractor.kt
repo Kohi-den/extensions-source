@@ -3,14 +3,15 @@ package eu.kanade.tachiyomi.lib.luluextractor
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import java.util.regex.Pattern
 
 class LuluExtractor(private val client: OkHttpClient, headers: Headers) {
 
     private val headers = headers.newBuilder()
-        .add("Referer", "https://luluvdo.com")
-        .add("Origin", "https://luluvdo.com")
+        .add("Referer", "https://luluvdo.com/")
+        .add("Origin", "https://luluvdo.com/")
         .build()
 
     //Credit: https://github.com/skoruppa/docchi-stremio-addon/blob/main/app/players/lulustream.py
@@ -21,7 +22,7 @@ class LuluExtractor(private val client: OkHttpClient, headers: Headers) {
             val html = client.newCall(GET(url, headers)).execute().use { it.body.string() }
             val m3u8Url = extractM3u8Url(html) ?: return emptyList()
             val fixedUrl = fixM3u8Link(m3u8Url)
-            val quality = getResolution(fixedUrl, headers)
+            val quality = getResolution(fixedUrl)
 
             videos.add(Video(fixedUrl, "${prefix}Lulu - $quality", fixedUrl, headers))
         } catch (e: Exception) {
@@ -77,16 +78,18 @@ class LuluExtractor(private val client: OkHttpClient, headers: Headers) {
 
         val baseUrl = link.split("?")[0]
 
-        val fixedLink = StringBuilder(baseUrl)
-        val orderedParams = paramOrder.filter { paramDict.containsKey(it) }.map { "$it=${paramDict[it]}" }
+        val fixedLink = baseUrl.toHttpUrl().newBuilder()
+        paramOrder.filter { paramDict.containsKey(it) }.forEach { key ->
+            fixedLink.addQueryParameter(key, paramDict[key])
+        }
+        extraParams.forEach { (key, value) ->
+            fixedLink.addQueryParameter(key, value)
+        }
 
-        fixedLink.append("?").append(orderedParams.joinToString("&"))
-        fixedLink.append("&").append(extraParams.entries.joinToString("&") { "${it.key}=${it.value}" })
-
-        return fixedLink.toString()
+        return fixedLink.build().toString()
     }
 
-    private fun getResolution(m3u8Url: String, headers: Headers): String {
+    private fun getResolution(m3u8Url: String): String {
         return try {
             val content = client.newCall(GET(m3u8Url, headers)).execute()
                 .use { it.body.string() }
