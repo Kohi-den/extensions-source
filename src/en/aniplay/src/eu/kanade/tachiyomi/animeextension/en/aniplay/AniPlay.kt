@@ -260,6 +260,14 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
+    private fun getProxiedUrl(originalUrl: String, serverName: String, referer: String?): String {
+        return when (serverName) {
+            "Yuki" -> "$PROXY_URL/yukiprox?url=$originalUrl"
+            "Pahe" -> "$PROXY_URL/fetch?url=$originalUrl?ref=$referer"
+            else -> return originalUrl
+        }
+    }
+
     private fun processEpisodeData(episodeData: EpisodeData): List<Video> {
         val defaultSource = episodeData.response.sources?.firstOrNull {
             it.quality in listOf("default", "auto")
@@ -282,37 +290,19 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         }
 
         try {
-            if (episodeData.response.proxy == true) {
-                var proxyUrl = "$PROXY_URL/fetch?url=${defaultSource.url}"
-                if (episodeData.response.headers != null && episodeData.response.headers.Referer?.startsWith("https://") == true) {
-                    proxyUrl += "&ref=${episodeData.response.headers.Referer}"
-                }
-                return playlistUtils.extractFromHls(
-                    playlistUrl = proxyUrl,
-                    videoNameGen = { quality -> "$serverName - $quality - $typeName" },
-                    subtitleList = subtitles,
-                )
-            }
-            if (episodeData.response.headers != null && episodeData.response.headers.Referer?.startsWith("https://") == true) {
-                return playlistUtils.extractFromHls(
-                    playlistUrl = defaultSource.url,
-                    videoNameGen = { quality -> "$serverName - $quality - $typeName" },
-                    subtitleList = subtitles,
-                    masterHeadersGen = { baseHeaders: Headers, _: String ->
-                        baseHeaders.newBuilder().apply {
-                            set("Accept", "*/*")
-                            set("Origin", baseUrl)
-                            set("Referer", episodeData.response.headers.Referer)
-                        }.build()
-                    },
-                )
-            } else {
-                return playlistUtils.extractFromHls(
-                    playlistUrl = defaultSource.url,
-                    videoNameGen = { quality -> "$serverName - $quality - $typeName" },
-                    subtitleList = subtitles,
-                )
-            }
+            val url = getProxiedUrl(defaultSource.url, serverName, episodeData.response.headers?.Referer)
+            return playlistUtils.extractFromHls(
+                playlistUrl = url,
+                videoNameGen = { quality -> "$serverName - $quality - $typeName" },
+                subtitleList = subtitles,
+                masterHeadersGen = { baseHeaders: Headers, _: String ->
+                    baseHeaders.newBuilder().apply {
+                        set("Accept", "*/*")
+                        set("Origin", baseUrl)
+                        set("Referer", "$baseUrl/")
+                    }.build()
+                },
+            )
         } catch (e: Exception) {
             Log.e("AniPlay", "processEpisodeData extractFromHls Error (\"$serverName - $typeName\"): $e")
         }
@@ -536,15 +526,15 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
         private val HEADER_NEXT_ACTION = mapOf(
             PREF_DOMAIN_ENTRY_VALUES[0] to mapOf(
-                "NEXT_ACTION_EPISODE_LIST" to "7f245562e54103f7dc13b3f89743fe31492ae34d6d",
-                "NEXT_ACTION_SOURCES_LIST" to "7fa64b02d2e6dc6a72c31b915844cb42a729b5e575",
+                "NEXT_ACTION_EPISODE_LIST" to "7f07777b5f74e3edb312e0b718a560f9d3ad21aeba",
+                "NEXT_ACTION_SOURCES_LIST" to "7f11490e43dca1ed90fcb5b90bac1e5714a3e11232",
             ),
             PREF_DOMAIN_ENTRY_VALUES[1] to mapOf(
-                "NEXT_ACTION_EPISODE_LIST" to "7f4b13f495ada236e47ada7923680d8264f2601e45",
-                "NEXT_ACTION_SOURCES_LIST" to "7f41e61d8806a49322bbe4746ff28a39e4dc098b6b",
+                "NEXT_ACTION_EPISODE_LIST" to "7f57233b7a6486e8211b883c502fa0450775f0ee98",
+                "NEXT_ACTION_SOURCES_LIST" to "7f48c7ffeb25edece852102a65d794a1dffa37aaac",
             ),
         )
-        private const val PROXY_URL = "https://aniplay-cors.yqizw7.easypanel.host"
+        private const val PROXY_URL = "https://prox.aniplaynow.live"
 
         private val DATE_FORMATTER = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
     }

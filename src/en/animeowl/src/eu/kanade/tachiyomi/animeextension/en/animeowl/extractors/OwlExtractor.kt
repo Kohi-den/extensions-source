@@ -45,23 +45,32 @@ class OwlExtractor(private val client: OkHttpClient, private val baseUrl: String
         coroutineScope {
             val lufDeferred = async {
                 servers.luffy?.let { luffy ->
-                    noRedirectClient.newCall(GET("${luffy}$jwt")).execute()
-                        .use { it.headers["Location"] }
-                        ?.let { videoList.add(Video(it, "${link.lang} Luffy:1080p", it)) }
+                    luffy.forEach { stream ->
+                        noRedirectClient.newCall(GET("${stream.url}$jwt")).execute()
+                            .use { it.headers["Location"] }?.let {
+                                videoList.add(
+                                    Video(it, "${link.lang} Luffy:${stream.resolution}", it),
+                                )
+                            }
+                    }
                 }
             }
             val kaiDeferred = async {
-                servers.kaido?.let {
-                    videoList.addAll(
-                        getHLS("${it}$jwt", "Kaido", link.lang),
-                    )
+                servers.kaido?.let { kaido ->
+                    kaido.forEach { stream ->
+                        videoList.addAll(
+                            getHLS("${stream.url}$jwt", "Kaido", link.lang),
+                        )
+                    }
                 }
             }
             val zorDeferred = async {
-                servers.zoro?.let {
-                    videoList.addAll(
-                        getHLS("${it}$jwt", "Boa", link.lang),
-                    )
+                servers.zoro?.let { zoro ->
+                    zoro.forEach { stream ->
+                        videoList.addAll(
+                            getHLS("${stream.url}$jwt", "Boa", link.lang),
+                        )
+                    }
                 }
             }
 
@@ -71,7 +80,7 @@ class OwlExtractor(private val client: OkHttpClient, private val baseUrl: String
     }
 
     private fun getHLS(url: String, server: String, lang: String): List<Video> {
-        return client.newCall(GET(url)).execute().let {
+        return client.newCall(GET(url)).execute().let { it ->
             if (it.isSuccessful) {
                 it.parseAs<Stream>().url.let {
                     playlistUtils.extractFromHls(it, videoNameGen = { qty -> "$lang $server:$qty" })

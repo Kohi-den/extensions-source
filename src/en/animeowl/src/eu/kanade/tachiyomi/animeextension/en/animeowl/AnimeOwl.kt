@@ -129,20 +129,20 @@ class AnimeOwl : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val document = response.asJsoup()
         val sub = document.select("#anime-cover-sub-content .episode-node").mapIndexed { idx, it ->
             EpisodeResponse.Episode(
-                id = it.text().toDouble(),
+                id = it.attr("title").toDoubleOrNull(),
                 episodeIndex = idx.toString(),
-                name = it.text(),
+                name = it.attr("title"),
                 lang = "Sub",
-                href = it.attr("abs:href"),
+                href = it.absUrl("href"),
             )
         }
         val dub = document.select("#anime-cover-dub-content .episode-node").mapIndexed { idx, it ->
             EpisodeResponse.Episode(
-                id = it.text().toDouble(),
+                id = it.attr("title").toDoubleOrNull(),
                 episodeIndex = idx.toString(),
-                name = it.text(),
+                name = it.attr("title"),
                 lang = "Dub",
-                href = it.attr("abs:href"),
+                href = it.absUrl("href"),
             )
         }
 
