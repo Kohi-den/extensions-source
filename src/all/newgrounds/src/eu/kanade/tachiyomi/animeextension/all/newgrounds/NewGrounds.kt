@@ -31,10 +31,8 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.text.SimpleDateFormat
 import java.util.Locale
-import java.util.regex.Pattern
 
 private const val PAGE_SIZE = 20
-private val MOVIE_ID_PATTERN = Pattern.compile("""data-movie-id=\\"(\d+)\\"""", Pattern.MULTILINE)
 
 class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
@@ -260,14 +258,25 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     override suspend fun getEpisodeList(anime: SAnime): List<SEpisode> {
         val response = client.newCall(GET("${baseUrl}${anime.url}", headers)).execute()
         val document = response.asJsoup()
-        val relatedSeriesUrl = document.selectFirst("div[id^=\"related_playlists\"] a:not([id^=\"related_playlists\"])")?.absUrl("href")
 
-        val episodes = if (relatedSeriesUrl != null) {
-            val response2 = client.newCall(GET(relatedSeriesUrl, headers)).execute()
+        val relatedPlaylistUrl = document.selectFirst("div[id^=\"related_playlists\"] a:not([id^=\"related_playlists\"])")?.absUrl("href")
+        val isPartOfSeries = relatedPlaylistUrl?.startsWith("$baseUrl/series") ?: false
+
+        val episodes = if (isPartOfSeries) {
+            val response2 = client.newCall(GET(relatedPlaylistUrl!!, headers)).execute()
             val document2 = response2.asJsoup()
             parseEpisodeList(document2)
         } else {
-            parseSingleEpisode(document)
+            val dateString = document.selectFirst("#sidestats  > dl:nth-of-type(2) > dd:first-of-type")?.text()
+
+            return listOf(
+                SEpisode.create().apply {
+                    episode_number = 1f
+                    date_upload = dateFormat.tryParse(dateString)
+                    name = document.selectFirst("meta[name=\"title\"]")!!.attr("content")
+                    setUrlWithoutDomain("$baseUrl${anime.url.replace("/view/","/video/")}")
+                },
+            )
         }
 
         return episodes
@@ -276,31 +285,6 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     override fun episodeListRequest(anime: SAnime): Request = throw UnsupportedOperationException()
 
     override fun episodeListParse(response: Response): List<SEpisode> = throw UnsupportedOperationException()
-
-    private fun parseSingleEpisode(document: Document): List<SEpisode> {
-        val episodeIdScript = document.selectFirst("#ng-global-video-player script")
-        val episodeId = extractEpisodeIdFromScript(episodeIdScript)
-        val dateString = document.selectFirst("#sidestats  > dl:nth-of-type(2) > dd:first-of-type")?.text()
-
-        return listOf(
-            SEpisode.create().apply {
-                episode_number = 1f
-                date_upload = dateFormat.tryParse(dateString)
-                name = document.selectFirst("meta[name=\"title\"]")!!.attr("content")
-                setUrlWithoutDomain("$baseUrl/portal/video/$episodeId")
-            },
-        )
-    }
-
-    private fun extractEpisodeIdFromScript(element: Element?): String? {
-        val scriptContent = element!!.html().toString()
-        val matcher = MOVIE_ID_PATTERN.matcher(scriptContent)
-        return if (matcher.find()) {
-            matcher.group(1)
-        } else {
-            null
-        }
-    }
 
     private fun parseEpisodeList(document: Document): List<SEpisode> {
         val ids = document.select("li.visual-link-container").map { it.attr("data-visual-link") }
@@ -314,11 +298,7 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
         val request = Request.Builder()
             .url("$baseUrl/visual-links-fetch")
             .post(formBody)
-            .apply {
-                headers.forEach { (key, value) ->
-                    addHeader(key, value)
-                }
-            }
+            .headers(headers)
             .build()
 
         val response = client.newCall(request).execute()
@@ -339,7 +319,7 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
                     episode_number = index.toFloat()
                     name = episodeData.getString("title")
                     scanlator = uploaderData.getString("user_name")
-                    setUrlWithoutDomain(episodeData.getString("url"))
+                    setUrlWithoutDomain("$baseUrl/portal/video/${episodeData.getString("id")}")
                 }
 
                 episodes.add(episode)
@@ -534,9 +514,7 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
         if (!usernameCookie) {
             handler.post {
-                context.let {
-                    Toast.makeText(it, "Log in via WebView to include adult content", Toast.LENGTH_SHORT).show()
-                }
+                Toast.makeText(context, "Log in via WebView to include adult content", Toast.LENGTH_SHORT).show()
             }
         }
     }
