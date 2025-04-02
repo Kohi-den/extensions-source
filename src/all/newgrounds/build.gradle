@@ -2,6 +2,7 @@ ext {
     extName = 'Newgrounds'
     extClass = '.NewGrounds'
     extVersionCode = 1
+    isNsfw = true
 }
 
 apply from: "$rootDir/common.gradle"
