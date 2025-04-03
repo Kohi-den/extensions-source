@@ -137,7 +137,7 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
     private val sibnetExtractor by lazy { SibnetExtractor(client) }
     private val doodExtractor by lazy { DoodExtractor(client) }
     private val lycorisExtractor by lazy { LycorisCafeExtractor(client) }
-    private val luluExtractor by lazy { LuluExtractor(client) }
+    private val luluExtractor by lazy { LuluExtractor(client, headers) }
     private val googledriveExtractor by lazy { GoogleDriveExtractor(client, headers) }
 
     override fun videoListParse(response: Response): List<Video> {
@@ -278,7 +278,7 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
         val genres: List<String>,
         val broadcast_day: String?,
         val aired_from: String?,
-        val episodes: Int,
+        val episodes: Int?,
         val season: String,
         val season_year: Int,
         val series_type: String,
@@ -294,7 +294,7 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
         val cover: String,
         val adult_content: String,
         val series_type: String,
-        val episodes: Int,
+        val episodes: Int?,
         val season: String,
         val season_year: Int,
     )
@@ -315,7 +315,7 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
         val genres: List<String>,
         val broadcast_day: String?,
         val aired_from: String?,
-        val episodes: Int,
+        val episodes: Int?,
         val season: String,
         val season_year: Int,
         val series_type: String,
