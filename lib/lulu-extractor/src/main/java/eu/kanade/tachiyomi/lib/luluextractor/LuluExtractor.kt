@@ -11,7 +11,7 @@ class LuluExtractor(private val client: OkHttpClient, headers: Headers) {
 
     private val headers = headers.newBuilder()
         .add("Referer", "https://luluvdo.com/")
-        .add("Origin", "https://luluvdo.com/")
+        .add("Origin", "https://luluvdo.com")
         .build()
 
     //Credit: https://github.com/skoruppa/docchi-stremio-addon/blob/main/app/players/lulustream.py
