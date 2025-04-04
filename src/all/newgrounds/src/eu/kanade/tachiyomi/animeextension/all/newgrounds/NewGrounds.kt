@@ -60,11 +60,13 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     // Latest
 
-    private val latestSection = preferences.getString("LATEST", PREF_SECTIONS["Latest"])!!
+    private fun getLatestSection(): String {
+        return preferences.getString("LATEST", PREF_SECTIONS["Latest"])!!
+    }
 
     override fun latestUpdatesRequest(page: Int): Request {
         val offset = (page - 1) * PAGE_SIZE
-        return GET("$baseUrl/$latestSection?offset=$offset", headers)
+        return GET("$baseUrl/${getLatestSection()}?offset=$offset", headers)
     }
 
     override fun latestUpdatesNextPageSelector(): String = "#load-more-items a"
@@ -74,19 +76,21 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
         return super.latestUpdatesParse(response)
     }
 
-    override fun latestUpdatesSelector(): String = animeSelector(latestSection)
+    override fun latestUpdatesSelector(): String = animeSelector(getLatestSection())
 
     override fun latestUpdatesFromElement(element: Element): SAnime {
-        return animeFromElement(element, latestSection)
+        return animeFromElement(element, getLatestSection())
     }
 
     // Browse
 
-    private val popularSection = preferences.getString("POPULAR", PREF_SECTIONS["Popular"])!!
+    private fun getPopularSection(): String {
+        return preferences.getString("POPULAR", PREF_SECTIONS["Popular"])!!
+    }
 
     override fun popularAnimeRequest(page: Int): Request {
         val offset = (page - 1) * PAGE_SIZE
-        return GET("$baseUrl/$popularSection?offset=$offset", headers)
+        return GET("$baseUrl/${getPopularSection()}?offset=$offset", headers)
     }
 
     override fun popularAnimeNextPageSelector(): String = "#load-more-items a"
@@ -96,10 +100,10 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
         return super.popularAnimeParse(response)
     }
 
-    override fun popularAnimeSelector(): String = animeSelector(popularSection)
+    override fun popularAnimeSelector(): String = animeSelector(getPopularSection())
 
     override fun popularAnimeFromElement(element: Element): SAnime {
-        return animeFromElement(element, popularSection)
+        return animeFromElement(element, getPopularSection())
     }
 
     // Search
@@ -402,7 +406,6 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
             setOnPreferenceChangeListener { _, newValue ->
                 val selected = newValue as String
-                Toast.makeText(screen.context, "Restart app to apply new setting.", Toast.LENGTH_LONG).show()
                 preferences.edit().putString(key, selected).commit()
             }
         }.also(screen::addPreference)
@@ -417,7 +420,6 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
             setOnPreferenceChangeListener { _, newValue ->
                 val selected = newValue as String
-                Toast.makeText(screen.context, "Restart app to apply new setting.", Toast.LENGTH_LONG).show()
                 preferences.edit().putString(key, selected).commit()
             }
         }.also(screen::addPreference)
@@ -507,12 +509,11 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
      * If cookie is missing: displays a toast with information.
      */
     private fun checkAdultContentFiltered(headers: Headers) {
-        val shouldCheck = preferences.getBoolean("PROMPT_CONTENT_FILTERED", true)
-        if (!shouldCheck) return
+        val usernameCookie: Boolean = headers.values("Set-Cookie").any { it.startsWith("NG_GG_username=") }
+        if (usernameCookie) return // user already logged in
 
-        val usernameCookie = headers.values("Set-Cookie").any { it.startsWith("NG_GG_username=") }
-
-        if (!usernameCookie) {
+        val shouldPrompt = preferences.getBoolean("PROMPT_CONTENT_FILTERED", true)
+        if (shouldPrompt) {
             handler.post {
                 Toast.makeText(context, "Log in via WebView to include adult content", Toast.LENGTH_SHORT).show()
             }
