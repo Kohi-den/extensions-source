@@ -54,7 +54,7 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
         headers.newBuilder()
             .add("Accept", "application/json, text/javascript, */*; q=0.01")
             .add("X-Requested-With", "XMLHttpRequest")
-            .add("Referer", "https://www.newgrounds.com")
+            .add("Referer", baseUrl)
             .build()
     }
 
