@@ -204,7 +204,7 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             val faves = statsElement?.selectFirst("dd:nth-of-type(2)")?.text() ?: "?"
             val votes = statsElement?.selectFirst("dd:nth-of-type(3)")?.text() ?: "?"
 
-            return "👀 $views | ❤️ $faves | 👍 $votes"
+            return "👀 $views  |  ❤️ $faves  |  🗳️ $votes"
         }
 
         fun prepareDescription(): String {
@@ -213,7 +213,7 @@ class NewGrounds : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
             val shortDescription = document.selectFirst("meta[itemprop=\"description\"]")?.attr("content")
             val longDescription = document.selectFirst("#author_comments")?.wholeText()
-            val statsSummary = "${getAdultRating()} | ${getStarRating()} | ${getStats()}"
+            val statsSummary = "${getAdultRating()}  |  ${getStarRating()}  |  ${getStats()}"
 
             val description = StringBuilder()
 
