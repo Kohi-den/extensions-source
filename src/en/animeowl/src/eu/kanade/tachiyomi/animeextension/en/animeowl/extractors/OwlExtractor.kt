@@ -49,7 +49,7 @@ class OwlExtractor(private val client: OkHttpClient, private val baseUrl: String
                         noRedirectClient.newCall(GET("${stream.url}$jwt")).execute()
                             .use { it.headers["Location"] }?.let {
                                 videoList.add(
-                                    Video(it, "${link.lang} Luffy:${stream.resolution}", it),
+                                    Video(it, "${link.lang} Luffy:${stream.resolution}p", it),
                                 )
                             }
                     }
@@ -83,7 +83,7 @@ class OwlExtractor(private val client: OkHttpClient, private val baseUrl: String
         return client.newCall(GET(url)).execute().let { it ->
             if (it.isSuccessful) {
                 it.parseAs<Stream>().url.let {
-                    playlistUtils.extractFromHls(it, videoNameGen = { qty -> "$lang $server:$qty" })
+                    playlistUtils.extractFromHls(it, videoNameGen = { qty -> "$lang $server:${qty}p" })
                 }
             } else {
                 emptyList()
