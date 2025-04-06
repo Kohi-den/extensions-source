@@ -3,16 +3,18 @@ package eu.kanade.tachiyomi.lib.luluextractor
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import java.util.regex.Pattern
 
-class LuluExtractor(private val client: OkHttpClient) {
+class LuluExtractor(private val client: OkHttpClient, headers: Headers) {
 
-    private val headers = Headers.Builder()
-        .add("Referer", "https://luluvdo.com")
+    private val headers = headers.newBuilder()
+        .add("Referer", "https://luluvdo.com/")
         .add("Origin", "https://luluvdo.com")
         .build()
 
+    //Credit: https://github.com/skoruppa/docchi-stremio-addon/blob/main/app/players/lulustream.py
     fun videosFromUrl(url: String, prefix: String): List<Video> {
         val videos = mutableListOf<Video>()
 
@@ -22,7 +24,7 @@ class LuluExtractor(private val client: OkHttpClient) {
             val fixedUrl = fixM3u8Link(m3u8Url)
             val quality = getResolution(fixedUrl)
 
-            videos.add(Video(fixedUrl, "${prefix}Lulu - $quality", fixedUrl))
+            videos.add(Video(fixedUrl, "${prefix}Lulu - $quality", fixedUrl, headers))
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -50,34 +52,41 @@ class LuluExtractor(private val client: OkHttpClient) {
 
     private fun fixM3u8Link(link: String): String {
         val paramOrder = listOf("t", "s", "e", "f")
-        val baseUrl = link.split("?").first()
-        val params = link.split("?").getOrNull(1)?.split("&") ?: emptyList()
+        val params = Pattern.compile("[?&]([^=]*)=([^&]*)").matcher(link).let { matcher ->
+            generateSequence { if (matcher.find()) matcher.group(1) to matcher.group(2) else null }.toList()
+        }
 
-        val paramMap = mutableMapOf<String, String>()
-        val extraParams = mutableMapOf(
-            "i" to "0.3",
-            "sp" to "0"
-        )
+        val paramDict = mutableMapOf<String, String>()
+        val extraParams = mutableMapOf<String, String>()
 
-        params.forEachIndexed { index, param ->
-            val parts = param.split("=")
-            when {
-                parts.size == 2 -> {
-                    val (key, value) = parts
-                    if (key in paramOrder) paramMap[key] = value
-                    else extraParams[key] = value
+        params.forEachIndexed { index, (key , value) ->
+            if (key.isNullOrEmpty()) {
+                if (index < paramOrder.size) {
+                    if (value != null) {
+                        paramDict[paramOrder[index]] = value
+                    }
                 }
-                index < paramOrder.size -> paramMap[paramOrder[index]] = parts.firstOrNull() ?: ""
+            } else {
+                if (value != null) {
+                    extraParams[key] = value
+                }
             }
         }
 
-        return buildString {
-            append(baseUrl)
-            append("?")
-            append(paramOrder.joinToString("&") { "$it=${paramMap[it]}" })
-            append("&")
-            append(extraParams.map { "${it.key}=${it.value}" }.joinToString("&"))
+        extraParams["i"] = "0.3"
+        extraParams["sp"] = "0"
+
+        val baseUrl = link.split("?")[0]
+
+        val fixedLink = baseUrl.toHttpUrl().newBuilder()
+        paramOrder.filter { paramDict.containsKey(it) }.forEach { key ->
+            fixedLink.addQueryParameter(key, paramDict[key])
         }
+        extraParams.forEach { (key, value) ->
+            fixedLink.addQueryParameter(key, value)
+        }
+
+        return fixedLink.build().toString()
     }
 
     private fun getResolution(m3u8Url: String): String {
@@ -98,11 +107,10 @@ class LuluExtractor(private val client: OkHttpClient) {
 }
 
 object JavaScriptUnpacker {
-    private val UNPACK_REGEX = Regex(
-        """}\('(.*)', *(\d+), *(\d+), *'(.*?)'\.split\('\|'\)""",
-        RegexOption.DOT_MATCHES_ALL
-    )
-
+    private val UNPACK_REGEX by lazy {
+        Regex("""\}\('(.*)', *(\d+), *(\d+), *'(.*?)'\.split\('\|'\)""",
+            RegexOption.DOT_MATCHES_ALL)
+    }
     fun unpack(encodedJs: String): String? {
         val match = UNPACK_REGEX.find(encodedJs) ?: return null
         val (payload, radixStr, countStr, symtabStr) = match.destructured
@@ -121,8 +129,8 @@ object JavaScriptUnpacker {
         return Regex("""\b\w+\b""").replace(payload) { mr ->
             symtab.getOrNull(unbase(mr.value, radix, baseDict)) ?: mr.value
         }.replace("\\", "")
-    }
 
+    }
     private fun unbase(value: String, radix: Int, dict: Map<Char, Int>): Int {
         var result = 0
         var multiplier = 1
