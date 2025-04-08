@@ -291,19 +291,41 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         }
 
         try {
-            val url = getProxiedUrl(defaultSource.url, serverName, episodeData.response.headers?.Referer)
-            return playlistUtils.extractFromHls(
-                playlistUrl = url,
-                videoNameGen = { quality -> "$serverName - $quality - $typeName" },
-                subtitleList = subtitles,
-                masterHeadersGen = { baseHeaders: Headers, _: String ->
-                    baseHeaders.newBuilder().apply {
+            return when (serverName) {
+                // yuki
+                PREF_SERVER_ENTRIES[1] -> {
+                    // proxy wont work due to aniplay using /m3u8-proxy for playlists and /ts-proxy for segments, not sure how to tell that to aniyomi
+                    // val url = "https://yukiprox.aniplaynow.live/m3u8-proxy?url=${defaultSource.url}&headers={\"Referer\":\"https://megacloud.club/\"}"
+
+                    //and using raw server is kinda cheap
+//                    playlistUtils.extractFromHls(
+//                        playlistUrl = defaultSource.url,
+//                        videoNameGen = { quality -> "$serverName - $quality - $typeName" },
+//                        subtitleList = subtitles,
+//                        masterHeadersGen = { baseHeaders: Headers, _: String ->
+//                            baseHeaders.newBuilder().apply {
+//                                set("Accept", "*/*")
+//                                set("Origin", "https://megacloud.club")
+//                                set("Referer", "https://megacloud.club/")
+//                            }.build()
+//                        },
+//                    )
+                    emptyList()
+                }
+                // pahe
+                PREF_SERVER_ENTRIES[2] -> {
+                    val url = "https://prox.aniplaynow.live/?url=${defaultSource.url}&ref=https://kwik.si"
+                    val headers = headers.newBuilder().apply {
                         set("Accept", "*/*")
                         set("Origin", baseUrl)
                         set("Referer", "$baseUrl/")
                     }.build()
-                },
-            )
+                    listOf(Video(url, "$serverName - Video - $typeName", url, headers, subtitles, listOf()))
+                }
+                else -> {
+                    emptyList()
+                }
+            }
         } catch (e: Exception) {
             Log.e("AniPlay", "processEpisodeData extractFromHls Error (\"$serverName - $typeName\"): $e")
         }
