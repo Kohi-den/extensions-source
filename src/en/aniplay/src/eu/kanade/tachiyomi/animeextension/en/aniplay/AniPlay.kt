@@ -30,6 +30,7 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.IOException
 import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 @Suppress("unused")
@@ -358,6 +359,50 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         return if (bracketCount == 0) input.substring(startIndex - 1, endIndex) else null
     }
 
+    private var lastHeaderFetch = 0L
+    private fun fetchHeaders() {
+        val currentTimestamp = Date().time
+        val timeout = lastHeaderFetch + (HEADERS_TIMEOUT_MINUTES * 60 * 1000)
+        // check only after 15 minutes
+        if (timeout > currentTimestamp) {
+            Log.i("AniPlay", "Skipping header update. $timeout > $currentTimestamp (${timeout - currentTimestamp}).")
+            return
+        }
+
+        val baseUrl = Base64.decode("aHR0cHM6Ly9qb3NlZmZzdHJha2EuZ2l0aHViLmlvL2FuaXBsYXktaGVhZGVycy8=", Base64.DEFAULT).toString(Charsets.UTF_8)
+
+        val preferredDomain = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!!
+
+        try {
+            val url = ("$baseUrl$preferredDomain/headers.json").toHttpUrl()
+            val response = client.newCall(Request(url)).execute()
+            val body = response.body.string()
+            val domainHeaders = body.parseAs<DomainHeaders>()
+            domainsHeaders[preferredDomain] = domainHeaders
+            Log.i("AniPlay", "Fetched headers($preferredDomain): $domainHeaders")
+        } catch (e: Exception) {
+            Log.e("AniPlay", "Failed to fetch new headers: \"e\"")
+            return
+        }
+
+        lastHeaderFetch = Date().time
+    }
+
+    private fun getHeaderValue(serverHost: String, key: String): String {
+        fetchHeaders()
+        try {
+            val domainHeaders = domainsHeaders[serverHost] ?: throw Exception("Bad host: $serverHost")
+            return when (key) {
+                NEXT_ACTION_EPISODE_LIST -> domainHeaders.episodes
+                NEXT_ACTION_SOURCES_LIST -> domainHeaders.sources
+                else -> throw Exception("Bad key: $key")
+            }
+        } catch (e: Exception) {
+            Log.e("AniPlay", "getHeaderValue error. $e. (s:${domainsHeaders.size}, l:$lastHeaderFetch)")
+            throw e
+        }
+    }
+
     /* ====================================== Preferences ====================================== */
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
@@ -485,10 +530,6 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         } ?: 0L
     }
 
-    private fun getHeaderValue(serverHost: String, key: String): String {
-        return HEADER_NEXT_ACTION[serverHost]?.get(key) ?: throw Exception("Bad host/key")
-    }
-
     companion object {
         private const val PREF_DOMAIN_KEY = "domain"
         private val PREF_DOMAIN_ENTRIES = arrayOf("aniplaynow.live (default)", "aniplay.lol (backup/experimental)")
@@ -524,18 +565,12 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         private const val NEXT_ACTION_EPISODE_LIST = "NEXT_ACTION_EPISODE_LIST"
         private const val NEXT_ACTION_SOURCES_LIST = "NEXT_ACTION_SOURCES_LIST"
 
-        private val HEADER_NEXT_ACTION = mapOf(
-            PREF_DOMAIN_ENTRY_VALUES[0] to mapOf(
-                "NEXT_ACTION_EPISODE_LIST" to "7f07777b5f74e3edb312e0b718a560f9d3ad21aeba",
-                "NEXT_ACTION_SOURCES_LIST" to "7f11490e43dca1ed90fcb5b90bac1e5714a3e11232",
-            ),
-            PREF_DOMAIN_ENTRY_VALUES[1] to mapOf(
-                "NEXT_ACTION_EPISODE_LIST" to "7f57233b7a6486e8211b883c502fa0450775f0ee98",
-                "NEXT_ACTION_SOURCES_LIST" to "7f48c7ffeb25edece852102a65d794a1dffa37aaac",
-            ),
-        )
         private const val PROXY_URL = "https://prox.aniplaynow.live"
 
+        private const val HEADERS_TIMEOUT_MINUTES = 15
+
         private val DATE_FORMATTER = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
+
+        private var domainsHeaders = mutableMapOf<String, DomainHeaders>()
     }
 }
