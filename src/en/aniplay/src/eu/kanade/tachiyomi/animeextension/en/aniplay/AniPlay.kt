@@ -589,7 +589,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
         private const val PROXY_URL = "https://prox.aniplaynow.live"
 
-        private const val HEADERS_TIMEOUT_MINUTES = 15
+        private const val HEADERS_TIMEOUT_MINUTES = 60
 
         private val DATE_FORMATTER = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
 
