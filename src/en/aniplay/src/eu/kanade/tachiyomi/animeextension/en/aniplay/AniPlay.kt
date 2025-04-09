@@ -32,6 +32,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.locks.ReentrantLock
 
 @Suppress("unused")
 class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
@@ -381,33 +382,43 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         return if (bracketCount == 0) input.substring(startIndex - 1, endIndex) else null
     }
 
+    private val headerFetchLock = ReentrantLock()
     private var lastHeaderFetch = 0L
     private fun fetchHeaders() {
-        val currentTimestamp = Date().time
-        val timeout = lastHeaderFetch + (HEADERS_TIMEOUT_MINUTES * 60 * 1000)
-        // check only after 15 minutes
-        if (timeout > currentTimestamp) {
-            Log.i("AniPlay", "Skipping header update. $timeout > $currentTimestamp (${timeout - currentTimestamp}).")
-            return
+        val internalFetchHeaders = internalFetchHeaders@{
+            val currentTimestamp = Date().time
+            val timeout = lastHeaderFetch + (HEADERS_TIMEOUT_MINUTES * 60 * 1000)
+            // check only after 15 minutes
+            if (timeout > currentTimestamp) {
+                Log.i("AniPlay", "Skipping header update. $timeout > $currentTimestamp (${timeout - currentTimestamp}).")
+                return@internalFetchHeaders
+            }
+
+            val baseUrl = Base64.decode("aHR0cHM6Ly9qb3NlZmZzdHJha2EuZ2l0aHViLmlvL2FuaXBsYXktaGVhZGVycy8=", Base64.DEFAULT).toString(Charsets.UTF_8)
+
+            val preferredDomain = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!!
+
+            try {
+                val url = ("$baseUrl$preferredDomain/headers.json").toHttpUrl()
+                val response = client.newCall(Request(url)).execute()
+                val body = response.body.string()
+                val domainHeaders = body.parseAs<DomainHeaders>()
+                domainsHeaders[preferredDomain] = domainHeaders
+                Log.i("AniPlay", "Fetched headers($preferredDomain): $domainHeaders")
+            } catch (e: Exception) {
+                Log.e("AniPlay", "Failed to fetch new headers: \"e\"")
+                return@internalFetchHeaders
+            }
+
+            lastHeaderFetch = Date().time
         }
 
-        val baseUrl = Base64.decode("aHR0cHM6Ly9qb3NlZmZzdHJha2EuZ2l0aHViLmlvL2FuaXBsYXktaGVhZGVycy8=", Base64.DEFAULT).toString(Charsets.UTF_8)
-
-        val preferredDomain = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!!
-
+        headerFetchLock.lock()
         try {
-            val url = ("$baseUrl$preferredDomain/headers.json").toHttpUrl()
-            val response = client.newCall(Request(url)).execute()
-            val body = response.body.string()
-            val domainHeaders = body.parseAs<DomainHeaders>()
-            domainsHeaders[preferredDomain] = domainHeaders
-            Log.i("AniPlay", "Fetched headers($preferredDomain): $domainHeaders")
-        } catch (e: Exception) {
-            Log.e("AniPlay", "Failed to fetch new headers: \"e\"")
-            return
+            internalFetchHeaders()
+        } finally {
+            headerFetchLock.unlock()
         }
-
-        lastHeaderFetch = Date().time
     }
 
     private fun getHeaderValue(serverHost: String, key: String): String {
