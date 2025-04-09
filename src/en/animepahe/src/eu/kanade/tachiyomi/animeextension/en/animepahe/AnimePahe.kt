@@ -153,7 +153,15 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun episodeListParse(response: Response): List<SEpisode> {
         val url = response.request.url.toString()
         val session = url.substringAfter("&id=").substringBefore("&")
-        return recursivePages(response, session)
+        val episodeList = recursivePages(response, session)
+
+        return episodeList
+            .sortedBy { it.date_upload } // Optional, makes sure it's in correct order
+            .mapIndexed { index, episode ->
+                episode.episode_number = (index + 1).toFloat()
+                episode.name = "Episode ${index + 1}"
+                episode
+            }
     }
 
     private fun parseEpisodePage(episodes: List<EpisodeDto>, animeSession: String): MutableList<SEpisode> {
