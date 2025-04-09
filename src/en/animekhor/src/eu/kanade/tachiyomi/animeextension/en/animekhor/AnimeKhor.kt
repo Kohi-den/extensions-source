@@ -9,7 +9,7 @@ import eu.kanade.tachiyomi.multisrc.animestream.AnimeStream
 class AnimeKhor : AnimeStream(
     "en",
     "AnimeKhor",
-    "https://animekhor.xyz",
+    "https://animekhor.org",
 ) {
     // ============================ Video Links =============================
 
