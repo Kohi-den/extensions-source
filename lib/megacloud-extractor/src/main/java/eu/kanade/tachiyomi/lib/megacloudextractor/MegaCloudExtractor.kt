@@ -141,7 +141,7 @@ class MegaCloudExtractor(
     }
 
     private fun getVideoDto(url: String): VideoDto {
-        val type = if (url.startsWith("https://megacloud.tv") or url.startsWith("https://megacloud.club")) 0 else 1
+        val type = if (url.startsWith("https://megacloud.tv") or url.startsWith("https://megacloud.blog")) 0 else 1
 
         val keyType = SOURCES_KEY[type]
 
