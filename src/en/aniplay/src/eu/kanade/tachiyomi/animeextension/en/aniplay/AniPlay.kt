@@ -246,9 +246,9 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         val response = client.newCall(request).execute()
 
         val responseString = response.body.string()
-        val sourcesString = extractSourcesList(responseString) ?: return emptyList()
-        Log.i("AniPlay", "${extra.source} $language -> $sourcesString")
         try {
+            val sourcesString = extractSourcesList(responseString) ?: throw Exception("extractSourcesList null")
+            Log.i("AniPlay", "${extra.source} $language -> $sourcesString")
             return processEpisodeData(
                 EpisodeData(
                     source = extra.source,
@@ -259,14 +259,6 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         } catch (e: Exception) {
             Log.e("AniPlay", "processEpisodeData Error (\"${extra.source} - $language\"): $e")
             return emptyList()
-        }
-    }
-
-    private fun getProxiedUrl(originalUrl: String, serverName: String, referer: String?): String {
-        return when (serverName) {
-            "Yuki" -> "$PROXY_URL/yukiprox?url=$originalUrl"
-            "Pahe" -> "$PROXY_URL/fetch?url=$originalUrl?ref=$referer"
-            else -> return originalUrl
         }
     }
 
@@ -292,26 +284,29 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         }
 
         try {
-            return when (serverName) {
+            when (serverName) {
                 // yuki
                 PREF_SERVER_ENTRIES[1] -> {
-                    // proxy wont work due to aniplay using /m3u8-proxy for playlists and /ts-proxy for segments, not sure how to tell that to aniyomi
-                    // val url = "https://yukiprox.aniplaynow.live/m3u8-proxy?url=${defaultSource.url}&headers={\"Referer\":\"https://megacloud.club/\"}"
-
-                    //and using raw server is kinda cheap
-//                    playlistUtils.extractFromHls(
-//                        playlistUrl = defaultSource.url,
-//                        videoNameGen = { quality -> "$serverName - $quality - $typeName" },
-//                        subtitleList = subtitles,
-//                        masterHeadersGen = { baseHeaders: Headers, _: String ->
-//                            baseHeaders.newBuilder().apply {
-//                                set("Accept", "*/*")
-//                                set("Origin", "https://megacloud.club")
-//                                set("Referer", "https://megacloud.club/")
-//                            }.build()
-//                        },
-//                    )
-                    emptyList()
+                    val url = "https://yukiprox.aniplaynow.live/m3u8-proxy?url=${defaultSource.url}&headers={\"Referer\":\"https://megacloud.club/\"}"
+                    return playlistUtils.extractFromHls(
+                        playlistUrl = url,
+                        videoNameGen = { quality -> "$serverName - $quality - $typeName" },
+                        subtitleList = subtitles,
+                        masterHeadersGen = { baseHeaders: Headers, _: String ->
+                            baseHeaders.newBuilder().apply {
+                                set("Accept", "*/*")
+                                set("Origin", baseUrl)
+                                set("Referer", "$baseUrl/")
+                            }.build()
+                        },
+                        videoHeadersGen = { baseHeaders: Headers, _, _: String ->
+                            baseHeaders.newBuilder().apply {
+                                set("Accept", "*/*")
+                                set("Origin", baseUrl)
+                                set("Referer", "$baseUrl/")
+                            }.build()
+                        },
+                    )
                 }
                 // pahe
                 PREF_SERVER_ENTRIES[2] -> {
@@ -321,10 +316,10 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                         set("Origin", baseUrl)
                         set("Referer", "$baseUrl/")
                     }.build()
-                    listOf(Video(url, "$serverName - Video - $typeName", url, headers, subtitles, listOf()))
+                    return listOf(Video(url, "$serverName - Video - $typeName", url, headers, subtitles, listOf()))
                 }
                 else -> {
-                    emptyList()
+                    throw Exception("Unknown serverName: $serverName (${episodeData.source})")
                 }
             }
         } catch (e: Exception) {
@@ -597,8 +592,6 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         // These values has probably something to do with Next.js server and hydration
         private const val NEXT_ACTION_EPISODE_LIST = "NEXT_ACTION_EPISODE_LIST"
         private const val NEXT_ACTION_SOURCES_LIST = "NEXT_ACTION_SOURCES_LIST"
-
-        private const val PROXY_URL = "https://prox.aniplaynow.live"
 
         private const val HEADERS_TIMEOUT_MINUTES = 60
 
