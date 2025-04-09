@@ -92,7 +92,7 @@ class WebViewResolver(private val globalHeaders: Headers) {
             val headers = mapOf("X-Requested-With" to "org.lineageos.jelly")
 
             webView?.loadUrl("https://megacloud.tv/about", headers)
-        }
+        }  
 
         latch.await(TIMEOUT_SEC, TimeUnit.SECONDS)
 
