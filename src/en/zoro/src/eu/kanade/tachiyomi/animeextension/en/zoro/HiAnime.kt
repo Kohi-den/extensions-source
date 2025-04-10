@@ -12,7 +12,7 @@ import org.jsoup.nodes.Element
 class HiAnime : ZoroTheme(
     "en",
     "HiAnime",
-    "https://hianime.to",
+    "https://hianimez.to",
     hosterNames = listOf(
         "HD-1",
         "HD-2",
