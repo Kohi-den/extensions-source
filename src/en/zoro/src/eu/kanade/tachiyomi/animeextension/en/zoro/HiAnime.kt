@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.en.hianime
+package eu.kanade.tachiyomi.animeextension.en.zoro
 
 import android.app.Application
 import android.content.SharedPreferences
