@@ -79,3 +79,11 @@ data class EpisodeExtra(
     val episodeId: String,
     val hasDub: Boolean,
 )
+
+// Headers
+@Serializable
+data class DomainHeaders(
+    val episodes: String,
+    val sources: String,
+    val time: Long,
+)
