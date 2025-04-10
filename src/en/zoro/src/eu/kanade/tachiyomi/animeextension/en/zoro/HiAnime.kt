@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.en.zoro
+package eu.kanade.tachiyomi.animeextension.en.hianime
 
 import android.app.Application
 import android.content.SharedPreferences
@@ -17,12 +17,14 @@ import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
-class HiAnime : ConfigurableAnimeSource, ZoroTheme(
-    lang = "en",
-    name = "HiAnime",
-    baseUrl = preferences.getString(PREF_BASE_URL_KEY, DEFAULT_BASE_URL)!!,
-    hosterNames = listOf("HD-1", "HD-2", "StreamTape"),
-) {
+class HiAnime :
+    ConfigurableAnimeSource,
+    ZoroTheme(
+        "en",
+        "HiAnime",
+        getPrefBaseUrl(),
+        hosterNames = listOf("HD-1", "HD-2", "StreamTape"),
+    ) {
 
     override val id = 6706411382606718900L
 
@@ -61,13 +63,13 @@ class HiAnime : ConfigurableAnimeSource, ZoroTheme(
             summary = "Set a custom domain to override the default ($DEFAULT_BASE_URL)"
             dialogTitle = "Custom domain"
             setDefaultValue(DEFAULT_BASE_URL)
-            setOnPreferenceChangeListener { _, newValue ->
+            setOnPreferenceChangeListener { _, _ ->
                 Toast.makeText(
                     screen.context,
                     "Restart Aniyomi to apply changes.",
                     Toast.LENGTH_LONG
                 ).show()
-                true // Save the preference
+                true
             }
         }
 
@@ -80,6 +82,10 @@ class HiAnime : ConfigurableAnimeSource, ZoroTheme(
 
         private val preferences: SharedPreferences by lazy {
             Injekt.get<Application>().getSharedPreferences("hianime", 0)
+        }
+
+        private fun getPrefBaseUrl(): String {
+            return preferences.getString(PREF_BASE_URL_KEY, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL
         }
     }
 }
