@@ -22,7 +22,7 @@ class HiAnime :
     ZoroTheme(
         "en",
         "HiAnime",
-        getPrefBaseUrl(),
+        HiAnime.BASE_URL,
         hosterNames = listOf("HD-1", "HD-2", "StreamTape"),
     ) {
 
@@ -84,8 +84,6 @@ class HiAnime :
             Injekt.get<Application>().getSharedPreferences("hianime", 0)
         }
 
-        private fun getPrefBaseUrl(): String {
-            return preferences.getString(PREF_BASE_URL_KEY, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL
-        }
+        val BASE_URL: String
+            get() = preferences.getString(PREF_BASE_URL_KEY, DEFAULT_BASE_URL) ?: DEFAULT_BASE_URL
     }
-}
