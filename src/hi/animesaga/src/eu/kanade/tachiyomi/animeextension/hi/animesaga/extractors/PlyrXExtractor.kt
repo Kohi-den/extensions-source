@@ -3,39 +3,55 @@ package eu.kanade.tachiyomi.animeextension.hi.anisaga.extractors
 import eu.kanade.tachiyomi.animesource.model.SubtitleFile
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
-import okhttp3.OkHttpClient
-import org.jsoup.Jsoup
-import java.net.URLDecoder
+import eu.kanade.tachiyomi.network.NetworkHelper
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.Headers
 
-class PlyrXExtractor(private val client: OkHttpClient) {
+class PlyrXExtractor(
+    private val network: NetworkHelper,
+    private val headers: Headers,
+) {
+    private val client = network.client
+    private val json = Json { ignoreUnknownKeys = true }
 
     fun videosFromUrl(
         url: String,
         referer: String,
-        subtitleCallback: (SubtitleFile) -> Unit
+        subtitleCallback: (SubtitleFile) -> Unit,
     ): List<Video> {
-        val response = client.newCall(GET(url, headers = mapOf("Referer" to referer))).execute()
-        val doc = Jsoup.parse(response.body.string())
+        val response = client.newCall(
+            GET(url, headers.newBuilder().set("Referer", referer).build()),
+        ).execute()
 
-        val script = doc.select("script").firstOrNull { it.data().contains("sources:") }?.data()
+        val document = response.body?.string() ?: return emptyList()
+
+        val masterUrl = Regex("sources:\\s*\\\{\\s*file:\\s*\"(https[^\"]+\\.m3u8)\"")
+            .find(document)
+            ?.groupValues?.get(1)
             ?: return emptyList()
 
-        // Extract video sources
-        val sources = Regex("""file:\s*["'](.*?)["']""").findAll(script).map { it.groupValues[1] }.toList()
-        val videos = sources.mapIndexed { i, source ->
-            val decoded = URLDecoder.decode(source, "UTF-8")
-            Video(url, "PlyrXCDN - ${i + 1}", decoded, headers = mapOf("Referer" to referer))
+        val subtitleRegex = Regex("tracks:\\s*\(.*?)\")
+        val subtitleMatch = subtitleRegex.find(document)?.groupValues?.get(1)
+        subtitleMatch?.let { subText ->
+            Regex("""\{file:"(.*?)",label:"(.*?)"\}""")
+                .findAll(subText)
+                .forEach { match ->
+                    val subUrl = match.groupValues[1]
+                    val label = match.groupValues[2]
+                    subtitleCallback(SubtitleFile(label, subUrl))
+                }
         }
 
-        // Extract subtitles (if any)
-        Regex("""tracks:\s*(.*?)""", RegexOption.DOT_MATCHES_ALL).find(script)?.groupValues?.get(1)?.let { tracksBlock ->
-            Regex("""file:\s*["'](.*?)["'],\s*label:\s*["'](.*?)["']""").findAll(tracksBlock).forEach {
-                val subUrl = URLDecoder.decode(it.groupValues[1], "UTF-8")
-                val label = it.groupValues[2]
-                subtitleCallback(SubtitleFile(label, subUrl))
-            }
-        }
-
-        return videos
+        return listOf(
+            Video(
+                url = masterUrl,
+                quality = "HLS",
+                videoUrl = masterUrl,
+                headers = mapOf("Referer" to referer),
+            ),
+        )
     }
 }
