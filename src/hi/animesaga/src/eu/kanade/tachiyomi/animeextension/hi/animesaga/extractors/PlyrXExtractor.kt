@@ -1,13 +1,9 @@
-package eu.kanade.tachiyomi.animeextension.hi.animesaga.extractors
+package eu.kanade.tachiyomi.animeextension.hi.anisaga.extractors
 
 import eu.kanade.tachiyomi.animesource.model.SubtitleFile
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Headers
 
 class PlyrXExtractor(
@@ -15,7 +11,6 @@ class PlyrXExtractor(
     private val headers: Headers,
 ) {
     private val client = network.client
-    private val json = Json { ignoreUnknownKeys = true }
 
     fun videosFromUrl(
         url: String,
