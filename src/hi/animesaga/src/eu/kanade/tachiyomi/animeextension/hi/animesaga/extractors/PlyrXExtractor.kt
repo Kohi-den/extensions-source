@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.hi.anisaga.extractors
+package eu.kanade.tachiyomi.animeextension.hi.animesaga.extractors
 
 import eu.kanade.tachiyomi.animesource.model.SubtitleFile
 import eu.kanade.tachiyomi.animesource.model.Video
