@@ -9,7 +9,7 @@ import eu.kanade.tachiyomi.util.asJsoup
 import okhttp3.FormBody
 import okhttp3.Response
 import org.jsoup.nodes.Element
-import eu.kanade.tachiyomi.animeextension.hi.anisaga.extractors.PlyrXExtractor
+import eu.kanade.tachiyomi.animeextension.hi.animesaga.extractors.PlyrXExtractor
 
 class AniSAGA : DooPlay(
     "hi",
