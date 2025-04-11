@@ -24,6 +24,12 @@ class AniSAGA : DooPlay(
     override fun popularAnimeSelector() = "div.top-imdb-list > div.top-imdb-item"
 
     // ============================ Video Links =============================
+    private var subtitleCallback: (SubtitleFile) -> Unit = {}
+
+    override fun setVideoLoadListener(subtitleCb: (SubtitleFile) -> Unit) {
+        subtitleCallback = subtitleCb
+    }
+
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
 
@@ -33,15 +39,21 @@ class AniSAGA : DooPlay(
         players.forEach { player ->
             val url = getPlayerUrl(player)
 
-            val videos = when {
-                videoHost in url -> plyrXExtractor.videosFromUrl(url, baseUrl, subtitleCallback)
-                else -> chillxExtractor.videoFromUrl(url, baseUrl)
-            }
+            val videos = runCatching {
+                getPlayerVideos(url)
+            }.getOrElse { emptyList() }
 
             videoList.addAll(videos)
         }
 
         return videoList
+    }
+
+    private fun getPlayerVideos(url: String): List<Video> {
+        return when {
+            videoHost in url -> plyrXExtractor.videosFromUrl(url, baseUrl, subtitleCallback)
+            else -> chillxExtractor.videoFromUrl(url, baseUrl)
+        }
     }
 
     private fun getPlayerUrl(player: Element): String {
@@ -59,17 +71,5 @@ class AniSAGA : DooPlay(
         return response.substringAfter("\"embed_url\":\"")
             .substringBefore("\",")
             .replace("\\", "")
-    }
-
-    // Needed for subtitles
-    private var subtitleCallback: (SubtitleFile) -> Unit = {}
-
-    override fun setupPreferenceScreen(screen: androidx.preference.PreferenceScreen) {
-        super.setupPreferenceScreen(screen)
-        // You can add custom settings here if needed
-    }
-
-    override fun setVideoLoadListener(subtitleCb: (SubtitleFile) -> Unit) {
-        subtitleCallback = subtitleCb
     }
 }
