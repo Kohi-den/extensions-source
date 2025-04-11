@@ -10,5 +10,6 @@ ext {
 apply from: "$rootDir/common.gradle"
 
 dependencies {
+    implementation(project(":multisrc:src:dooplay"))
     implementation(project(":lib:chillx-extractor"))
 }
