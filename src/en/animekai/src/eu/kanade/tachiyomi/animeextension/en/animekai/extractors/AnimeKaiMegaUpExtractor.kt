@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.animeextension.en.animekai.extractors
 
 import eu.kanade.tachiyomi.animeextension.en.animekai.AnimekaiDecoder
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -11,38 +13,34 @@ import uy.kohesive.injekt.injectLazy
 class MegaUpExtractor {
 
     private val client: OkHttpClient by injectLazy()
+    private val decoder = AnimekaiDecoder()
 
     fun getVideoList(url: String): List<Video> {
         val mediaUrl = url.replace("/e/", "/media/").replace("/e2/", "/media/")
 
         val encodedResult = runCatching {
-            val response = client.newCall(GET(mediaUrl)).execute().body.string()
+            val response = client.newCall(GET(mediaUrl)).execute().body?.string().orEmpty()
             Jsoup.parse(response).selectFirst("body")?.text()?.let { json ->
                 json.substringAfter("\"result\":\"").substringBefore("\",\"status\"")
             }
         }.getOrNull() ?: return emptyList()
 
         val decryptSteps = runCatching {
-            val json = client.newCall(GET(KEYS_URL)).execute().body.string()
-            Json.decodeFromString(AnimeKaiKey.serializer(), json).megaup.decrypt
+            val json = client.newCall(GET(KEYS_URL)).execute().body?.string().orEmpty()
+            Json.decodeFromString<AnimeKaiKey>(json).megaup.decrypt
         }.getOrNull() ?: return emptyList()
 
         val decodedJson = runCatching {
-            AnimekaiDecoder().decode(encodedResult, decryptSteps).replace("\\", "")
+            decoder.decode(encodedResult, decryptSteps).replace("\\", "")
         }.getOrNull() ?: return emptyList()
 
         val m3u8Data = runCatching {
-            Json.decodeFromString(M3U8.serializer(), decodedJson)
+            Json.decodeFromString<M3U8>(decodedJson)
         }.getOrNull() ?: return emptyList()
 
-        val videoList = mutableListOf<Video>()
-
-        m3u8Data.sources.forEach { source ->
-            val quality = "MegaUp - Auto"
-            videoList.add(Video(source.file, quality, source.file))
+        return m3u8Data.sources.map {
+            Video(it.file, "MegaUp - Auto", it.file)
         }
-
-        return videoList
     }
 
     companion object {
