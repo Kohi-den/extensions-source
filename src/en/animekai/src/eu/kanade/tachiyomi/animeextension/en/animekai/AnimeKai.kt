@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.en.animekai
 
+import android.util.Base64
 import eu.kanade.tachiyomi.animesource.AnimeHttpSource
 import eu.kanade.tachiyomi.animesource.model.*
 import eu.kanade.tachiyomi.network.GET
@@ -7,8 +8,8 @@ import eu.kanade.tachiyomi.network.asJsoup
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import org.json.JSONObject
 import org.jsoup.Jsoup
+import java.security.MessageDigest
 
 class AnimeKai : AnimeHttpSource() {
 
@@ -76,7 +77,7 @@ class AnimeKai : AnimeHttpSource() {
             SEpisode.create().apply {
                 name = ep.select("span").text().ifEmpty { "Episode ${index + 1}" }
                 episode_number = ep.attr("num").toFloatOrNull() ?: (index + 1).toFloat()
-                url = ep.attr("token")
+                url = ep.attr("token") // Used in videoListParse
             }
         }
     }
@@ -91,9 +92,7 @@ class AnimeKai : AnimeHttpSource() {
             val lid = serverEl.attr("data-lid")
             val label = serverEl.text()
             val videoRes = client.newCall(
-                GET(
-                    "$baseUrl/ajax/links/view?id=$lid&_=${decoder.generateToken(lid)}",
-                ),
+                GET("$baseUrl/ajax/links/view?id=$lid&_=${decoder.generateToken(lid)}")
             ).execute().body?.string() ?: return@mapNotNull null
 
             val jsonEncoded = Jsoup.parse(videoRes).text()
@@ -104,12 +103,14 @@ class AnimeKai : AnimeHttpSource() {
         }
     }
 
+    // Not used / unsupported
     override fun videoUrlParse(response: Response): String = throw UnsupportedOperationException()
     override fun episodeFromElement(element: org.jsoup.nodes.Element): SEpisode = throw UnsupportedOperationException()
     override fun latestUpdatesFromElement(element: org.jsoup.nodes.Element): SAnime = throw UnsupportedOperationException()
     override fun popularAnimeFromElement(element: org.jsoup.nodes.Element): SAnime = throw UnsupportedOperationException()
     override fun searchAnimeFromElement(element: org.jsoup.nodes.Element): SAnime = throw UnsupportedOperationException()
 
+    // Selectors and paging (not used due to manual page logic)
     override fun popularAnimeNextPageSelector(): String? = null
     override fun latestUpdatesNextPageSelector(): String? = null
     override fun searchAnimeNextPageSelector(): String? = null
