@@ -1,12 +1,9 @@
 package eu.kanade.tachiyomi.animeextension.en.animekai.extractors
 
 import eu.kanade.tachiyomi.animeextension.en.animekai.AnimekaiDecoder
-import kotlinx.serialization.Serializable
-import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
-import uy.kohesive.injekt.injectLazy
 
 class AnimeKaiMegaUpExtractor {
 
@@ -39,7 +36,13 @@ class AnimeKaiMegaUpExtractor {
 
         m3u8Data.sources.forEach { source ->
             val quality = "MegaUp - Auto"
-            videoList.add(Video(source.file, quality, source.file))
+            videoList.add(
+                Video(
+                    source.file,
+                    quality,
+                    source.file
+                )
+            )
         }
 
         return videoList
@@ -62,37 +65,4 @@ class AnimeKaiMegaUpExtractor {
                 .build()
         }
     }
-
-    @Serializable
-    data class AnimeKaiKey(val kai: Kai, val megaup: Megaup)
-
-    @Serializable
-    data class Kai(val encrypt: List<List<String>>, val decrypt: List<List<String>>)
-
-    @Serializable
-    data class Megaup(val encrypt: List<List<String>>, val decrypt: List<List<String>>)
-
-    @Serializable
-    data class M3U8(
-        val sources: List<Source>,
-        val tracks: List<Track> = emptyList(),
-        val download: String? = null
-    )
-
-    @Serializable
-    data class Source(val file: String)
-
-    @Serializable
-    data class Track(
-        val file: String,
-        val label: String? = null,
-        val kind: String? = null,
-        val default: Boolean? = false
-    )
 }
-
-data class Video(
-    val url: String,
-    val quality: String,
-    val videoUrl: String
-)
