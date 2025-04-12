@@ -9,6 +9,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.Jsoup
+import org.json.JSONObject
+import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 class AnimeKai : AnimeHttpSource() {
@@ -21,6 +23,7 @@ class AnimeKai : AnimeHttpSource() {
 
     private val decoder = AnimekaiDecoder()
 
+    // Fetches popular anime
     override fun popularAnimeRequest(page: Int): Request =
         GET("$baseUrl/browser?sort=trending&page=$page", headers)
 
@@ -36,16 +39,19 @@ class AnimeKai : AnimeHttpSource() {
         return AnimesPage(animeList, true)
     }
 
+    // Fetches latest updates
     override fun latestUpdatesRequest(page: Int): Request =
         GET("$baseUrl/browser?sort=updated_date&status[]=releasing&page=$page", headers)
 
     override fun latestUpdatesParse(response: Response): AnimesPage = popularAnimeParse(response)
 
+    // Search anime
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request =
         GET("$baseUrl/browser?keyword=$query&page=$page", headers)
 
     override fun searchAnimeParse(response: Response): AnimesPage = popularAnimeParse(response)
 
+    // Fetch anime details
     override fun animeDetailsParse(response: Response): SAnime {
         val document = response.asJsoup()
         return SAnime.create().apply {
@@ -58,12 +64,14 @@ class AnimeKai : AnimeHttpSource() {
         }
     }
 
+    // Parse status from the text
     private fun parseStatus(text: String): Int = when {
         text.contains("Finished", ignoreCase = true) -> SAnime.COMPLETED
         text.contains("Releasing", ignoreCase = true) -> SAnime.ONGOING
         else -> SAnime.UNKNOWN
     }
 
+    // Fetch episodes list
     override fun episodeListParse(response: Response): List<SEpisode> {
         val animeId = response.asJsoup()
             .selectFirst("div.rate-box")?.attr("data-id") ?: return emptyList()
@@ -82,6 +90,7 @@ class AnimeKai : AnimeHttpSource() {
         }
     }
 
+    // Parse video list
     override fun videoListParse(response: Response): List<Video> {
         val token = response.request.url.toString().substringAfterLast("token=")
         val doc = response.asJsoup()
