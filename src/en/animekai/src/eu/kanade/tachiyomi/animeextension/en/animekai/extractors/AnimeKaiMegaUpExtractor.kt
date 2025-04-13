@@ -53,10 +53,10 @@ class AnimeKaiMegaUpExtractor {
     }
 
     companion object {
-        private const val KEYS_URL =
+        private const val keysUrl =
             "https://raw.githubusercontent.com/amarullz/kaicodex/refs/heads/main/generated/kai_codex.json"
 
-        private fun GET(url: String): Request {
+        private fun get(url: String): Request {
             return Request.Builder()
                 .url(url)
                 .headers(
