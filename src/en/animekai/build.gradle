@@ -6,3 +6,14 @@ ext {
 }
 
 apply from: "$rootDir/common.gradle"
+
+AnimeKai extension
+dependencies {
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0"
+
+    implementation "com.squareup.okhttp3:okhttp:4.9.3"
+
+    implementation "org.jsoup:jsoup:1.15.4"
+
+    implementation project(':tachiyomi:source-model')
+}
