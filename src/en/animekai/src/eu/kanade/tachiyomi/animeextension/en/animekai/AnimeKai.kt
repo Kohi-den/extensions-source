@@ -3,22 +3,26 @@ package eu.kanade.tachiyomi.animeextension.en.animekai
 import android.util.Base64
 import androidx.preference.ListPreference
 import eu.kanade.tachiyomi.animesource.AnimeHttpSource
-import eu.kanade.tachiyomi.animesource.model.*
+import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import eu.kanade.tachiyomi.animesource.model.AnimesPage
+import eu.kanade.tachiyomi.animesource.model.SAnime
+import eu.kanade.tachiyomi.animesource.model.SEpisode
+import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.asJsoup
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import org.jsoup.Jsoup
 import org.json.JSONObject
+import org.jsoup.Jsoup
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 class AnimeKai : AnimeHttpSource() {
 
-    private val PREF_SERVER_KEY = "preferred_server"
-    private val PREF_SUBTYPE_KEY = "preferred_subtype"
-    private val PREF_DOMAIN_KEY = "preferred_domain"
+    private val prefServerKey = "preferred_server"
+    private val prefSubtypeKey = "preferred_subtype"
+    private val prefDomainKey = "preferred_domain"
 
     private val defaultServer = "HD-1"
     private val defaultSubtype = "sub"
@@ -30,7 +34,7 @@ class AnimeKai : AnimeHttpSource() {
     override val client: OkHttpClient = network.cloudflareClient
 
     override val baseUrl by lazy {
-        preferences.getString(PREF_DOMAIN_KEY, defaultDomain)!!
+        preferences.getString(prefDomainKey, defaultDomain)!!
     }
 
     private val decoder = AnimekaiDecoder()
@@ -100,8 +104,8 @@ class AnimeKai : AnimeHttpSource() {
         val token = response.request.url.toString().substringAfterLast("token=")
         val doc = response.asJsoup()
 
-        val preferredServer = preferences.getString(PREF_SERVER_KEY, defaultServer)!!
-        val preferredSubtype = preferences.getString(PREF_SUBTYPE_KEY, defaultSubtype)!!
+        val preferredServer = preferences.getString(prefServerKey, defaultServer)!!
+        val preferredSubtype = preferences.getString(prefSubtypeKey, defaultSubtype)!!
 
         val serverEls = doc.select("div.server-items span.server[data-lid]")
 
@@ -109,7 +113,7 @@ class AnimeKai : AnimeHttpSource() {
             val lid = serverEl.attr("data-lid")
             val label = serverEl.text()
             val videoRes = client.newCall(
-                GET("$baseUrl/ajax/links/view?id=$lid&_=${decoder.generateToken(lid)}")
+                GET("$baseUrl/ajax/links/view?id=$lid&_=${decoder.generateToken(lid)}"),
             ).execute().body?.string() ?: return@mapNotNull null
 
             val jsonEncoded = Jsoup.parse(videoRes).text()
@@ -124,13 +128,13 @@ class AnimeKai : AnimeHttpSource() {
                 it.quality.contains(preferredServer, ignoreCase = true)
             }.thenByDescending {
                 it.quality.contains(preferredSubtype, ignoreCase = true)
-            }
+            },
         )
     }
 
     override fun setupPreferenceScreen(screen: androidx.preference.PreferenceScreen) {
         val serverPref = ListPreference(screen.context).apply {
-            key = PREF_SERVER_KEY
+            key = prefServerKey
             title = "Preferred Server"
             entries = arrayOf("HD-1", "HD-2")
             entryValues = arrayOf("HD-1", "HD-2")
@@ -139,7 +143,7 @@ class AnimeKai : AnimeHttpSource() {
         }
 
         val subPref = ListPreference(screen.context).apply {
-            key = PREF_SUBTYPE_KEY
+            key = prefSubtypeKey
             title = "Preferred Subtitle Type"
             entries = arrayOf("Sub", "Dub", "Softsub")
             entryValues = arrayOf("sub", "dub", "softsub")
@@ -148,7 +152,7 @@ class AnimeKai : AnimeHttpSource() {
         }
 
         val domainPref = ListPreference(screen.context).apply {
-            key = PREF_DOMAIN_KEY
+            key = prefDomainKey
             title = "Preferred Domain"
             entries = arrayOf("animekai.to", "animekai.bz")
             entryValues = arrayOf("https://animekai.to", "https://animekai.bz")
