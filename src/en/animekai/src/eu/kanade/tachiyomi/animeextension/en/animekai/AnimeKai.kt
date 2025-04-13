@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.animeextension.en.animekai
 
 import android.util.Base64
+import androidx.preference.ListPreference
 import eu.kanade.tachiyomi.animesource.AnimeHttpSource
 import eu.kanade.tachiyomi.animesource.model.*
 import eu.kanade.tachiyomi.network.GET
@@ -15,15 +16,25 @@ import java.security.MessageDigest
 
 class AnimeKai : AnimeHttpSource() {
 
+    private val PREF_SERVER_KEY = "preferred_server"
+    private val PREF_SUBTYPE_KEY = "preferred_subtype"
+    private val PREF_DOMAIN_KEY = "preferred_domain"
+
+    private val defaultServer = "HD-1"
+    private val defaultSubtype = "sub"
+    private val defaultDomain = "https://animekai.to"
+
     override val name = "AnimeKai"
-    override val baseUrl = "https://animekai.to"
     override val lang = "en"
     override val supportsLatest = true
     override val client: OkHttpClient = network.cloudflareClient
 
+    override val baseUrl by lazy {
+        preferences.getString(PREF_DOMAIN_KEY, defaultDomain)!!
+    }
+
     private val decoder = AnimekaiDecoder()
 
-    // Fetches popular anime
     override fun popularAnimeRequest(page: Int): Request =
         GET("$baseUrl/browser?sort=trending&page=$page", headers)
 
@@ -39,19 +50,16 @@ class AnimeKai : AnimeHttpSource() {
         return AnimesPage(animeList, true)
     }
 
-    // Fetches latest updates
     override fun latestUpdatesRequest(page: Int): Request =
         GET("$baseUrl/browser?sort=updated_date&status[]=releasing&page=$page", headers)
 
     override fun latestUpdatesParse(response: Response): AnimesPage = popularAnimeParse(response)
 
-    // Search anime
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request =
         GET("$baseUrl/browser?keyword=$query&page=$page", headers)
 
     override fun searchAnimeParse(response: Response): AnimesPage = popularAnimeParse(response)
 
-    // Fetch anime details
     override fun animeDetailsParse(response: Response): SAnime {
         val document = response.asJsoup()
         return SAnime.create().apply {
@@ -64,14 +72,12 @@ class AnimeKai : AnimeHttpSource() {
         }
     }
 
-    // Parse status from the text
     private fun parseStatus(text: String): Int = when {
         text.contains("Finished", ignoreCase = true) -> SAnime.COMPLETED
         text.contains("Releasing", ignoreCase = true) -> SAnime.ONGOING
         else -> SAnime.UNKNOWN
     }
 
-    // Fetch episodes list
     override fun episodeListParse(response: Response): List<SEpisode> {
         val animeId = response.asJsoup()
             .selectFirst("div.rate-box")?.attr("data-id") ?: return emptyList()
@@ -85,19 +91,21 @@ class AnimeKai : AnimeHttpSource() {
             SEpisode.create().apply {
                 name = ep.select("span").text().ifEmpty { "Episode ${index + 1}" }
                 episode_number = ep.attr("num").toFloatOrNull() ?: (index + 1).toFloat()
-                url = ep.attr("token") // Used in videoListParse
+                url = ep.attr("token")
             }
         }
     }
 
-    // Parse video list
     override fun videoListParse(response: Response): List<Video> {
         val token = response.request.url.toString().substringAfterLast("token=")
         val doc = response.asJsoup()
 
+        val preferredServer = preferences.getString(PREF_SERVER_KEY, defaultServer)!!
+        val preferredSubtype = preferences.getString(PREF_SUBTYPE_KEY, defaultSubtype)!!
+
         val serverEls = doc.select("div.server-items span.server[data-lid]")
 
-        return serverEls.mapNotNull { serverEl ->
+        val videos = serverEls.mapNotNull { serverEl ->
             val lid = serverEl.attr("data-lid")
             val label = serverEl.text()
             val videoRes = client.newCall(
@@ -110,16 +118,55 @@ class AnimeKai : AnimeHttpSource() {
 
             Video(videoUrl, "AnimeKai | $label", videoUrl, null)
         }
+
+        return videos.sortedWith(
+            compareByDescending<Video> {
+                it.quality.contains(preferredServer, ignoreCase = true)
+            }.thenByDescending {
+                it.quality.contains(preferredSubtype, ignoreCase = true)
+            }
+        )
     }
 
-    // Not used / unsupported
+    override fun setupPreferenceScreen(screen: androidx.preference.PreferenceScreen) {
+        val serverPref = ListPreference(screen.context).apply {
+            key = PREF_SERVER_KEY
+            title = "Preferred Server"
+            entries = arrayOf("HD-1", "HD-2")
+            entryValues = arrayOf("HD-1", "HD-2")
+            setDefaultValue(defaultServer)
+            summary = "%s"
+        }
+
+        val subPref = ListPreference(screen.context).apply {
+            key = PREF_SUBTYPE_KEY
+            title = "Preferred Subtitle Type"
+            entries = arrayOf("Sub", "Dub", "Softsub")
+            entryValues = arrayOf("sub", "dub", "softsub")
+            setDefaultValue(defaultSubtype)
+            summary = "%s"
+        }
+
+        val domainPref = ListPreference(screen.context).apply {
+            key = PREF_DOMAIN_KEY
+            title = "Preferred Domain"
+            entries = arrayOf("animekai.to", "animekai.bz")
+            entryValues = arrayOf("https://animekai.to", "https://animekai.bz")
+            setDefaultValue(defaultDomain)
+            summary = "%s"
+        }
+
+        screen.addPreference(serverPref)
+        screen.addPreference(subPref)
+        screen.addPreference(domainPref)
+    }
+
     override fun videoUrlParse(response: Response): String = throw UnsupportedOperationException()
     override fun episodeFromElement(element: org.jsoup.nodes.Element): SEpisode = throw UnsupportedOperationException()
     override fun latestUpdatesFromElement(element: org.jsoup.nodes.Element): SAnime = throw UnsupportedOperationException()
     override fun popularAnimeFromElement(element: org.jsoup.nodes.Element): SAnime = throw UnsupportedOperationException()
     override fun searchAnimeFromElement(element: org.jsoup.nodes.Element): SAnime = throw UnsupportedOperationException()
 
-    // Selectors and paging (not used due to manual page logic)
     override fun popularAnimeNextPageSelector(): String? = null
     override fun latestUpdatesNextPageSelector(): String? = null
     override fun searchAnimeNextPageSelector(): String? = null
