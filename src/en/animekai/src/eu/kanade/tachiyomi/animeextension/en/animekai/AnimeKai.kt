@@ -1,8 +1,7 @@
-
 package eu.kanade.tachiyomi.animeextension.en.animekai
 
-import androidx.preference.ListPreference
 import android.util.Log
+import androidx.preference.ListPreference
 import eu.kanade.tachiyomi.animesource.AnimeHttpSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
