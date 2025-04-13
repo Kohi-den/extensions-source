@@ -1,3 +1,4 @@
+
 package eu.kanade.tachiyomi.animeextension.en.animekai
 
 import android.util.Base64
@@ -55,8 +56,11 @@ class AnimekaiDecoder {
     }
 
     companion object {
-        private const val SECRET = "T3xKHVZBiNwbzVBDLTlaTw=="
-        private const val IV = "3rR5dURR27mN"
+        private val SECRET: String
+            get() = System.getenv("ANIMEKAI_SECRET") ?: throw IllegalStateException("Secret not set")
+
+        private val IV: String
+            get() = System.getenv("ANIMEKAI_IV") ?: throw IllegalStateException("IV not set")
 
         private fun decodeBase64(data: String): ByteArray {
             return Base64.decode(data, Base64.NO_WRAP)
