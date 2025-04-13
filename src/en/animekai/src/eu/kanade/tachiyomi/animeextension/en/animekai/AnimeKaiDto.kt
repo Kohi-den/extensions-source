@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.en.animekai
 
-/**
+/*
  * Data Transfer Object for token request.
  *
  * @property id The unique identifier for the token request.
@@ -11,7 +11,7 @@ data class TokenRequestDTO(
     val time: String,
 )
 
-/**
+/*
  * Data Transfer Object for iframe data.
  *
  * @property encryptedData The encrypted data contained in the iframe.
@@ -20,7 +20,7 @@ data class IframeDataDTO(
     val encryptedData: String,
 )
 
-/**
+/*
  * Data Transfer Object for AnimeKai decoder.
  *
  * @property secret The secret key for decoding.
