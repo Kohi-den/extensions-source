@@ -1,13 +1,11 @@
 package eu.kanade.tachiyomi.animeextension.en.animekai.extractors
 
 import eu.kanade.tachiyomi.animeextension.en.animekai.AnimekaiDecoder
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Headers
-import org.jsoup.Jsoup
-import kotlinx.serialization.decodeFromString
 import eu.kanade.tachiyomi.source.model.Video
 import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.jsoup.Jsoup
 
 class AnimeKaiMegaUpExtractor {
 
@@ -44,8 +42,8 @@ class AnimeKaiMegaUpExtractor {
                 Video(
                     source.file,
                     quality,
-                    source.file
-                )
+                    source.file,
+                ),
             )
         }
 
@@ -53,7 +51,7 @@ class AnimeKaiMegaUpExtractor {
     }
 
     companion object {
-        private const val keysUrl =
+        private const val KEYS_URL =
             "https://raw.githubusercontent.com/amarullz/kaicodex/refs/heads/main/generated/kai_codex.json"
 
         private fun get(url: String): Request {
@@ -63,8 +61,8 @@ class AnimeKaiMegaUpExtractor {
                     Headers.headersOf(
                         "User-Agent", "Mozilla/5.0",
                         "Accept", "application/json",
-                        "Referer", "https://animekai.to/"
-                    )
+                        "Referer", "https://animekai.to/",
+                    ),
                 )
                 .build()
         }
