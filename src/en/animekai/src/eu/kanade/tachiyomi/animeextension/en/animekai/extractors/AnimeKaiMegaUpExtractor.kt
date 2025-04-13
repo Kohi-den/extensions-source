@@ -59,9 +59,12 @@ class AnimeKaiMegaUpExtractor {
                 .url(url)
                 .headers(
                     Headers.headersOf(
-                        "User-Agent", "Mozilla/5.0",
-                        "Accept", "application/json",
-                        "Referer", "https://animekai.to/",
+                        "User-Agent",
+                        "Mozilla/5.0",
+                        "Accept",
+                        "application/json",
+                        "Referer",
+                        "https://animekai.to/",
                     ),
                 )
                 .build()
