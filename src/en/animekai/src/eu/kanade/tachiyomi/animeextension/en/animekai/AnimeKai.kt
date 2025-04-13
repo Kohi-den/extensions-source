@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.animeextension.en.animekai
 
-import android.util.Base64
 import androidx.preference.ListPreference
 import eu.kanade.tachiyomi.animesource.AnimeHttpSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -15,8 +14,6 @@ import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONObject
 import org.jsoup.Jsoup
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 
 class AnimeKai : AnimeHttpSource() {
 
