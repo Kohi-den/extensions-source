@@ -1,4 +1,3 @@
-
 package eu.kanade.tachiyomi.animeextension.en.animekai
 
 import android.util.Base64
