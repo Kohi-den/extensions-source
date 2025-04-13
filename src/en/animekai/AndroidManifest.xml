@@ -1,0 +1,12 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="eu.kanade.tachiyomi.animeextension.en.animekai">
+
+    <application
+        android:label="AnimeKai"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+        
+        <!-- Add any additional components if needed -->
+        
+    </application>
+</manifest>
