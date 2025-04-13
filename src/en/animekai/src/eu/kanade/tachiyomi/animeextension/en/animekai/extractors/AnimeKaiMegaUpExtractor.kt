@@ -40,12 +40,12 @@ class AnimeKaiMegaUpExtractor {
         val videoList = mutableListOf<Video>()
 
         m3u8Data.sources.forEach { source ->
-            val quality = "MegaUp - Auto"
+            val quality = source.file.split("quality=").getOrNull(1)?.split("&")?.firstOrNull() ?: "MegaUp - Auto"
             videoList.add(
                 Video(
-                    source.file,
-                    quality,
-                    source.file,
+                    url = source.file,
+                    quality = quality,
+                    videoUrl = source.file,
                 ),
             )
         }
@@ -84,16 +84,16 @@ class AnimeKaiMegaUpExtractor {
 
 @Serializable
 data class M3U8(
-    val sources: List<M3U8Source>
+    val sources: List<M3U8Source>,
 )
 
 @Serializable
 data class M3U8Source(
-    val file: String
+    val file: String,
 )
 
 data class Video(
     val url: String,
     val quality: String,
-    val videoUrl: String
+    val videoUrl: String,
 )
