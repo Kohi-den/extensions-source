@@ -8,6 +8,6 @@ ext {
 apply from: "$rootDir/common.gradle"
 
 dependencies {
-    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1"
-    implementation "org.jsoup:jsoup:1.15.0"
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json"
+    implementation "org.jsoup:jsoup"
 }
