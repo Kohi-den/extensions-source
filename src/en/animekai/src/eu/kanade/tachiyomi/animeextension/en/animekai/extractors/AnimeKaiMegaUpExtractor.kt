@@ -42,8 +42,8 @@ class AnimeKaiMegaUpExtractor {
                 Video(
                     source.file,
                     quality,
-                    source.file
-                )
+                    source.file,
+                ),
             )
         }
 
@@ -61,8 +61,8 @@ class AnimeKaiMegaUpExtractor {
                     Headers.headersOf(
                         "User-Agent", "Mozilla/5.0",
                         "Accept", "application/json",
-                        "Referer", "https://animekai.to/"
-                    )
+                        "Referer", "https://animekai.to/",
+                    ),
                 )
                 .build()
         }
