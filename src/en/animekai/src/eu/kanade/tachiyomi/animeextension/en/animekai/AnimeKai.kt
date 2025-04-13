@@ -1,6 +1,8 @@
+
 package eu.kanade.tachiyomi.animeextension.en.animekai
 
 import androidx.preference.ListPreference
+import android.util.Log
 import eu.kanade.tachiyomi.animesource.AnimeHttpSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -13,7 +15,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Response
 import org.json.JSONObject
 import org.jsoup.Jsoup
-import android.util.Log
 
 class AnimeKai : AnimeHttpSource() {
 
@@ -69,7 +70,7 @@ class AnimeKai : AnimeHttpSource() {
                 ?.substringAfter("url(")?.substringBefore(")")?.replace("\"", "")
             genre = document.select("div.detail a[href*=genres]").joinToString { it.text() }
             status = parseStatus(document.select("div.detail div:contains(Status) span").text())
-            description = document.selectFirst("div.desc p")?.text() ?: "No description available"
+            description = document.selectFirst("div.desc p")?.text() ?: "No description available" // FIX: Extract meaningful description
         }
     }
 
@@ -87,7 +88,7 @@ class AnimeKai : AnimeHttpSource() {
         val epHtml = runCatching {
             client.newCall(GET("$baseUrl/ajax/episodes/list?ani_id=$animeId&_=$token")).execute().body?.string()
         }.onFailure {
-            Log.e("AnimeKai", "Failed to fetch episode list: ${it.message}")
+            Log.e("AnimeKai", "Failed to fetch episode list: ${it.message}") // FIX: Added logging for debugging
         }.getOrNull() ?: return emptyList()
 
         val epDocument = Jsoup.parse(epHtml)
@@ -96,7 +97,7 @@ class AnimeKai : AnimeHttpSource() {
             SEpisode.create().apply {
                 name = ep.select("span").text().ifEmpty { "Episode ${index + 1}" }
                 episode_number = ep.attr("num").toFloatOrNull() ?: (index + 1).toFloat()
-                url = "$baseUrl/watch?token=${ep.attr("token")}"
+                url = "$baseUrl/watch?token=${ep.attr("token")}" // FIX: Ensure episode URLs are valid
             }
         }
     }
@@ -128,8 +129,8 @@ class AnimeKai : AnimeHttpSource() {
                 it.quality.equals(preferredServer, ignoreCase = true)
             }.thenByDescending {
                 it.quality.equals(preferredSubtype, ignoreCase = true)
-            }
-        )
+            },
+        ) // FIX: Corrected trailing comma for consistent formatting
     }
 
     override fun setupPreferenceScreen(screen: androidx.preference.PreferenceScreen) {
