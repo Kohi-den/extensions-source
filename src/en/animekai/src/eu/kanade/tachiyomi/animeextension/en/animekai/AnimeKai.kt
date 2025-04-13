@@ -10,10 +10,10 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.asJsoup
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONObject
 import org.jsoup.Jsoup
+import android.util.Log
 
 class AnimeKai : AnimeHttpSource() {
 
@@ -36,7 +36,7 @@ class AnimeKai : AnimeHttpSource() {
 
     private val decoder = AnimekaiDecoder()
 
-    override fun popularAnimeRequest(page: Int): Request =
+    override fun popularAnimeRequest(page: Int): okhttp3.Request =
         GET("$baseUrl/browser?sort=trending&page=$page", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage {
@@ -51,12 +51,12 @@ class AnimeKai : AnimeHttpSource() {
         return AnimesPage(animeList, true)
     }
 
-    override fun latestUpdatesRequest(page: Int): Request =
+    override fun latestUpdatesRequest(page: Int): okhttp3.Request =
         GET("$baseUrl/browser?sort=updated_date&status[]=releasing&page=$page", headers)
 
     override fun latestUpdatesParse(response: Response): AnimesPage = popularAnimeParse(response)
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request =
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): okhttp3.Request =
         GET("$baseUrl/browser?keyword=$query&page=$page", headers)
 
     override fun searchAnimeParse(response: Response): AnimesPage = popularAnimeParse(response)
@@ -69,7 +69,7 @@ class AnimeKai : AnimeHttpSource() {
                 ?.substringAfter("url(")?.substringBefore(")")?.replace("\"", "")
             genre = document.select("div.detail a[href*=genres]").joinToString { it.text() }
             status = parseStatus(document.select("div.detail div:contains(Status) span").text())
-            description = "No description available"
+            description = document.selectFirst("div.desc p")?.text() ?: "No description available"
         }
     }
 
@@ -84,21 +84,24 @@ class AnimeKai : AnimeHttpSource() {
             .selectFirst("div.rate-box")?.attr("data-id") ?: return emptyList()
         val token = decoder.generateToken(animeId)
 
-        val epHtml = client.newCall(GET("$baseUrl/ajax/episodes/list?ani_id=$animeId&_=$token")).execute().body?.string()
-            ?: return emptyList()
+        val epHtml = runCatching {
+            client.newCall(GET("$baseUrl/ajax/episodes/list?ani_id=$animeId&_=$token")).execute().body?.string()
+        }.onFailure {
+            Log.e("AnimeKai", "Failed to fetch episode list: ${it.message}")
+        }.getOrNull() ?: return emptyList()
+
         val epDocument = Jsoup.parse(epHtml)
 
         return epDocument.select("div.eplist a").mapIndexed { index, ep ->
             SEpisode.create().apply {
                 name = ep.select("span").text().ifEmpty { "Episode ${index + 1}" }
                 episode_number = ep.attr("num").toFloatOrNull() ?: (index + 1).toFloat()
-                url = ep.attr("token")
+                url = "$baseUrl/watch?token=${ep.attr("token")}"
             }
         }
     }
 
     override fun videoListParse(response: Response): List<Video> {
-        val token = response.request.url.toString().substringAfterLast("token=")
         val doc = response.asJsoup()
 
         val preferredServer = preferences.getString(prefServerKey, defaultServer)!!
@@ -122,10 +125,10 @@ class AnimeKai : AnimeHttpSource() {
 
         return videos.sortedWith(
             compareByDescending<Video> {
-                it.quality.contains(preferredServer, ignoreCase = true)
+                it.quality.equals(preferredServer, ignoreCase = true)
             }.thenByDescending {
-                it.quality.contains(preferredSubtype, ignoreCase = true)
-            },
+                it.quality.equals(preferredSubtype, ignoreCase = true)
+            }
         )
     }
 
@@ -163,16 +166,4 @@ class AnimeKai : AnimeHttpSource() {
     }
 
     override fun videoUrlParse(response: Response): String = throw UnsupportedOperationException()
-    override fun episodeFromElement(element: org.jsoup.nodes.Element): SEpisode = throw UnsupportedOperationException()
-    override fun latestUpdatesFromElement(element: org.jsoup.nodes.Element): SAnime = throw UnsupportedOperationException()
-    override fun popularAnimeFromElement(element: org.jsoup.nodes.Element): SAnime = throw UnsupportedOperationException()
-    override fun searchAnimeFromElement(element: org.jsoup.nodes.Element): SAnime = throw UnsupportedOperationException()
-
-    override fun popularAnimeNextPageSelector(): String? = null
-    override fun latestUpdatesNextPageSelector(): String? = null
-    override fun searchAnimeNextPageSelector(): String? = null
-    override fun popularAnimeSelector(): String = "div.aitem"
-    override fun latestUpdatesSelector(): String = popularAnimeSelector()
-    override fun searchAnimeSelector(): String = popularAnimeSelector()
-    override fun episodeListSelector(): String = "div.eplist a"
 }
