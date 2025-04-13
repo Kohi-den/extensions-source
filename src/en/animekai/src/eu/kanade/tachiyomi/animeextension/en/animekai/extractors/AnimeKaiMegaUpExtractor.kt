@@ -3,7 +3,11 @@ package eu.kanade.tachiyomi.animeextension.en.animekai.extractors
 import eu.kanade.tachiyomi.animeextension.en.animekai.AnimekaiDecoder
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Headers
 import org.jsoup.Jsoup
+import kotlinx.serialization.decodeFromString
+import eu.kanade.tachiyomi.source.model.Video
+import kotlinx.serialization.json.Json
 
 class AnimeKaiMegaUpExtractor {
 
@@ -13,14 +17,14 @@ class AnimeKaiMegaUpExtractor {
         val mediaUrl = url.replace("/e/", "/media/").replace("/e2/", "/media/")
 
         val encodedResult = runCatching {
-            val response = client.newCall(GET(mediaUrl)).execute().body.string()
+            val response = client.newCall(GET(mediaUrl)).execute().body?.string()
             Jsoup.parse(response).selectFirst("body")?.text()?.let { json ->
                 json.substringAfter("\"result\":\"").substringBefore("\",\"status\"")
             }
         }.getOrNull() ?: return emptyList()
 
         val decryptSteps = runCatching {
-            val json = client.newCall(GET(KEYS_URL)).execute().body.string()
+            val json = client.newCall(GET(KEYS_URL)).execute().body?.string()
             Json.decodeFromString(AnimeKaiKey.serializer(), json).megaup.decrypt
         }.getOrNull() ?: return emptyList()
 
