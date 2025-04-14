@@ -27,7 +27,7 @@ dependencies {
 // Add a resolution strategy to force compatible versions
 configurations.all {
     resolutionStrategy {
-        force 'androidx.appcompat:appcompat:1.6.1' // Ensure this version is used across all modules
+        force 'androidx.appcompat:appcompat:1.6.1'
         force 'org.jsoup:jsoup:1.16.1'
     }
 }
