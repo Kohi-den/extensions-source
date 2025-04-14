@@ -23,11 +23,3 @@ dependencies {
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1" // JSON serialization for Kotlin
     implementation "org.jsoup:jsoup:1.16.1" // Jsoup for HTML parsing
 }
-
-// Add a resolution strategy to force compatible versions
-configurations.all {
-    resolutionStrategy {
-        force 'androidx.appcompat:appcompat:1.6.1'
-        force 'org.jsoup:jsoup:1.16.1'
-    }
-}
