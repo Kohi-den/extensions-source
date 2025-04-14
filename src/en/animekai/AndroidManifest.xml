@@ -4,8 +4,10 @@
     <application
         android:label="AnimeKai"
         android:icon="@mipmap/ic_launcher"
-        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar"
         tools:replace="android:label">
+        
+        <!-- Add other components, permissions, or metadata here if needed -->
 
     </application>
 </manifest>
