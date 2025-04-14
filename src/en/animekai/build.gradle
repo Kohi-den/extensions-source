@@ -7,8 +7,27 @@ ext {
 
 apply from: "$rootDir/common.gradle"
 
+android {
+    // Update compileSdkVersion and targetSdkVersion to ensure compatibility with dependencies
+    compileSdkVersion 34
+
+    defaultConfig {
+        minSdkVersion 21         // Minimum Android version supported
+        targetSdkVersion 34      // Align with compileSdkVersion
+    }
+}
+
 dependencies {
+    // Add necessary dependencies with correct versions
     implementation "androidx.appcompat:appcompat:1.6.1"
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1" // JSON serialization for Kotlin
     implementation "org.jsoup:jsoup:1.16.1" // Jsoup for HTML parsing
+}
+
+// Add a resolution strategy to force compatible versions
+configurations.all {
+    resolutionStrategy {
+        force 'androidx.appcompat:appcompat:1.6.1' // Ensure this version is used across all modules
+        force 'org.jsoup:jsoup:1.16.1'
+    }
 }
