@@ -1,0 +1,12 @@
+ext {
+    extName = 'MyAsianTV'
+    extClass = '.MyAsianTv'
+    extVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:vidmoly-extractor'))
+    implementation(project(':lib:streamwish-extractor'))
+}
