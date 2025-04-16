@@ -310,7 +310,7 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
         val aniZipResponse = json.decodeFromString<AniZipResponse>(responseString)
 
         return when (aniZipResponse.mappings?.type) {
-            "TV" -> {
+            "TV", "ONA", "OVA" -> {
                 aniZipResponse.episodes
                     ?.let { episodes ->
                         if (preferences.getBoolean(UPCOMING_EP_KEY, UPCOMING_EP_DEFAULT)) {
