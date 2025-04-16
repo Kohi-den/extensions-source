@@ -27,9 +27,13 @@ class HiAnime : ZoroTheme(
     override val ajaxRoute = "/v2"
 
     private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
+
     private val megaCloudExtractor by lazy { MegaCloudExtractor(client, headers, preferences) }
 
-    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/recently-updated?page=$page", docHeaders)
+    override fun latestUpdatesRequest(page: Int): Request = GET(
+        "$baseUrl/recently-updated?page=$page",
+        docHeaders,
+    )
 
     override fun popularAnimeFromElement(element: Element): SAnime {
         return super.popularAnimeFromElement(element).apply {
@@ -40,32 +44,46 @@ class HiAnime : ZoroTheme(
     override fun extractVideo(server: VideoData): List<Video> {
         return when (server.name) {
             "StreamTape" -> {
-                streamtapeExtractor.videoFromUrl(server.link, "Streamtape - ${server.type}")
-                    ?.let(::listOf)
-                    ?: emptyList()
+                streamtapeExtractor.videoFromUrl(
+                    server.link,
+                    "Streamtape - ${server.type}",
+                )?.let(::listOf) ?: emptyList()
             }
-            "HD-1", "HD-2" -> megaCloudExtractor.getVideosFromUrl(server.link, server.type, server.name)
+
+            "HD-1", "HD-2" -> megaCloudExtractor.getVideosFromUrl(
+                server.link,
+                server.type,
+                server.name,
+            )
+
             else -> emptyList()
         }
     }
+
     // Added the setupPreferenceScreen method here
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
-        screen.addPreference(ListPreference(screen.context).apply {
-            key = PREF_DOMAIN_KEY
-            title = "Preferred domain"
-            entries = arrayOf("hianimez.to", "hianime.to", "hianime.bz", "hianime.pe")
-            entryValues = arrayOf("https://hianimez.to", "https://hianime.to", "https://hianime.bz", "https://hianime.pe")
-            setDefaultValue(PREF_DOMAIN_DEFAULT)
-            summary = "%s"
+        screen.addPreference(
+            ListPreference(screen.context).apply {
+                key = PREF_DOMAIN_KEY
+                title = "Preferred domain"
+                entries = arrayOf("hianimez.to", "hianime.to", "hianime.bz", "hianime.pe")
+                entryValues = arrayOf("https://hianimez.to", "https://hianime.to", "https://hianime.bz", "https://hianime.pe")
+                setDefaultValue(PREF_DOMAIN_DEFAULT)
+                summary = "%s"
 
-            setOnPreferenceChangeListener { _, newValue ->
-                val selected = newValue as String
-                val index = findIndexOfValue(selected)
-                val entry = entryValues[index] as String
-                Toast.makeText(screen.context, "Restart Aniyomi to apply changes", Toast.LENGTH_LONG).show()
-                preferences.edit().putString(key, entry).commit()
-            }
-        })
+                setOnPreferenceChangeListener { _, newValue ->
+                    val selected = newValue as String
+                    val index = findIndexOfValue(selected)
+                    val entry = entryValues[index] as String
+                    Toast.makeText(
+                        screen.context,
+                        "Restart Aniyomi to apply changes",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                    preferences.edit().putString(key, entry).commit()
+                }
+            },
+        )
     }
 
     companion object {
