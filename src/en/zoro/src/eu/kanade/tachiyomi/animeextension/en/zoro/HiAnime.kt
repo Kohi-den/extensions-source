@@ -62,6 +62,7 @@ class HiAnime : ZoroTheme(
 
     // Added the setupPreferenceScreen method here
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        super.setupPreferenceScreen(screen)
         screen.addPreference(
             ListPreference(screen.context).apply {
                 key = PREF_DOMAIN_KEY
