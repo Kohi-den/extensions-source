@@ -10,24 +10,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout source branch
-      uses: actions/checkout@v3
+      - name: Checkout source branch
+        uses: actions/checkout@v3
 
-    - name: Set up JDK
-      uses: actions/setup-java@v3
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+      - name: Set up JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
-    - name: Grant permission to Gradle
-      run: chmod +x ./gradlew
+      - name: Grant permission to Gradle
+        run: chmod +x ./gradlew
 
-    - name: Build Hianime APK
-      run: ./gradlew :src:en:zoro:assembleDebug
+      - name: Build Hianime APK
+        run: ./gradlew :src:en:zoro:assembleDebug
 
-    - name: Copy APK to temporary folder
-      run: |
-        mkdir -p out/apk/Hianime
-        cp src/en/zoro/build/outputs/apk/debug/*.apk out/apk/Hianime/
+      - name: Copy APK to output folder
+        run: |
+          mkdir -p out/apk/Hianime
+          cp src/en/zoro/build/outputs/apk/debug/*.apk out/apk/Hianime/
 
-    - name: Push APK to apk
+      - name: Push APK to apk-builds branch
+        run: |
+          cd out
+          git init
+          git config user.name "GitHub Actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add .
+          git commit -m "Update Hianime APK [CI build]"
+          git branch -M apk-builds
+          git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git push -f origin apk-builds
