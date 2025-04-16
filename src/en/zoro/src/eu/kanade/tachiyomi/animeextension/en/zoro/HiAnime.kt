@@ -60,7 +60,6 @@ class HiAnime : ZoroTheme(
         }
     }
 
-    // Added the setupPreferenceScreen method here
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         super.setupPreferenceScreen(screen)
         screen.addPreference(
@@ -75,9 +74,12 @@ class HiAnime : ZoroTheme(
                 setOnPreferenceChangeListener { _, newValue ->
                     val selected = newValue as String
                     val index = findIndexOfValue(selected)
+                    if (index == -1) {
+                        Toast.makeText(screen.context, "Invalid selection. Please try again.", Toast.LENGTH_LONG).show()
+                        return@setOnPreferenceChangeListener false
+                    }
                     val entry = entryValues[index] as String
                     preferences.edit().putString(PREF_DOMAIN_KEY, entry).commit()
-
                     Toast.makeText(
                         screen.context,
                         "Restart Aniyomi to apply changes",
@@ -93,10 +95,19 @@ class HiAnime : ZoroTheme(
         private const val PREF_DOMAIN_KEY = "preferred_domain"
         private const val PREF_DOMAIN_DEFAULT = "https://hianimez.to"
 
+        private val allowedDomains = listOf(
+            "https://hianimez.to",
+            "https://hianime.to",
+            "https://hianime.bz",
+            "https://hianime.pe",
+        )
+
         fun getPreferredDomain(): String {
             // Fetch the saved domain from SharedPreferences
             val preferences = androidx.preference.PreferenceManager.getDefaultSharedPreferences(eu.kanade.tachiyomi.App.INSTANCE)
-            return preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT) ?: PREF_DOMAIN_DEFAULT
+            val domain = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT) ?: PREF_DOMAIN_DEFAULT
+            // Validate the domain against the allowed list
+            return if (allowedDomains.contains(domain)) domain else PREF_DOMAIN_DEFAULT
         }
     }
 }
