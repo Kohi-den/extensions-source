@@ -1,0 +1,33 @@
+name: Build and Push Hianime APK to apk-builds
+
+on:
+  push:
+    branches:
+      - Hianime-fix
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout source branch
+      uses: actions/checkout@v3
+
+    - name: Set up JDK
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Grant permission to Gradle
+      run: chmod +x ./gradlew
+
+    - name: Build Hianime APK
+      run: ./gradlew :src:en:zoro:assembleDebug
+
+    - name: Copy APK to temporary folder
+      run: |
+        mkdir -p out/apk/Hianime
+        cp src/en/zoro/build/outputs/apk/debug/*.apk out/apk/Hianime/
+
+    - name: Push APK to apk
