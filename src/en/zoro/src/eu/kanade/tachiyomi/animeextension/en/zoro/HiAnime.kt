@@ -30,6 +30,9 @@ class HiAnime : ZoroTheme(
 
     private val megaCloudExtractor by lazy { MegaCloudExtractor(client, headers, preferences) }
 
+    override val baseUrl: String
+        get() = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT) ?: PREF_DOMAIN_DEFAULT
+
     override fun latestUpdatesRequest(page: Int): Request = GET(
         "$baseUrl/recently-updated?page=$page",
         docHeaders,
@@ -67,8 +70,8 @@ class HiAnime : ZoroTheme(
             ListPreference(screen.context).apply {
                 key = PREF_DOMAIN_KEY
                 title = "Preferred domain"
-                entries = arrayOf("hianimez.to", "hianime.to", "hianime.bz", "hianime.pe")
-                entryValues = arrayOf("https://hianimez.to", "https://hianime.to", "https://hianime.bz", "https://hianime.pe")
+                entries = arrayOf("hianimez.to", "hianime.to", "hianimez.is", "hianime.nz", "hianime.pe")
+                entryValues = arrayOf("https://hianimez.to", "https://hianime.to", "https://hianimez.is", "https://hianime.nz", "https://hianime.pe")
                 setDefaultValue(PREF_DOMAIN_DEFAULT)
                 summary = "%s"
 
