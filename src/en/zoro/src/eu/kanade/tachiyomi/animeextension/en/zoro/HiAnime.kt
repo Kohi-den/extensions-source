@@ -12,8 +12,8 @@ import eu.kanade.tachiyomi.multisrc.zorotheme.ZoroTheme
 import eu.kanade.tachiyomi.network.GET
 import okhttp3.Request
 import org.jsoup.nodes.Element
-import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 class HiAnime : ZoroTheme(
     "en",
