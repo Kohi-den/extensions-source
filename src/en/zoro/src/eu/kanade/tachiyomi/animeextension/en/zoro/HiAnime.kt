@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.en.zoro
 
+import android.content.SharedPreferences
 import android.widget.Toast
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
@@ -11,9 +12,8 @@ import eu.kanade.tachiyomi.multisrc.zorotheme.ZoroTheme
 import eu.kanade.tachiyomi.network.GET
 import okhttp3.Request
 import org.jsoup.nodes.Element
-import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import android.content.SharedPreferences
+import uy.kohesive.injekt.Injekt
 
 class HiAnime : ZoroTheme(
     "en",
