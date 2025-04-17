@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.en.zoro
 
+import android.app.Application // Import Application
 import android.content.SharedPreferences
 import android.widget.Toast
 import androidx.preference.ListPreference
@@ -18,7 +19,7 @@ import uy.kohesive.injekt.api.get
 class HiAnime : ZoroTheme(
     "en",
     "HiAnime",
-    getPreferredDomain(),
+    getPreferredDomain(), // Dynamically get the preferred domain
     hosterNames = listOf(
         "HD-1",
         "HD-2",
@@ -29,7 +30,8 @@ class HiAnime : ZoroTheme(
 
     override val ajaxRoute = "/v2"
 
-    private val preferences: SharedPreferences by lazy {
+    // Override preferences from ZoroTheme
+    override val preferences: SharedPreferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
 
