@@ -1,5 +1,5 @@
 ext {
-    extName = 'Gogoanime (Inactive)'
+    extName = "Gogoanime (Inactive)"
     extClass = '.GogoAnime'
     extVersionCode = 88
 }
