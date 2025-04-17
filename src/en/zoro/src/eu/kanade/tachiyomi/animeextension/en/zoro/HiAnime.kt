@@ -11,6 +11,9 @@ import eu.kanade.tachiyomi.multisrc.zorotheme.ZoroTheme
 import eu.kanade.tachiyomi.network.GET
 import okhttp3.Request
 import org.jsoup.nodes.Element
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
+import android.content.SharedPreferences
 
 class HiAnime : ZoroTheme(
     "en",
@@ -25,6 +28,10 @@ class HiAnime : ZoroTheme(
     override val id = 6706411382606718900L
 
     override val ajaxRoute = "/v2"
+
+    private val preferences: SharedPreferences by lazy {
+        Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
+    }
 
     private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
 
@@ -66,20 +73,15 @@ class HiAnime : ZoroTheme(
             ListPreference(screen.context).apply {
                 key = PREF_DOMAIN_KEY
                 title = "Preferred domain"
-                entries = arrayOf("hianimez.to", "hianimez.is", "hianime.to", "hianime.nz", "hianime.pe")
-                entryValues = arrayOf("https://hianimez.to", "https://hianimez.is", "https://hianime.to", "https://hianime.nz", "https://hianime.pe")
+                entries = PREF_DOMAIN_ENTRIES
+                entryValues = PREF_DOMAIN_ENTRY_VALUES
                 setDefaultValue(PREF_DOMAIN_DEFAULT)
                 summary = "%s"
 
                 setOnPreferenceChangeListener { _, newValue ->
-                    val selected = newValue as String
-                    val index = findIndexOfValue(selected)
-                    if (index == -1) {
-                        Toast.makeText(screen.context, "Invalid selection. Please try again.", Toast.LENGTH_LONG).show()
-                        return@setOnPreferenceChangeListener false
-                    }
-                    val entry = entryValues[index] as String
-                    preferences.edit().putString(PREF_DOMAIN_KEY, entry).commit()
+                    val selectedDomain = newValue as String
+                    preferences.edit().putString(PREF_DOMAIN_KEY, selectedDomain).commit()
+
                     Toast.makeText(
                         screen.context,
                         "Restart Aniyomi to apply changes",
@@ -92,27 +94,16 @@ class HiAnime : ZoroTheme(
     }
 
     companion object {
-    private const val PREF_DOMAIN_KEY = "preferred_domain"
-    private const val PREF_DOMAIN_DEFAULT = "https://hianimez.to"
+        private const val PREF_DOMAIN_KEY = "preferred_domain"
+        private const val PREF_DOMAIN_DEFAULT = "https://hianimez.to"
 
-    // Updated property name to follow screaming snake case
-    private val ALLOWED_DOMAINS = listOf(
-        "https://hianimez.to",
-        "https://hianimez.is",
-        "https://hianime.to",
-        "https://hianime.nz",
-        "https://hianime.pe",
-    )
+        private val PREF_DOMAIN_ENTRIES = arrayOf("hianimez.to", "hianime.to", "hianimez.is", "hianime.nz", "hianime.pe")
+        private val PREF_DOMAIN_ENTRY_VALUES = arrayOf("https://hianimez.to", "https://hianime.to", "https://hianimez.is", "https://hianime.nz", "https://hianime.pe")
 
-    // Initialize custom SharedPreferences for the extension
-    fun getPreferredDomain(preferences: SharedPreferences): String {
-        // Fetch the saved domain from SharedPreferences
-        val domain = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT) ?: PREF_DOMAIN_DEFAULT
-        // Validate the domain against the allowed list
-        return if (ALLOWED_DOMAINS.contains(domain)) domain else PREF_DOMAIN_DEFAULT
-    }
-
-    fun createPreferences(context: Context): SharedPreferences {
-        return context.getSharedPreferences("source_${this::class.java.simpleName}", Context.MODE_PRIVATE)
+        // Dynamically fetch the preferred domain
+        fun getPreferredDomain(): String {
+            val preferences = Injekt.get<Application>().getSharedPreferences("source_${HiAnime::class.java.simpleName}", 0x0000)
+            return preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT) ?: PREF_DOMAIN_DEFAULT
+        }
     }
 }
