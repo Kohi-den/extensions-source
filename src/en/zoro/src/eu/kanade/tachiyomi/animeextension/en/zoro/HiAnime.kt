@@ -70,7 +70,7 @@ class HiAnime : ZoroTheme(
             ListPreference(screen.context).apply {
                 key = PREF_DOMAIN_KEY
                 title = "Preferred domain"
-                entries = arrayOf("hianimez.to", "hianime.to", "hianimez.is" "hianime.nz", "hianime.pe")
+                entries = arrayOf("hianimez.to", "hianime.to", "hianimez.is", "hianime.nz", "hianime.pe")
                 entryValues = arrayOf("https://hianimez.to", "https://hianime.to", "https://hianimez.is", "https://hianime.nz", "https://hianime.pe")
                 setDefaultValue(PREF_DOMAIN_DEFAULT)
                 summary = "%s"
