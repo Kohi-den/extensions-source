@@ -26,7 +26,8 @@ import uy.kohesive.injekt.api.get
 
 class GogoAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
-    override val name = "Gogoanime"
+    override val name = "Gogoanime (Inactive)"
+    override val id = 7055547649318749672L
 
     // TODO: Check frequency of url changes to potentially
     // add back overridable baseurl preference
@@ -45,7 +46,7 @@ class GogoAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // ============================== Popular ===============================
-    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/popular.html?page=$page", headers)
+    override fun popularAnimeRequest(page: Int): Request = throw Exception("Source is no longer active.\nUninstall this extension.")
 
     override fun popularAnimeSelector(): String = "div.img a"
 
@@ -58,7 +59,7 @@ class GogoAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun popularAnimeNextPageSelector(): String = "ul.pagination-list li:last-child:not(.selected)"
 
     // =============================== Latest ===============================
-    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/home.html?page=$page", headers)
+    override fun latestUpdatesRequest(page: Int): Request = throw Exception("Source is no longer active.\nUninstall this extension.")
 
     override fun latestUpdatesSelector(): String = "div.img a"
 
