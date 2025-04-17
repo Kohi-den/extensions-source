@@ -66,8 +66,8 @@ class HiAnime : ZoroTheme(
             ListPreference(screen.context).apply {
                 key = PREF_DOMAIN_KEY
                 title = "Preferred domain"
-                entries = arrayOf("hianimez.to", "hianime.to", "hianime.bz", "hianime.pe")
-                entryValues = arrayOf("https://hianimez.to", "https://hianime.to", "https://hianime.bz", "https://hianime.pe")
+                entries = arrayOf("hianimez.to", "hianimez.is", "hianime.to", "hianime.nz", "hianime.pe")
+                entryValues = arrayOf("https://hianimez.to", "https://hianimez.is", "https://hianime.to", "https://hianime.nz", "https://hianime.pe")
                 setDefaultValue(PREF_DOMAIN_DEFAULT)
                 summary = "%s"
 
@@ -92,22 +92,27 @@ class HiAnime : ZoroTheme(
     }
 
     companion object {
-        private const val PREF_DOMAIN_KEY = "preferred_domain"
-        private const val PREF_DOMAIN_DEFAULT = "https://hianimez.to"
+    private const val PREF_DOMAIN_KEY = "preferred_domain"
+    private const val PREF_DOMAIN_DEFAULT = "https://hianimez.to"
 
-        private val allowedDomains = listOf(
-            "https://hianimez.to",
-            "https://hianime.to",
-            "https://hianime.bz",
-            "https://hianime.pe",
-        )
+    // Updated property name to follow screaming snake case
+    private val ALLOWED_DOMAINS = listOf(
+        "https://hianimez.to",
+        "https://hianimez.is",
+        "https://hianime.to",
+        "https://hianime.nz",
+        "https://hianime.pe",
+    )
 
-        fun getPreferredDomain(): String {
-            // Fetch the saved domain from SharedPreferences
-            val preferences = androidx.preference.PreferenceManager.getDefaultSharedPreferences(eu.kanade.tachiyomi.App.INSTANCE)
-            val domain = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT) ?: PREF_DOMAIN_DEFAULT
-            // Validate the domain against the allowed list
-            return if (allowedDomains.contains(domain)) domain else PREF_DOMAIN_DEFAULT
-        }
+    // Initialize custom SharedPreferences for the extension
+    fun getPreferredDomain(preferences: SharedPreferences): String {
+        // Fetch the saved domain from SharedPreferences
+        val domain = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT) ?: PREF_DOMAIN_DEFAULT
+        // Validate the domain against the allowed list
+        return if (ALLOWED_DOMAINS.contains(domain)) domain else PREF_DOMAIN_DEFAULT
+    }
+
+    fun createPreferences(context: Context): SharedPreferences {
+        return context.getSharedPreferences("source_${this::class.java.simpleName}", Context.MODE_PRIVATE)
     }
 }
