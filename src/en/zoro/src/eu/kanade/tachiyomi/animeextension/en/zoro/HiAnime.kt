@@ -31,7 +31,7 @@ class HiAnime : ZoroTheme(
     private val megaCloudExtractor by lazy { MegaCloudExtractor(client, headers, preferences) }
 
     override val baseUrl: String
-    get() = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT) ?: PREF_DOMAIN_DEFAULT
+        get() = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT) ?: PREF_DOMAIN_DEFAULT
 
     override fun latestUpdatesRequest(page: Int): Request = GET(
         "$baseUrl/recently-updated?page=$page",
