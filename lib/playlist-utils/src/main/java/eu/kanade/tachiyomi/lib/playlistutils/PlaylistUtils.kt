@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.lib.playlistutils
 
+import android.net.Uri
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
@@ -8,6 +9,7 @@ import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.internal.commonEmptyHeaders
+import java.io.File
 import kotlin.math.abs
 
 class PlaylistUtils(private val client: OkHttpClient, private val headers: Headers = commonEmptyHeaders) {
@@ -342,7 +344,32 @@ class PlaylistUtils(private val client: OkHttpClient, private val headers: Heade
         return "${result}p"
     }
 
+    private fun cleanSubtitleData(matchResult: MatchResult): String {
+        val lineCount = matchResult.groupValues[1].count { it == '\n' }
+        return "\n" + "&nbsp;\n".repeat(lineCount - 1)
+    }
+
+    fun fixSubtitles(subtitleList: List<Track>): List<Track> {
+        return subtitleList.mapNotNull {
+            try {
+                val subData = client.newCall(GET(it.url)).execute().body.string()
+
+                val file = File.createTempFile("subs", "vtt")
+                    .also(File::deleteOnExit)
+
+                file.writeText(FIX_SUBTITLE_REGEX.replace(subData, ::cleanSubtitleData))
+                val uri = Uri.fromFile(file)
+
+                Track(uri.toString(), it.lang)
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
+
     companion object {
+        private val FIX_SUBTITLE_REGEX = Regex("""${'$'}(\n{2,})(?!\d+:\d+(?:\.\d+)?\s-+>\s\d+:\d+(?:\.\d+)?)""", RegexOption.MULTILINE)
+        
         private const val PLAYLIST_SEPARATOR = "#EXT-X-STREAM-INF:"
 
         private val SUBTITLE_REGEX by lazy { Regex("""#EXT-X-MEDIA:TYPE=SUBTITLES.*?NAME="(.*?)".*?URI="(.*?)"""") }
