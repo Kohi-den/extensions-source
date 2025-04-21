@@ -47,9 +47,7 @@ class MegaCloudExtractor(
         private var shouldUpdateKey = false
         private const val PREF_KEY_KEY = "megacloud_key_"
         private const val PREF_KEY_DEFAULT = "[[0, 0]]"
-
-        private val FIX_SUBTITLE_REGEX = Regex("""${'$'}(\n{2,})(?!\d+:\d+(?:\.\d+)?\s-+>\s\d+:\d+(?:\.\d+)?)""", RegexOption.MULTILINE)
-
+        
         private inline fun <reified R> runLocked(crossinline block: () -> R) = runBlocking(Dispatchers.IO) {
             MUTEX.withLock { block() }
         }
