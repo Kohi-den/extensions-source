@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.lib.megacloudextractor
 
 import android.content.SharedPreferences
+import android.net.Uri
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.cryptoaes.CryptoAES
@@ -20,6 +21,7 @@ import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import uy.kohesive.injekt.injectLazy
+import java.io.File
 
 class MegaCloudExtractor(
     private val client: OkHttpClient,
@@ -47,6 +49,8 @@ class MegaCloudExtractor(
         private var shouldUpdateKey = false
         private const val PREF_KEY_KEY = "megacloud_key_"
         private const val PREF_KEY_DEFAULT = "[[0, 0]]"
+
+        private val FIX_SUBTITLE_REGEX = Regex("""${'$'}(\n{2,})(?!\d+:\d+(?:\.\d+)?\s-+>\s\d+:\d+(?:\.\d+)?)""", RegexOption.MULTILINE)
 
         private inline fun <reified R> runLocked(crossinline block: () -> R) = runBlocking(Dispatchers.IO) {
             MUTEX.withLock { block() }
@@ -132,12 +136,36 @@ class MegaCloudExtractor(
             ?.filter { it.kind == "captions" }
             ?.map { Track(it.file, it.label) }
             .orEmpty()
+            .let { fixSubtitles(it) }
         return playlistUtils.extractFromHls(
             masterUrl,
             videoNameGen = { "$name - $it - $type" },
             subtitleList = subs2,
             referer = "https://${url.toHttpUrl().host}/",
         )
+    }
+
+    private fun cleanSubtitleData(matchResult: MatchResult): String {
+        val lineCount = matchResult.groupValues[1].count { it == '\n' }
+        return "\n" + "&nbsp;\n".repeat(lineCount - 1)
+    }
+
+    private fun fixSubtitles(subtitleList: List<Track>): List<Track> {
+        return subtitleList.mapNotNull {
+            try {
+                val subData = client.newCall(GET(it.url)).execute().body.string()
+
+                val file = File.createTempFile("subs", "vtt")
+                    .also(File::deleteOnExit)
+
+                file.writeText(FIX_SUBTITLE_REGEX.replace(subData, ::cleanSubtitleData))
+                val uri = Uri.fromFile(file)
+
+                Track(uri.toString(), it.lang)
+            } catch (_: Exception) {
+                null
+            }
+        }
     }
 
     private fun getVideoDto(url: String): VideoDto {
