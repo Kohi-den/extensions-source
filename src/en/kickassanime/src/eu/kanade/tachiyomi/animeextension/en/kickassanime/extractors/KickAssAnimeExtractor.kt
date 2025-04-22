@@ -18,6 +18,8 @@ class KickAssAnimeExtractor(
     private val json: Json,
     private val headers: Headers,
 ) {
+    private val playlistUtils by lazy { PlaylistUtils(client, headers) }
+
     fun videosFromUrl(url: String, name: String): List<Video> {
         val host = url.toHttpUrl().host
         val mid = if (name == "DuckStream") "mid" else "id"
@@ -77,7 +79,7 @@ class KickAssAnimeExtractor(
             val language = "${it.name} (${it.language})"
 
             Track(subUrl, language)
-        }
+        }.let { playlistUtils.fixSubtitles(it) }
 
         fun getVideoHeaders(baseHeaders: Headers, referer: String, videoUrl: String): Headers {
             return baseHeaders.newBuilder().apply {
@@ -92,8 +94,8 @@ class KickAssAnimeExtractor(
 
         return when {
             videoObject.hls.isBlank() ->
-                PlaylistUtils(client, headers).extractFromDash(videoObject.playlistUrl, videoNameGen = { res -> "$name - $res" }, subtitleList = subtitles)
-            else -> PlaylistUtils(client, headers).extractFromHls(
+                playlistUtils.extractFromDash(videoObject.playlistUrl, videoNameGen = { res -> "$name - $res" }, subtitleList = subtitles)
+            else -> playlistUtils.extractFromHls(
                 videoObject.playlistUrl,
                 videoNameGen = { "$name - $it" },
                 videoHeadersGen = ::getVideoHeaders,
