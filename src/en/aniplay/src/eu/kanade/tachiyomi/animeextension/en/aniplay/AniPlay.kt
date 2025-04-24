@@ -291,7 +291,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                     return playlistUtils.extractFromHls(
                         playlistUrl = url,
                         videoNameGen = { quality -> "$serverName - $quality - $typeName" },
-                        subtitleList = subtitles,
+                        subtitleList = playlistUtils.fixSubtitles(subtitles),
                         masterHeadersGen = { baseHeaders: Headers, _: String ->
                             baseHeaders.newBuilder().apply {
                                 set("Accept", "*/*")
