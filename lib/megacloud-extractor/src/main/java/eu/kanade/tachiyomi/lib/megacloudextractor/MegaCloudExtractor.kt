@@ -47,7 +47,7 @@ class MegaCloudExtractor(
         private var shouldUpdateKey = false
         private const val PREF_KEY_KEY = "megacloud_key_"
         private const val PREF_KEY_DEFAULT = "[[0, 0]]"
-
+        
         private inline fun <reified R> runLocked(crossinline block: () -> R) = runBlocking(Dispatchers.IO) {
             MUTEX.withLock { block() }
         }
@@ -132,6 +132,7 @@ class MegaCloudExtractor(
             ?.filter { it.kind == "captions" }
             ?.map { Track(it.file, it.label) }
             .orEmpty()
+            .let { playlistUtils.fixSubtitles(it) }
         return playlistUtils.extractFromHls(
             masterUrl,
             videoNameGen = { "$name - $it - $type" },
