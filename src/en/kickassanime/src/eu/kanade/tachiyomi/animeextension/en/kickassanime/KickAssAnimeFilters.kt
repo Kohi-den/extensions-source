@@ -270,6 +270,7 @@ object KickAssAnimeFilters {
             Pair("2022", "2022"),
             Pair("2023", "2023"),
             Pair("2024", "2024"),
+            Pair("2025", "2025"),
         )
 
         val STATUS = arrayOf(
