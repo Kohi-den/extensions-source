@@ -3,7 +3,7 @@ ext {
     extClass = '.AniSAGA'
     themePkg = 'dooplay'
     baseUrl = 'https://www.anisaga.org'
-    overrideVersionCode = 16
+    overrideVersionCode = 17
     isNsfw = false
 }
 
