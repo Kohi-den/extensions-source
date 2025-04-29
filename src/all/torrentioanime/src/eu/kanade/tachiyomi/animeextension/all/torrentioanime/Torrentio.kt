@@ -456,18 +456,47 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
         }.orEmpty()
     }
 
-    override fun List<Video>.sort(): List<Video> {
-        val isDub = preferences.getBoolean(IS_DUB_KEY, IS_DUB_DEFAULT)
-        val isEfficient = preferences.getBoolean(IS_EFFICIENT_KEY, IS_EFFICIENT_DEFAULT)
-
-        return sortedWith(
+  override fun List<Video>.sort(): List<Video> {
+    val isDub = preferences.getBoolean(IS_DUB_KEY, IS_DUB_DEFAULT)
+    val isEfficient = preferences.getBoolean(IS_EFFICIENT_KEY, IS_EFFICIENT_DEFAULT)
+    val codecPreferences = preferences.getStringSet(PREF_CODEC_KEY, PREF_CODEC_DEFAULT) ?: setOf()
+    
+    // For x264 only filtering, check if that's the only codec selected
+    val isX264Only = codecPreferences.size == 1 && codecPreferences.contains("x264")
+    
+    return if (isX264Only) {
+        // Filter to only show x264 videos
+        filter { it.quality.contains("264", true) || 
+                (!it.quality.contains("265", true) && 
+                 !it.quality.contains("hevc", true) && 
+                 !it.quality.contains("av1", true) && 
+                 !it.quality.contains("vp9", true)) 
+        }.sortedWith(
+            compareBy(
+                { Regex("\\[(.+?) download]").containsMatchIn(it.quality) },
+                { isDub && !it.quality.contains("dubbed", true) }
+            )
+        )
+    } else if (codecPreferences.isNotEmpty()) {
+        // Sort based on codec preferences
+        sortedWith(
+            compareBy(
+                { Regex("\\[(.+?) download]").containsMatchIn(it.quality) },
+                { isDub && !it.quality.contains("dubbed", true) },
+                { video -> codecPreferences.none { codec -> video.quality.contains(codec, true) } }
+            )
+        )
+    } else {
+        // Existing sort logic
+        sortedWith(
             compareBy(
                 { Regex("\\[(.+?) download]").containsMatchIn(it.quality) },
                 { isDub && !it.quality.contains("dubbed", true) },
                 { isEfficient && !arrayOf("hevc", "265", "av1").any { q -> it.quality.contains(q, true) } },
-            ),
+            )
         )
     }
+}
 
     private fun fetchTrackers(): String {
         val request = Request.Builder()
@@ -616,6 +645,18 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
             }
             summary = "Codec: (HEVC / x265)  & AV1. High-quality video with less data usage."
         }.also(screen::addPreference)
+		MultiSelectListPreference(screen.context).apply {
+    key = PREF_CODEC_KEY
+    title = "Preferred Codecs"
+    entries = PREF_CODEC
+    entryValues = PREF_CODEC_VALUE
+    setDefaultValue(PREF_CODEC_DEFAULT)
+
+    setOnPreferenceChangeListener { _, newValue ->
+        @Suppress("UNCHECKED_CAST")
+        preferences.edit().putStringSet(key, newValue as Set<String>).commit()
+    }
+}.also(screen::addPreference)
     }
 
     companion object {
@@ -897,7 +938,22 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
 
         private const val IS_EFFICIENT_KEY = "efficient"
         private const val IS_EFFICIENT_DEFAULT = false
-
+		private const val PREF_CODEC_KEY = "codec_selection"
+private val PREF_CODEC = arrayOf(
+    "x264",
+    "x265/HEVC",
+    "AV1",
+    "VP9",
+    "Other"
+)
+private val PREF_CODEC_VALUE = arrayOf(
+    "x264",
+    "x265",
+    "av1",
+    "vp9",
+    "other"
+)
+private val PREF_CODEC_DEFAULT = setOf<String>() // Empty by default to show al
         private val DATE_TIME_FORMATTER by lazy {
             SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ENGLISH)
         }
@@ -905,5 +961,6 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
         private val DATE_FORMATTER by lazy {
             SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
         }
+		
     }
 }
