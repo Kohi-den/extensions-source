@@ -456,38 +456,41 @@ class Torrentio : ConfigurableAnimeSource, AnimeHttpSource() {
         }.orEmpty()
     }
 
-  override fun List<Video>.sort(): List<Video> {
+ override fun List<Video>.sort(): List<Video> {
     val isDub = preferences.getBoolean(IS_DUB_KEY, IS_DUB_DEFAULT)
     val isEfficient = preferences.getBoolean(IS_EFFICIENT_KEY, IS_EFFICIENT_DEFAULT)
     val codecPreferences = preferences.getStringSet(PREF_CODEC_KEY, PREF_CODEC_DEFAULT) ?: setOf()
     
-    // For x264 only filtering, check if that's the only codec selected
-    val isX264Only = codecPreferences.size == 1 && codecPreferences.contains("x264")
-    
-    return if (isX264Only) {
-        // Filter to only show x264 videos
-        filter { it.quality.contains("264", true) || 
-                (!it.quality.contains("265", true) && 
-                 !it.quality.contains("hevc", true) && 
-                 !it.quality.contains("av1", true) && 
-                 !it.quality.contains("vp9", true)) 
+    return if (codecPreferences.isNotEmpty()) {
+        // Filter to only show videos matching selected codecs
+        filter { video ->
+            codecPreferences.any { codec ->
+                when (codec) {
+                    "x264" -> video.quality.contains("264", true) || 
+                             (!video.quality.contains("265", true) && 
+                              !video.quality.contains("hevc", true) && 
+                              !video.quality.contains("av1", true) && 
+                              !video.quality.contains("vp9", true))
+                    "x265" -> video.quality.contains("265", true) || 
+                             video.quality.contains("hevc", true)
+                    "av1" -> video.quality.contains("av1", true)
+                    "vp9" -> video.quality.contains("vp9", true)
+                    "other" -> !video.quality.contains("264", true) && 
+                               !video.quality.contains("265", true) && 
+                               !video.quality.contains("hevc", true) && 
+                               !video.quality.contains("av1", true) && 
+                               !video.quality.contains("vp9", true)
+                    else -> false
+                }
+            }
         }.sortedWith(
             compareBy(
                 { Regex("\\[(.+?) download]").containsMatchIn(it.quality) },
                 { isDub && !it.quality.contains("dubbed", true) }
             )
         )
-    } else if (codecPreferences.isNotEmpty()) {
-        // Sort based on codec preferences
-        sortedWith(
-            compareBy(
-                { Regex("\\[(.+?) download]").containsMatchIn(it.quality) },
-                { isDub && !it.quality.contains("dubbed", true) },
-                { video -> codecPreferences.none { codec -> video.quality.contains(codec, true) } }
-            )
-        )
     } else {
-        // Existing sort logic
+        // If no codec preferences, use old sorting logic
         sortedWith(
             compareBy(
                 { Regex("\\[(.+?) download]").containsMatchIn(it.quality) },
