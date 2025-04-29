@@ -14,7 +14,7 @@ class AniSAGA : DooPlay(
     "AniSAGA",
     "https://www.anisaga.org",
 ) {
-    private val videoHost = "https://plyrxcdn.site/"
+    private val videoHost = "https://plyrxcdn.site"
 
     // ============================== Popular ===============================
     override fun popularAnimeSelector() = "div.top-imdb-list > div.top-imdb-item"
