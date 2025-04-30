@@ -3,7 +3,7 @@ ext {
     extClass = '.AnimeYTES'
     themePkg = 'animestream'
     baseUrl = 'https://animeyt.pro'
-    overrideVersionCode = 9
+    overrideVersionCode = 10
 }
 
 apply from: "$rootDir/common.gradle"
