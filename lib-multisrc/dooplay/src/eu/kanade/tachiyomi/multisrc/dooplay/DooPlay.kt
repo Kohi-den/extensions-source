@@ -49,13 +49,13 @@ abstract class DooPlay(
         const val PREFIX_SEARCH = "path:"
     }
 
-    protected open val prefQualityDefault = "720p"
+    protected open val prefQualityDefault = "1080p"
     protected open val prefQualityKey = "preferred_quality"
     protected open val prefQualityTitle = when (lang) {
         "pt-BR" -> "Qualidade preferida"
         else -> "Preferred quality"
     }
-    protected open val prefQualityValues = arrayOf("480p", "720p")
+    protected open val prefQualityValues = arrayOf("360p", "480p", "720p", "1080p")
     protected open val prefQualityEntries = prefQualityValues
 
     protected open val videoSortPrefKey = prefQualityKey
