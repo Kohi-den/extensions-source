@@ -34,7 +34,9 @@ class BuzzheavierExtractor(
             add("Referer", url)
         }.build()
 
-        val path = client.newCall(GET("$url/download", dlHeaders)).execute().headers["hx-redirect"].orEmpty()
+        val path = client.newCall(
+            GET("https://${httpUrl.host}/$id/download", dlHeaders)
+        ).execute().headers["hx-redirect"].orEmpty()
 
         return if (path.isNotEmpty()) {
             val videoUrl = if (path.startsWith("http")) path else "https://${httpUrl.host}$path"

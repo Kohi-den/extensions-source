@@ -40,11 +40,6 @@ class Hikari : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override val supportsLatest = true
 
-    override fun headersBuilder() = super.headersBuilder().apply {
-        add("Origin", baseUrl)
-        add("Referer", "$baseUrl/")
-    }
-
     private val preferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
