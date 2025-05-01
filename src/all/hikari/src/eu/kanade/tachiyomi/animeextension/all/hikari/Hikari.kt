@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.animeextension.all.hikari
 import android.app.Application
 import android.content.SharedPreferences
 import androidx.preference.ListPreference
+import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -159,19 +160,35 @@ class Hikari : AnimeHttpSource(), ConfigurableAnimeSource {
     override fun videoListParse(response: Response): List<Video> {
         val data = response.parseAs<List<EmbedDto>>()
 
+        val selectedProviders = preferences.getStringSet(PREF_PROVIDER_KEY, PREF_PROVIDERS_DEFAULT)?.map(String::lowercase)?.toSet() ?: emptySet()
+
         return data.parallelCatchingFlatMapBlocking { embed ->
-            val prefix = getEmbedTypeName(embed.embedType) + embed.embedName
             val embedName = embed.embedName.lowercase()
+
+            if (embedName !in selectedProviders) return@parallelCatchingFlatMapBlocking emptyList()
+
+            val prefix = getEmbedTypeName(embed.embedType) + embed.embedName
 
             when (embedName) {
                 "streamwish" -> streamwishExtractor.videosFromUrl(embed.embedFrame, videoNameGen = { "$prefix - $it" })
                 "filemoon" -> filemoonExtractor.videosFromUrl(embed.embedFrame, "$prefix - ")
                 "sv" -> savefileExtractor.videosFromUrl(embed.embedFrame, "$prefix - ")
                 "playerx" -> chillxExtractor.videoFromUrl(embed.embedFrame, "$prefix - ")
-                "hiki" -> buzzheavierExtractor.videosFromUrl(embed.embedFrame, "$prefix - ", proxyUrl)
+                "hiki" -> hikiExtraction(embed.embedFrame, "$prefix - ")
                 else -> emptyList()
             }
         }
+    }
+
+    private fun hikiExtraction(url: String, prefix: String): List<Video> {
+        val hikiMirror = preferences.getString(PREF_HIKI_KEY, PREF_HIKI_DEFAULT)!!
+
+        if (hikiMirror == "hiki") {
+            return buzzheavierExtractor.videosFromUrl(url, prefix, proxyUrl)
+        }
+        val id = url.toHttpUrl().pathSegments[0]
+        val videoUrl = "https://$hikiMirror/$id"
+        return buzzheavierExtractor.videosFromUrl(videoUrl, prefix)
     }
 
     override fun List<Video>.sort(): List<Video> {
@@ -215,6 +232,21 @@ class Hikari : AnimeHttpSource(), ConfigurableAnimeSource {
         private const val PREF_HOSTER_DEFAULT = ""
         private val PREF_HOSTER_VALUES = arrayOf("") + HOSTER_LIST
         private val PREF_HOSTER_ENTRIES = arrayOf("Any") + HOSTER_LIST
+
+        private const val PREF_HIKI_KEY = "preferred_hiki_mirror"
+        private const val PREF_HIKI_DEFAULT = "hiki"
+        private val PREF_HIKI_VALUES = arrayOf("hiki", "buzzheavier.com", "bzzhr.co", "fuckingfast.net")
+        private val PREF_HIKI_ENTRIES = PREF_HIKI_VALUES
+
+        // Provider
+        private const val PREF_PROVIDER_KEY = "provider_selection"
+        private val PREF_PROVIDERS = arrayOf("Streamwish", "Filemoon", "SV", "PlayerX", "Hiki")
+
+        private val PREF_PROVIDERS_VALUE = arrayOf("streamwish", "filemoon", "sv", "playerx", "hiki")
+
+        private val PREF_DEFAULT_PROVIDERS_VALUE = arrayOf("streamwish", "filemoon", "sv", "playerx", "hiki")
+
+        private val PREF_PROVIDERS_DEFAULT = PREF_DEFAULT_PROVIDERS_VALUE.toSet()
     }
 
     // ============================== Settings ==============================
@@ -253,6 +285,28 @@ class Hikari : AnimeHttpSource(), ConfigurableAnimeSource {
             entries = PREF_HOSTER_ENTRIES
             entryValues = PREF_HOSTER_VALUES
             setDefaultValue(PREF_HOSTER_DEFAULT)
+            summary = "%s"
+        }.also(screen::addPreference)
+
+        MultiSelectListPreference(screen.context).apply {
+            key = PREF_PROVIDER_KEY
+            title = "Enable/Disable Video Providers"
+            entries = PREF_PROVIDERS
+            entryValues = PREF_PROVIDERS_VALUE
+            setDefaultValue(PREF_PROVIDERS_DEFAULT)
+
+            setOnPreferenceChangeListener { _, newValue ->
+                @Suppress("UNCHECKED_CAST")
+                preferences.edit().putStringSet(key, newValue as Set<String>).commit()
+            }
+        }.also(screen::addPreference)
+
+        ListPreference(screen.context).apply {
+            key = PREF_HIKI_KEY
+            title = "Hiki provider mirrors"
+            entries = PREF_HIKI_ENTRIES
+            entryValues = PREF_HIKI_VALUES
+            setDefaultValue(PREF_HIKI_DEFAULT)
             summary = "%s"
         }.also(screen::addPreference)
 
