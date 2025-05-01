@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 
 class StreamWishExtractor(private val client: OkHttpClient, private val headers: Headers) {
@@ -30,16 +31,19 @@ class StreamWishExtractor(private val client: OkHttpClient, private val headers:
                     script
                 }
             }
-        val masterUrl = scriptBody
-            ?.substringAfter("source", "")
-            ?.substringAfter("file:\"", "")
-            ?.substringBefore("\"", "")
-            ?.takeIf(String::isNotBlank)
+        val masterUrl = scriptBody?.let {
+            M3U8_REGEX.find(it)?.value
+        }
             ?: return emptyList()
 
         val subtitleList = extractSubtitles(scriptBody)
 
-        return playlistUtils.extractFromHls(masterUrl, url, videoNameGen = videoNameGen, subtitleList = subtitleList)
+        return playlistUtils.extractFromHls(
+            playlistUrl = masterUrl,
+            referer = "https://${url.toHttpUrl().host}/",
+            videoNameGen = videoNameGen,
+            subtitleList = playlistUtils.fixSubtitles(subtitleList),
+        )
     }
 
     private fun getEmbedUrl(url: String): String {
@@ -57,7 +61,11 @@ class StreamWishExtractor(private val client: OkHttpClient, private val headers:
                 .substringAfter("tracks")
                 .substringAfter("[")
                 .substringBefore("]")
-            json.decodeFromString<List<TrackDto>>("[$subtitleStr]")
+            val fixedSubtitleStr = FIX_TRACKS_REGEX.replace(subtitleStr) { match ->
+                "\"${match.value}\""
+            }
+
+            json.decodeFromString<List<TrackDto>>("[$fixedSubtitleStr]")
                 .filter { it.kind.equals("captions", true) }
                 .map { Track(it.file, it.label ?: "") }
         } catch (e: SerializationException) {
@@ -67,4 +75,7 @@ class StreamWishExtractor(private val client: OkHttpClient, private val headers:
 
     @Serializable
     private data class TrackDto(val file: String, val kind: String, val label: String? = null)
+
+    private val M3U8_REGEX = Regex("""https[^"]*m3u8[^"]*""")
+    private val FIX_TRACKS_REGEX = Regex("""(?<!["])(file|kind|label)(?!["])""")
 }

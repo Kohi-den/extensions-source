@@ -5,7 +5,7 @@ import okhttp3.HttpUrl
 import java.util.Calendar
 
 interface UriFilter {
-    fun addToUri(url: HttpUrl.Builder)
+    fun addToUri(builder: HttpUrl.Builder)
 }
 
 sealed class UriPartFilter(
@@ -20,7 +20,10 @@ sealed class UriPartFilter(
 ),
     UriFilter {
     override fun addToUri(builder: HttpUrl.Builder) {
-        builder.addQueryParameter(param, vals[state].second)
+        val value = vals[state].second
+        if (value.isNotEmpty()) {
+            builder.addQueryParameter(param, value)
+        }
     }
 }
 
@@ -33,13 +36,15 @@ sealed class UriMultiSelectFilter(
 ) : AnimeFilter.Group<UriMultiSelectOption>(name, vals.map { UriMultiSelectOption(it.first, it.second) }), UriFilter {
     override fun addToUri(builder: HttpUrl.Builder) {
         val checked = state.filter { it.state }
-        builder.addQueryParameter(param, checked.joinToString(",") { it.value })
+        if (checked.isNotEmpty()) {
+            builder.addQueryParameter(param, checked.joinToString(",") { it.value })
+        }
     }
 }
 
 class TypeFilter : UriPartFilter(
     "Type",
-    "type",
+    "ani_type",
     arrayOf(
         Pair("All", ""),
         Pair("TV", "1"),
@@ -50,165 +55,53 @@ class TypeFilter : UriPartFilter(
     ),
 )
 
-class CountryFilter : UriPartFilter(
-    "Country",
-    "country",
-    arrayOf(
-        Pair("All", ""),
-        Pair("Japanese", "1"),
-        Pair("Chinese", "2"),
-    ),
-)
-
 class StatusFilter : UriPartFilter(
     "Status",
-    "stats",
+    "ani_stats",
     arrayOf(
         Pair("All", ""),
-        Pair("Currently Airing", "1"),
-        Pair("Finished Airing", "2"),
-        Pair("Not yet Aired", "3"),
-    ),
-)
-
-class RatingFilter : UriPartFilter(
-    "Rating",
-    "rate",
-    arrayOf(
-        Pair("All", ""),
-        Pair("G", "1"),
-        Pair("PG", "2"),
-        Pair("PG-13", "3"),
-        Pair("R-17+", "4"),
-        Pair("R+", "5"),
-        Pair("Rx", "6"),
-    ),
-)
-
-class SourceFilter : UriPartFilter(
-    "Source",
-    "source",
-    arrayOf(
-        Pair("All", ""),
-        Pair("LightNovel", "1"),
-        Pair("Manga", "2"),
-        Pair("Original", "3"),
+        Pair("Ongoing", "1"),
+        Pair("Completed", "2"),
+        Pair("Upcoming", "3"),
     ),
 )
 
 class SeasonFilter : UriPartFilter(
     "Season",
-    "season",
+    "ani_release_season",
     arrayOf(
         Pair("All", ""),
-        Pair("Spring", "1"),
-        Pair("Summer", "2"),
-        Pair("Fall", "3"),
-        Pair("Winter", "4"),
+        Pair("Winter", "1"),
+        Pair("Spring", "2"),
+        Pair("Summer", "3"),
+        Pair("Fall", "4"),
     ),
 )
 
-class LanguageFilter : UriPartFilter(
-    "Language",
-    "language",
-    arrayOf(
-        Pair("All", ""),
-        Pair("Raw", "1"),
-        Pair("Sub", "2"),
-        Pair("Dub", "3"),
-        Pair("Turk", "4"),
-    ),
-)
-
-class SortFilter : UriPartFilter(
-    "Sort",
-    "sort",
-    arrayOf(
-        Pair("Default", "default"),
-        Pair("Recently Added", "recently_added"),
-        Pair("Recently Updated", "recently_updated"),
-        Pair("Score", "score"),
-        Pair("Name A-Z", "name_az"),
-        Pair("Released Date", "released_date"),
-        Pair("Most Watched", "most_watched"),
-    ),
-)
-
-class YearFilter(name: String, param: String) : UriPartFilter(
-    name,
-    param,
+class YearFilter : UriPartFilter(
+    "Release Year",
+    "ani_release",
     YEARS,
 ) {
     companion object {
-        private val NEXT_YEAR by lazy {
-            Calendar.getInstance()[Calendar.YEAR] + 1
+        private val CURRENT_YEAR by lazy {
+            Calendar.getInstance()[Calendar.YEAR]
         }
 
-        private val YEARS = Array(NEXT_YEAR - 1917) { year ->
-            if (year == 0) {
-                Pair("Any", "")
-            } else {
-                (NEXT_YEAR - year).toString().let { Pair(it, it) }
-            }
-        }
-    }
-}
-
-class MonthFilter(name: String, param: String) : UriPartFilter(
-    name,
-    param,
-    MONTHS,
-) {
-    companion object {
-        private val MONTHS = Array(13) { months ->
-            if (months == 0) {
-                Pair("Any", "")
-            } else {
-                val monthStr = "%02d".format(months)
-                Pair(monthStr, monthStr)
-            }
-        }
-    }
-}
-
-class DayFilter(name: String, param: String) : UriPartFilter(
-    name,
-    param,
-    DAYS,
-) {
-    companion object {
-        private val DAYS = Array(32) { day ->
-            if (day == 0) {
-                Pair("Any", "")
-            } else {
-                val dayStr = "%02d".format(day)
-                Pair(dayStr, dayStr)
-            }
-        }
-    }
-}
-
-class AiringDateFilter(
-    private val values: List<UriPartFilter> = PARTS,
-) : AnimeFilter.Group<UriPartFilter>("Airing Date", values), UriFilter {
-    override fun addToUri(builder: HttpUrl.Builder) {
-        values.forEach {
-            it.addToUri(builder)
-        }
-    }
-
-    companion object {
-        private val PARTS = listOf(
-            YearFilter("Year", "aired_year"),
-            MonthFilter("Month", "aired_month"),
-            DayFilter("Day", "aired_day"),
-        )
+        private val YEARS = buildList {
+            add(Pair("Any", ""))
+            addAll(
+                (1990..CURRENT_YEAR).map {
+                    Pair(it.toString(), it.toString())
+                },
+            )
+        }.toTypedArray()
     }
 }
 
 class GenreFilter : UriMultiSelectFilter(
     "Genre",
-    "genres",
+    "ani_genre",
     arrayOf(
         Pair("Action", "Action"),
         Pair("Adventure", "Adventure"),
@@ -233,7 +126,7 @@ class GenreFilter : UriMultiSelectFilter(
         Pair("Music", "Music"),
         Pair("Mystery", "Mystery"),
         Pair("Parody", "Parody"),
-        Pair("Police", "Police"),
+        Pair("Policy", "Policy"),
         Pair("Psychological", "Psychological"),
         Pair("Romance", "Romance"),
         Pair("Samurai", "Samurai"),
@@ -251,5 +144,14 @@ class GenreFilter : UriMultiSelectFilter(
         Pair("Supernatural", "Supernatural"),
         Pair("Thriller", "Thriller"),
         Pair("Vampire", "Vampire"),
+    ),
+)
+
+class LanguageFilter : UriPartFilter(
+    "Language",
+    "ani_genre",
+    arrayOf(
+        Pair("Any", ""),
+        Pair("Portuguese", "Portuguese"),
     ),
 )
