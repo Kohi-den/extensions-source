@@ -162,6 +162,7 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
                 episode.name = "Episode ${index + 1}"
                 episode
             }
+            .reversed()
     }
 
     private fun parseEpisodePage(episodes: List<EpisodeDto>, animeSession: String): MutableList<SEpisode> {

@@ -1,7 +1,7 @@
 ext {
     extName = 'Hikari'
     extClass = '.Hikari'
-    extVersionCode = 16
+    extVersionCode = 19
 }
 
 apply from: "$rootDir/common.gradle"
@@ -9,6 +9,7 @@ apply from: "$rootDir/common.gradle"
 dependencies {
     implementation(project(':lib:chillx-extractor'))
     implementation(project(':lib:filemoon-extractor'))
+    implementation(project(':lib:savefile-extractor'))
+    implementation(project(':lib:buzzheavier-extractor'))
     implementation(project(':lib:streamwish-extractor'))
-    implementation(project(':lib:vidhide-extractor'))
 }
