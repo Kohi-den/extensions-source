@@ -36,7 +36,7 @@ class WCOStream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "WCOStream"
 
-    override val baseUrl = "https://www.wcostream.org"
+    override val baseUrl = "https://www.wcostream.tv"
 
     override val lang = "en"
 
@@ -50,7 +50,7 @@ class WCOStream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun headersBuilder(): Headers.Builder {
         return super.headersBuilder()
-            .add("Referer", "https://wcostream.org/")
+            .add("Referer", "https://wcostream.tv/")
     }
 
     // Popular Anime
