@@ -3,7 +3,7 @@ ext {
     extClass = '.Q1N'
     themePkg = 'dooplay'
     baseUrl = 'https://q1n.net'
-    overrideVersionCode = 19
+    overrideVersionCode = 20
 }
 
 apply from: "$rootDir/common.gradle"

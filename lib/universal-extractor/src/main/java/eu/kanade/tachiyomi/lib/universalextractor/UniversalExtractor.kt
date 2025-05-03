@@ -18,6 +18,7 @@ import uy.kohesive.injekt.injectLazy
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 class UniversalExtractor(private val client: OkHttpClient) {
     private val context: Application by injectLazy()
@@ -73,7 +74,7 @@ class UniversalExtractor(private val client: OkHttpClient) {
 
             for (quality in qualities) {
                 val modifiedUrl = resultUrl.replace("M3U8_AUTO_360", "M3U8_AUTO_$quality")
-                val videos = playlistUtils.extractFromHls(modifiedUrl, origRequestUrl, videoNameGen = { "$prefix - $host: $it $quality" + "p" })
+                val videos = playlistUtils.extractFromHls(modifiedUrl, origRequestUrl, videoNameGen = { "$prefix - $host: ${stnQuality(it)} $quality" + "p" })
 
                 if (videos.isNotEmpty()) {
                     allVideos.addAll(videos)
@@ -89,7 +90,7 @@ class UniversalExtractor(private val client: OkHttpClient) {
         return when {
             "m3u8" in resultUrl -> {
                 Log.d("UniversalExtractor", "m3u8 URL: $resultUrl")
-                playlistUtils.extractFromHls(resultUrl, origRequestUrl, videoNameGen = { "$prefix - $host: $it" })
+                playlistUtils.extractFromHls(resultUrl, origRequestUrl, videoNameGen = { "$prefix - $host: ${stnQuality(it)}" })
             }
             "mpd" in resultUrl -> {
                 Log.d("UniversalExtractor", "mpd URL: $resultUrl")
@@ -101,6 +102,13 @@ class UniversalExtractor(private val client: OkHttpClient) {
             }
             else -> emptyList()
         }
+    }
+
+    private fun stnQuality(quality: String): String {
+        val intQuality = quality.trim().toInt()
+        val standardQualities = listOf(144, 240, 360, 480, 720, 1080)
+        val result =  standardQualities.minByOrNull { abs(it - intQuality) } ?: quality
+        return "${result}p"
     }
 
     private fun String.proper(): String {
