@@ -10,6 +10,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import eu.kanade.tachiyomi.network.GET
+import eu.kanade.tachiyomi.util.asJsoup
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import uy.kohesive.injekt.injectLazy
@@ -60,8 +61,8 @@ class WebViewResolver(
                     view: WebView?,
                     request: WebResourceRequest?
                 ): WebResourceResponse? {
-                    if (request?.url.toString().contains("assets/js/library")) {
-                        return patchScript(request!!.url.toString(), interfaceName)
+                    if (request?.url.toString().equals(embedUrl, true)) {
+                        return patchBody(request!!.url.toString(), interfaceName)
                             ?: super.shouldInterceptRequest(view, request)
                     }
 
@@ -92,12 +93,12 @@ class WebViewResolver(
         return List(length) { charPool.random() }.joinToString("")
     }
 
-    private fun patchScript(scriptUrl: String, interfaceName: String): WebResourceResponse? {
-        val scriptBody = client.newCall(GET(scriptUrl)).execute().body.string()
+    private fun patchBody(url: String, interfaceName: String): WebResourceResponse? {
+        val html = client.newCall(GET(url, globalHeaders)).execute().asJsoup()
 
         val oldFunc = randomString()
-        val newBody = buildString {
-            append(
+        val script = html.createElement("script").apply {
+            appendText(
                 """
                     const $oldFunc = Function;
                     window.Function = function (...args) {
@@ -108,17 +109,17 @@ class WebViewResolver(
                     };
                 """.trimIndent()
             )
-            append(scriptBody)
         }
 
+        html.body().insertChildren(0, script)
 
         return WebResourceResponse(
-            "application/javascript",
+            "text/html",
             "utf-8",
             200,
             "ok",
             mapOf("server" to "cloudflare"),
-            ByteArrayInputStream(newBody.toByteArray()),
+            ByteArrayInputStream(html.outerHtml().toByteArray()),
         )
     }
 }
