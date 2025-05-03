@@ -44,6 +44,7 @@ class ChillxExtractor(private val client: OkHttpClient, private val headers: Hea
                 url = it.url,
                 quality = it.quality,
                 videoUrl = it.videoUrl,
+                headers = it.headers,
                 audioTracks = it.audioTracks,
                 subtitleTracks = playlistUtils.fixSubtitles(it.subtitleTracks),
             )
