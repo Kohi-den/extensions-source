@@ -289,7 +289,7 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                     val url = "https://yukiproxy.aniplaynow.live/m3u8-proxy?url=${defaultSource.url}&headers={\"Referer\":\"https://megacloud.club/\"}"
                     return playlistUtils.extractFromHls(
                         playlistUrl = url,
-                        videoNameGen = { quality -> "$serverName - ${quality} - $typeName" },
+                        videoNameGen = { quality -> "$serverName - $quality - $typeName" },
                         subtitleList = playlistUtils.fixSubtitles(subtitles),
                         masterHeadersGen = { baseHeaders: Headers, _: String ->
                             baseHeaders.newBuilder().apply {
