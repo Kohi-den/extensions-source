@@ -285,9 +285,8 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
 
         try {
             when (serverName) {
-                // yuki
-                PREF_SERVER_ENTRIES[1] -> {
-                    val url = "https://yukiprox.aniplaynow.live/m3u8-proxy?url=${defaultSource.url}&headers={\"Referer\":\"https://megacloud.club/\"}"
+                "Yuki" -> {
+                    val url = "https://yukiproxy.aniplaynow.live/m3u8-proxy?url=${defaultSource.url}&headers={\"Referer\":\"https://megacloud.club/\"}"
                     return playlistUtils.extractFromHls(
                         playlistUrl = url,
                         videoNameGen = { quality -> "$serverName - $quality - $typeName" },
@@ -308,9 +307,8 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
                         },
                     )
                 }
-                // pahe
-                PREF_SERVER_ENTRIES[2] -> {
-                    val url = "https://prox.aniplaynow.live/?url=${defaultSource.url}&ref=https://kwik.si"
+                "Pahe" -> {
+                    val url = "https://paheproxy.aniplaynow.live/proxy?url=${defaultSource.url}&headers={\"Referer\":\"https://kwik.si/\"}"
                     val headers = headers.newBuilder().apply {
                         set("Accept", "*/*")
                         set("Origin", baseUrl)
@@ -565,8 +563,8 @@ class AniPlay : AniListAnimeHttpSource(), ConfigurableAnimeSource {
         private const val PREF_DOMAIN_DEFAULT = "aniplaynow.live"
 
         private const val PREF_SERVER_KEY = "server"
-        private val PREF_SERVER_ENTRIES = arrayOf("Maze", "Yuki", "Pahe", "Kuro")
-        private val PREF_SERVER_ENTRY_VALUES = arrayOf("maze", "yuki", "pahe", "kuro")
+        private val PREF_SERVER_ENTRIES = arrayOf("Pahe", "Yuki") // , "Hika")
+        private val PREF_SERVER_ENTRY_VALUES = arrayOf("pahe", "yuki") // , "hika")
         private const val PREF_SERVER_DEFAULT = "yuki"
         private const val SERVER_UNKNOWN = "Other"
 

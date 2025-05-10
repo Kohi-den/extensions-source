@@ -29,24 +29,50 @@ data class AnimeDto(
     val aniGenre: String? = null,
     @SerialName("ani_studio")
     val aniStudio: String? = null,
+    @SerialName("ani_producers")
+    val aniProducers: String? = null,
     @SerialName("ani_stats")
     val aniStats: Int? = null,
+    @SerialName("ani_time")
+    val aniTime: String? = null,
+    @SerialName("ani_ep")
+    val aniEp: String? = null,
+    @SerialName("ani_type")
+    val aniType: Int? = null,
+    @SerialName("ani_score")
+    val aniScore: Double? = null,
 ) {
     fun toSAnime(preferEnglish: Boolean): SAnime = SAnime.create().apply {
         url = uid
         title = if (preferEnglish) aniEName?.takeUnless(String::isBlank) ?: aniName else aniName
         thumbnail_url = aniPoster
         genre = aniGenre?.split(",")?.joinToString(transform = String::trim)
-        author = aniStudio
+        artist = aniStudio
+        author = aniProducers?.split(",")?.joinToString(transform = String::trim)
         description = buildString {
+            aniScore?.let { append("Score: %.2f/10\n\n".format(it)) }
             aniSynopsis?.trim()?.let(::append)
             append("\n\n")
+            aniType?.let {
+                val type = when (it) {
+                    1 -> "TV"
+                    2 -> "Movie"
+                    3 -> "OVA"
+                    4 -> "ONA"
+                    5 -> "Special"
+                    else -> "Unknown"
+                }
+                append("Type: $type\n")
+            }
+            aniEp?.let { append("Total Episode count: $it\n") }
+            aniTime?.let { append("Runtime: $it\n") }
             aniSynonyms?.let { append("Synonyms: $it") }
         }.trim()
 
         status = when (aniStats) {
-            1 -> SAnime.ONGOING
+            1 -> SAnime.UNKNOWN
             2 -> SAnime.COMPLETED
+            3 -> SAnime.ONGOING
             else -> SAnime.UNKNOWN
         }
     }

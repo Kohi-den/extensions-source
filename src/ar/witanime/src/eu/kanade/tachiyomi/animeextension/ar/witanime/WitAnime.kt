@@ -30,7 +30,7 @@ class WitAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "WIT ANIME"
 
-    override val baseUrl = "https://witanime.pics"
+    override val baseUrl = "https://witanime.cyou"
 
     override val lang = "ar"
 
