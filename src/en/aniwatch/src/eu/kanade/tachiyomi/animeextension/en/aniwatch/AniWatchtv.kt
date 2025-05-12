@@ -8,7 +8,7 @@ import eu.kanade.tachiyomi.network.GET
 import okhttp3.Request
 import org.jsoup.nodes.Element
 
-class AniWatch : ZoroTheme(
+class AniWatchtv : ZoroTheme(
     "en",
     "AniWatchtv",
     "https://aniwatchtv.to",
