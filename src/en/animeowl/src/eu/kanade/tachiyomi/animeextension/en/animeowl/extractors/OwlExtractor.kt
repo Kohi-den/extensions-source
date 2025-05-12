@@ -48,8 +48,13 @@ class OwlExtractor(private val client: OkHttpClient, private val baseUrl: String
                     luffy.forEach { stream ->
                         noRedirectClient.newCall(GET("${stream.url}$jwt")).execute()
                             .use { it.headers["Location"] }?.let {
+                                val resolution = when {
+                                    stream.resolution?.endsWith("0") == true -> "${stream.resolution}p"
+                                    else -> stream.resolution
+                                }
+
                                 videoList.add(
-                                    Video(it, "${link.lang} Luffy:${stream.resolution}", it),
+                                    Video(it, "${link.lang} Luffy:${resolution ?: "Unknown"}", it),
                                 )
                             }
                     }
@@ -83,7 +88,10 @@ class OwlExtractor(private val client: OkHttpClient, private val baseUrl: String
         return client.newCall(GET(url)).execute().let { it ->
             if (it.isSuccessful) {
                 it.parseAs<Stream>().url.let {
-                    playlistUtils.extractFromHls(it, videoNameGen = { qty -> "$lang $server:$qty" })
+                    playlistUtils.extractFromHls(
+                        it,
+                        videoNameGen = { qty -> "$lang $server:$qty" },
+                    )
                 }
             } else {
                 emptyList()
