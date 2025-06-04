@@ -10,9 +10,9 @@ on:
 
 jobs:
   stale:
-    runs-on: ubuntu-latest
+    runs-on: docker
     steps:
-    - uses: actions/stale@28ca1036281a5e5922ead5184a1bbf96e5fc984e # v9
+    - uses: https://github.com/actions/stale@28ca1036281a5e5922ead5184a1bbf96e5fc984e # v9
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
         # Close everything older than ~6 months

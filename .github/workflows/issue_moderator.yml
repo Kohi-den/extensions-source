@@ -8,10 +8,10 @@ on:
 
 jobs:
   autoclose:
-    runs-on: ubuntu-latest
+    runs-on: docker
     steps:
       - name: Moderate issues
-        uses: aniyomiorg/issue-moderator-action@v2
+        uses: https://github.com/aniyomiorg/issue-moderator-action@v2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           duplicate-label: Duplicate

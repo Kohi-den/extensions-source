@@ -10,11 +10,11 @@ on:
 
 jobs:
   lock:
-    runs-on: ubuntu-latest
+    runs-on: docker
     permissions:
       issues: write
     steps:
-      - uses: dessant/lock-threads@1bf7ec25051fe7c00bdd17e6a7cf3d7bfb7dc771 # v5
+      - uses: https://github.com/dessant/lock-threads@1bf7ec25051fe7c00bdd17e6a7cf3d7bfb7dc771 # v5
         with:
           github-token: ${{ github.token }}
           issue-inactive-days: '2'

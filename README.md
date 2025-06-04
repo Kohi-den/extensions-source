@@ -1,10 +1,16 @@
+## Donation
+
+Support this project by helping keep the servers up
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/T6T3124BZN)
+
 ## Guide
 
 just paste this into your anime repo 
 ```
-https://raw.githubusercontent.com/Kohi-den/extensions/main/index.min.json
+https://kohiden.xyz/Kohi-den/extensions/raw/branch/main/index.min.json
 ```
-If your interested in installing just the apks they can be found [Here](https://github.com/Kohi-den/extensions)
+If your interested in installing just the apks they can be found [Here](https://kohiden.xyz/Kohi-den/extensions/src/branch/main/apk)
 
 ## Support Server
 
