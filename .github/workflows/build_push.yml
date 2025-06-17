@@ -35,8 +35,7 @@ jobs:
         run: |
           set -x
           projects=(src/*/*)
-          export CI_CHUNK_NUM=${#projects[@]}
-          echo "NUM_INDIVIDUAL_MODULES=${#projects[@]}" >> $GITHUB_ENV
+          echo "NUM_INDIVIDUAL_MODULES=${#projects[@]}" >> "$GITHUB_ENV"
 
       # Temporary pause because of leak of tj-actions/changed-files
       # - name: Find lib changes
@@ -65,17 +64,12 @@ jobs:
       
       - id: generate-matrices
         name: Create output matrices
-        uses: https://github.com/actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
-        with:
-          script: |
-            const numIndividualModules = process.env.NUM_INDIVIDUAL_MODULES;
-            const chunkSize = process.env.CI_CHUNK_SIZE;
-
-            const numIndividualChunks = Math.ceil(numIndividualModules / chunkSize);
-
-            console.log(`Individual modules: ${numIndividualModules} (${numIndividualChunks} chunks of ${chunkSize})`);
-
-            core.setOutput('individualMatrix', { 'chunk': [...Array(numIndividualChunks).keys()] });
+        run: |
+          echo "Generating matrices"
+          numIndividualModules=$(echo "$NUM_INDIVIDUAL_MODULES")
+          chunkSize=$(echo "$CI_CHUNK_SIZE")
+          numChunks=$(( (numIndividualModules + chunkSize - 1) / chunkSize ))
+          echo "::set-output name=individualMatrix::{\"chunk\":["$(seq -s , 0 $((numChunks-1)))"]}"
 
   build_individual:
     name: Build individual modules
