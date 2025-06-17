@@ -106,7 +106,7 @@ jobs:
       - name: Set up Gradle
         uses: https://github.com/gradle/actions/setup-gradle@245c8a24de79c0dbeabaf19ebcbbd3b2c36f278d # v4
 
-      - name: Build extensions (chunk ${{ matrix.chunk }})
+      - name: Build extensions
         env:
           CI_CHUNK_NUM: ${{ matrix.chunk }}
           ALIAS: ${{ secrets.ALIAS }}
@@ -114,7 +114,7 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: chmod +x ./gradlew && ./gradlew -p src assembleRelease
 
-      - name: Upload APKs (chunk ${{ matrix.chunk }})
+      - name: Upload APKs
         uses: https://code.forgejo.org/forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e # v4-patch
         if: "github.repository == 'Kohi-den/extensions-source'"
         with:
