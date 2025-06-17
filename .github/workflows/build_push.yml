@@ -70,7 +70,7 @@ jobs:
             const numIndividualModules = process.env.NUM_INDIVIDUAL_MODULES;
             const chunkSize = process.env.CI_CHUNK_SIZE;
 
-            const numIndividualChunks = Math.ceil(numIndividualModules / chunkSize);
+            const numIndividualChunks = 1;
 
             console.log(`Individual modules: ${numIndividualModules} (${numIndividualChunks} chunks of ${chunkSize})`);
 
