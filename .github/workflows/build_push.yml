@@ -30,12 +30,6 @@ jobs:
         with:
           ref: main
           token: ${{ secrets.BOT_PAT }}
-          
-      - name: Get number of modules
-        run: |
-          set -x
-          projects=(src/*/*)
-          echo "NUM_INDIVIDUAL_MODULES=${#projects[@]}" >> "$GITHUB_ENV"
 
       # Temporary pause because of leak of tj-actions/changed-files
       # - name: Find lib changes
@@ -62,21 +56,10 @@ jobs:
       #     chmod +x ./.github/scripts/bump-versions.py
       #     ./.github/scripts/bump-versions.py ${{ steps.modified-libs.outputs.all_changed_files }}
       
-      - id: generate-matrices
-        name: Create output matrices
-        run: |
-          echo "Generating matrices"
-          numIndividualModules=$(echo "$NUM_INDIVIDUAL_MODULES")
-          chunkSize=$(echo "$CI_CHUNK_SIZE")
-          numChunks=$(( (numIndividualModules + chunkSize - 1) / chunkSize ))
-          echo "::set-output name=individualMatrix::{\"chunk\":["$(seq -s , 0 $((numChunks-1)))"]}"
-
-  build_individual:
-    name: Build individual modules
+  build:
+    name: Build
     needs: prepare
     runs-on: docker
-    strategy:
-      matrix: ${{ fromJSON(needs.prepare.outputs.individualMatrix) }}
     steps:
       - name: Checkout main branch
         uses: https://github.com/actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
