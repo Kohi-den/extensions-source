@@ -22,8 +22,6 @@ jobs:
   prepare:
     name: Prepare job
     runs-on: docker
-    outputs:
-      individualMatrix: ${{ steps.generate-matrices.outputs.individualMatrix }}
     steps:
       - name: Clone repo
         uses: https://github.com/actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
