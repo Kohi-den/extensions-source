@@ -21,7 +21,7 @@ env:
 jobs:
   prepare:
     name: Prepare job
-    runs-on: ubuntu-22.04
+    runs-on: docker
     outputs:
       individualMatrix: ${{ steps.generate-matrices.outputs.individualMatrix }}
     steps:
@@ -80,7 +80,7 @@ jobs:
   build_individual:
     name: Build individual modules
     needs: prepare
-    runs-on: ubuntu-22.04
+    runs-on: docker
     strategy:
       matrix: ${{ fromJSON(needs.prepare.outputs.individualMatrix) }}
     steps:
@@ -131,7 +131,7 @@ jobs:
     needs:
       - build_individual
     if: "github.repository == 'Kohi-den/extensions-source'"
-    runs-on: ubuntu-22.04
+    runs-on: docker
     steps:
       - name: Setup rsync
         run: |
