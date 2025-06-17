@@ -18,7 +18,7 @@ env:
 jobs:
   prepare:
     name: Prepare job
-    runs-on: docker
+    runs-on: ubuntu-22.04
     outputs:
       individualMatrix: ${{ steps.generate-matrices.outputs.individualMatrix }}
     steps:
@@ -52,7 +52,7 @@ jobs:
   build_individual:
     name: Build individual modules
     needs: prepare
-    runs-on: docker
+    runs-on: ubuntu-22.04
     strategy:
       matrix: ${{ fromJSON(needs.prepare.outputs.individualMatrix) }}
     steps:
