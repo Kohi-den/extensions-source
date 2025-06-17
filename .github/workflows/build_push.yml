@@ -31,6 +31,11 @@ jobs:
           ref: main
           token: ${{ secrets.BOT_PAT }}
           
+      - name: Get number of modules
+        run: |
+          set -x
+          projects=(src/*/*)
+          echo "NUM_INDIVIDUAL_MODULES=${#projects[@]}" >> "$GITHUB_ENV"
 
       # Temporary pause because of leak of tj-actions/changed-files
       # - name: Find lib changes
@@ -57,6 +62,19 @@ jobs:
       #     chmod +x ./.github/scripts/bump-versions.py
       #     ./.github/scripts/bump-versions.py ${{ steps.modified-libs.outputs.all_changed_files }}
       
+      - id: generate-matrices
+        name: Create output matrices
+        uses: https://github.com/actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const numIndividualModules = process.env.NUM_INDIVIDUAL_MODULES;
+            const chunkSize = process.env.CI_CHUNK_SIZE;
+
+            const numIndividualChunks = 1;
+
+            console.log(`Individual modules: ${numIndividualModules} (${numIndividualChunks} chunks of ${chunkSize})`);
+
+            core.setOutput('individualMatrix', { 'chunk': [...Array(numIndividualChunks).keys()] });
 
   build_individual:
     name: Build individual modules
