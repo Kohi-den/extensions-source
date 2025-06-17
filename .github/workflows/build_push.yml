@@ -35,8 +35,7 @@ jobs:
         run: |
           set -x
           projects=(src/*/*)
-          export CI_CHUNK_NUM=${#projects[@]}
-          echo "NUM_INDIVIDUAL_MODULES=${#projects[@]}" >> $GITHUB_ENV
+          echo "NUM_INDIVIDUAL_MODULES=${#projects[@]}" >> "$GITHUB_ENV"
 
       # Temporary pause because of leak of tj-actions/changed-files
       # - name: Find lib changes
