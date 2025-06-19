@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.lib.megacloudextractor
 
 import android.content.SharedPreferences
+import android.util.Base64
+import android.util.Log
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.cryptoaes.CryptoAES
@@ -20,6 +22,10 @@ import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import uy.kohesive.injekt.injectLazy
+import java.security.MessageDigest
+import javax.crypto.Cipher
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 class MegaCloudExtractor(
     private val client: OkHttpClient,
@@ -38,16 +44,16 @@ class MegaCloudExtractor(
 
     companion object {
         private val SERVER_URL = arrayOf("https://megacloud.tv", "https://rapid-cloud.co")
-        private val SOURCES_URL = arrayOf("/embed-2/ajax/e-1/getSources?id=", "/ajax/embed-6-v2/getSources?id=")
+        private val SOURCES_URL = arrayOf("/embed-2/v2/e-1/getSources?id=", "/ajax/embed-6-v2/getSources?id=")
         private val SOURCES_SPLITTER = arrayOf("/e-1/", "/embed-6-v2/")
         private val SOURCES_KEY = arrayOf("1", "6")
-        private const val E1_SCRIPT_URL = "https://megacloud.tv/js/player/a/prod/e1-player.min.js"
-        private const val E6_SCRIPT_URL = "https://rapid-cloud.co/js/player/prod/e6-player-v2.min.js"
+        private const val E1_SCRIPT_URL = "/js/player/a/v2/pro/embed-1.min.js"
+        private const val E6_SCRIPT_URL = "/js/player/e6-player-v2.min.js"
         private val MUTEX = Mutex()
         private var shouldUpdateKey = false
         private const val PREF_KEY_KEY = "megacloud_key_"
         private const val PREF_KEY_DEFAULT = "[[0, 0]]"
-        
+
         private inline fun <reified R> runLocked(crossinline block: () -> R) = runBlocking(Dispatchers.IO) {
             MUTEX.withLock { block() }
         }
@@ -66,8 +72,8 @@ class MegaCloudExtractor(
 
     private fun updateKey(type: String) {
         val scriptUrl = when (type) {
-            "1" -> E1_SCRIPT_URL
-            "6" -> E6_SCRIPT_URL
+            "1" -> "${SERVER_URL[0]}$E1_SCRIPT_URL"
+            "6" -> "${SERVER_URL[1]}$E6_SCRIPT_URL"
             else -> throw Exception("Unknown key type")
         }
         val script = noCacheClient.newCall(GET(scriptUrl, cache = cacheControl))
@@ -142,16 +148,21 @@ class MegaCloudExtractor(
     }
 
     private fun getVideoDto(url: String): VideoDto {
-        val type = if (url.startsWith("https://megacloud.tv") or url.startsWith("https://megacloud.blog")) 0 else 1
+        val type = if (
+            url.startsWith("https://megacloud.tv") ||
+            url.startsWith("https://megacloud.blog")
+            ) 0 else 1
 
         val keyType = SOURCES_KEY[type]
 
         val id = url.substringAfter(SOURCES_SPLITTER[type], "")
-            .substringBefore("?", "").ifEmpty { throw Exception("I HATE THE ANTICHRIST") }
+            .substringBefore("?", "")
+            .ifEmpty { throw Exception("Failed to extract ID from URL") }
 
-        if (type == 0) {
-            return webViewResolver.getSources(id)!!
-        }
+        // Previous method using WebViewResolver to get key
+        // if (type == 0) {
+        //     return webViewResolver.getSources(id)!!
+        // }
 
         val srcRes = client.newCall(GET(SERVER_URL[type] + SOURCES_URL[type] + id))
             .execute()
@@ -162,9 +173,80 @@ class MegaCloudExtractor(
         if (!data.encrypted) return json.decodeFromString<VideoDto>(srcRes)
 
         val ciphered = data.sources.jsonPrimitive.content
-        val decrypted = json.decodeFromString<List<VideoLink>>(tryDecrypting(ciphered, keyType))
+        val decrypted = json.decodeFromString<List<VideoLink>>(
+            // tryDecrypting(ciphered, keyType),
+            tryDecrypting(ciphered),
+        )
 
         return VideoDto(decrypted, data.tracks)
+    }
+
+    var megaKey: String? = null
+
+    private fun tryDecrypting(ciphered: String): String {
+        return megaKey?.let { key ->
+            try {
+                decryptOpenSSL(ciphered, key).also {
+                    Log.i("MegaCloudExtractor", "Decrypted URL: $it")
+                }
+            } catch (e: RuntimeException) {
+                Log.e("MegaCloudExtractor", "Decryption failed with existing key: ${e.message}")
+                decryptWithNewKey(ciphered)
+            }
+        } ?: decryptWithNewKey(ciphered)
+    }
+
+    private fun decryptWithNewKey(ciphered: String): String {
+        val newKey = requestNewKey()
+        megaKey = newKey
+        return decryptOpenSSL(ciphered, newKey).also {
+            Log.i("MegaCloudExtractor", "Decrypted URL with new key: $it")
+        }
+    }
+
+    private fun requestNewKey(): String =
+        client.newCall(GET("https://raw.githubusercontent.com/yogesh-hacker/MegacloudKeys/refs/heads/main/keys.json"))
+            .execute()
+            .use { response ->
+                if (!response.isSuccessful) throw IllegalStateException("Failed to fetch keys.json")
+                val jsonStr = response.body.string()
+                if (jsonStr.isEmpty()) throw IllegalStateException("keys.json is empty")
+                val key = json.decodeFromString<Map<String, String>>(jsonStr)["mega"]
+                    ?: throw IllegalStateException("Mega key not found in keys.json")
+                Log.i("MegaCloudExtractor", "Using Mega Key: $key")
+                megaKey = key
+                key
+            }
+
+    private fun decryptOpenSSL(encBase64: String, password: String): String {
+        try {
+            val data = Base64.decode(encBase64, Base64.NO_WRAP) // Base64.DEFAULT or Base64.NO_WRAP
+            require(data.copyOfRange(0, 8).contentEquals("Salted__".toByteArray()))
+            val salt = data.copyOfRange(8, 16)
+            val (key, iv) = opensslKeyIv(password.toByteArray(), salt)
+
+            val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            val secretKey = SecretKeySpec(key, "AES")
+            val ivSpec = IvParameterSpec(iv)
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec)
+
+            val decrypted = cipher.doFinal(data.copyOfRange(16, data.size))
+            return String(decrypted)
+        } catch (e: Exception) {
+            Log.e("DecryptOpenSSL", "Decryption failed: ${e.message}")
+            throw RuntimeException("Decryption failed: ${e.message}", e)
+        }
+    }
+
+    private fun opensslKeyIv(password: ByteArray, salt: ByteArray, keyLen: Int = 32, ivLen: Int = 16): Pair<ByteArray, ByteArray> {
+        var d = ByteArray(0)
+        var d_i = ByteArray(0)
+        while (d.size < keyLen + ivLen) {
+            val md = MessageDigest.getInstance("MD5")
+            d_i = md.digest(d_i + password + salt)
+            d += d_i
+        }
+        return Pair(d.copyOfRange(0, keyLen), d.copyOfRange(keyLen, keyLen + ivLen))
     }
 
     @Serializable
@@ -185,4 +267,4 @@ class MegaCloudExtractor(
 
     @Serializable
     data class TrackDto(val file: String, val kind: String, val label: String = "")
-} 
+}
