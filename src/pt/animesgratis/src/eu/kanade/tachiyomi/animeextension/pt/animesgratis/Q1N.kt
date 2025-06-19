@@ -1,7 +1,9 @@
 package eu.kanade.tachiyomi.animeextension.pt.animesgratis
 
+import android.util.Log
 import eu.kanade.tachiyomi.animeextension.pt.animesgratis.extractors.NoaExtractor
 import eu.kanade.tachiyomi.animeextension.pt.animesgratis.extractors.RuplayExtractor
+import eu.kanade.tachiyomi.animeextension.pt.animesgratis.extractors.UniversalExtractor
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
@@ -26,6 +28,8 @@ class Q1N : DooPlay(
     "Q1N",
     "https://q1n.net",
 ) {
+
+    private val tag by lazy { javaClass.simpleName }
 
     override val id: Long = 2969482460524685571L
 
@@ -118,10 +122,12 @@ class Q1N : DooPlay(
     private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
     private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
     private val mixDropExtractor by lazy { MixDropExtractor(client) }
+    private val universalExtractor by lazy { UniversalExtractor(client) }
 
     private fun getPlayerVideos(player: Element): List<Video> {
         val name = player.selectFirst("span.title")!!.text().lowercase()
         val url = getPlayerUrl(player) ?: return emptyList()
+        Log.d(tag, "Fetching videos from: $url")
         return when {
             "ruplay" in name -> ruplayExtractor.videosFromUrl(url)
             "streamwish" in name -> streamWishExtractor.videosFromUrl(url)
@@ -131,7 +137,7 @@ class Q1N : DooPlay(
             "noa" in name -> noaExtractor.videosFromUrl(url)
             "mdplayer" in name -> noaExtractor.videosFromUrl(url, "MDPLAYER")
             "/player/" in url -> bloggerExtractor.videosFromUrl(url, headers)
-            else -> emptyList()
+            else -> universalExtractor.videosFromUrl(url, headers)
         }
     }
 

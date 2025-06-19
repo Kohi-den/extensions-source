@@ -1,9 +1,10 @@
 ext {
+    extKmkVersionCode = 1
     extName = 'Q1N'
     extClass = '.Q1N'
     themePkg = 'dooplay'
     baseUrl = 'https://q1n.net'
-    overrideVersionCode = 20
+    overrideVersionCode = 21
 }
 
 apply from: "$rootDir/common.gradle"
@@ -13,5 +14,6 @@ dependencies {
     implementation(project(":lib:filemoon-extractor"))
     implementation(project(":lib:streamwish-extractor"))
     implementation(project(":lib:mixdrop-extractor"))
+    implementation(project(":lib:playlist-utils"))
     implementation(project(":lib:streamtape-extractor"))
 }
