@@ -37,15 +37,14 @@ jobs:
           projects=(src/*/*)
           echo "NUM_INDIVIDUAL_MODULES=${#projects[@]}" >> "$GITHUB_ENV"
 
-      # Temporary pause because of leak of tj-actions/changed-files
-      # - name: Find lib changes
-      #   id: modified-libs
-      #   uses: tj-actions/changed-files@90a06d6ba9543371ab4df8eeca0be07ca6054959 #v42
-      #   with:
-      #     files: lib/
-      #     files_ignore: lib/**.md
-      #     files_separator: " "
-      #     safe_output: false
+      - name: Find lib changes
+        id: modified-libs
+        uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c # v46.0.5
+        with:
+          files: lib/
+          files_ignore: lib/**.md
+          files_separator: " "
+          safe_output: false
 
       - name: Import GPG key
         uses: https://github.com/crazy-max/ghaction-import-gpg@v6  # v6.1.0
@@ -55,12 +54,11 @@ jobs:
           git_user_signingkey: true
           git_commit_gpgsign: true
 
-      #   # This step is going to commit, but this will not trigger another workflow.
-      # - name: Bump extensions that uses a modified lib
-      #   if: steps.modified-libs.outputs.any_changed == 'true'
-      #   run: |
-      #     chmod +x ./.github/scripts/bump-versions.py
-      #     ./.github/scripts/bump-versions.py ${{ steps.modified-libs.outputs.all_changed_files }}
+      - name: Bump extensions that uses a modified lib
+        if: steps.modified-libs.outputs.any_changed == 'true'
+        run: |
+          chmod +x ./.github/scripts/bump-versions.py
+          ./.github/scripts/bump-versions.py ${{ steps.modified-libs.outputs.all_changed_files }}
       
       - id: generate-matrices
         name: Create output matrices
