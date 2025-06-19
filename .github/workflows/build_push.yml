@@ -119,6 +119,9 @@ jobs:
             src/**/build
             !src/**/build/outputs
           key: build-cache-${{ github.sha }}-${{ matrix.chunk }}
+          restore-keys: |
+            build-cache-${{ github.sha }}-
+            build-cache-
 
       - name: Upload APKs
         uses: https://code.forgejo.org/forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e # v4-patch
