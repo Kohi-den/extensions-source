@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CI_CHUNK_SIZE: 288
+  CI_CHUNK_SIZE: 65
 
 jobs:
   prepare:
@@ -74,6 +74,17 @@ jobs:
         uses: https://github.com/gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5 # v3
         with:
           cache-read-only: true
+
+      - name: Restore build cache
+        uses: https://github.com/actions/cache/restore@v3
+        with:
+          path: |
+            src/**/build
+            !src/**/build/outputs
+          key: build-cache-${{ github.event.pull_request.base.sha }}-${{ matrix.chunk }}
+          restore-keys: |
+            build-cache-${{ github.event.pull_request.base.sha }}-
+            build-cache-
 
       - name: Build extensions (chunk ${{ matrix.chunk }})
         env:

@@ -31,26 +31,21 @@ jobs:
           ref: main
           token: ${{ secrets.BOT_PAT }}
           
-      - name: Find lib changes
-        id: modified-libs
-        uses: https://github.com/tj-actions/changed-files@90a06d6ba9543371ab4df8eeca0be07ca6054959 #v42
-        with:
-          files: lib/
-          files_ignore: lib/**.md
-          files_separator: " "
-          safe_output: false
-
-        # This step is going to commit, but this will not trigger another workflow.
-      - name: Bump extensions that uses a modified lib
-        if: steps.modified-libs.outputs.any_changed == 'true'
-        run: |
-          chmod +x ./.github/scripts/bump-versions.py ${{ steps.modified-libs.outputs.all_changed_files }}
-          
       - name: Get number of modules
         run: |
           set -x
           projects=(src/*/*)
           echo "NUM_INDIVIDUAL_MODULES=${#projects[@]}" >> "$GITHUB_ENV"
+
+      # Temporary pause because of leak of tj-actions/changed-files
+      # - name: Find lib changes
+      #   id: modified-libs
+      #   uses: tj-actions/changed-files@90a06d6ba9543371ab4df8eeca0be07ca6054959 #v42
+      #   with:
+      #     files: lib/
+      #     files_ignore: lib/**.md
+      #     files_separator: " "
+      #     safe_output: false
 
       - name: Import GPG key
         uses: https://github.com/crazy-max/ghaction-import-gpg@v6  # v6.1.0
@@ -119,6 +114,14 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: chmod +x ./gradlew && ./gradlew -p src assembleRelease
 
+      - name: Cache build directories
+        uses: https://github.com/actions/cache/save@v3
+        with:
+          path: |
+            src/**/build
+            !src/**/build/outputs
+          key: build-cache-${{ github.sha }}-${{ matrix.chunk }}
+
       - name: Upload APKs
         uses: https://code.forgejo.org/forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e # v4-patch
         if: "github.repository == 'Kohi-den/extensions-source'"
@@ -183,10 +186,6 @@ jobs:
       - name: Sync repo
         run: |
           rsync -a --delete --exclude .git --exclude .gitignore main/repo/ repo --exclude README.md --exclude repo.json
-          
-      - name: Increase buffer size
-        run: |
-          git config --global http.postBuffer 157286400
 
       - name: Deploy repo
         uses: https://github.com/EndBug/add-and-commit@v9
