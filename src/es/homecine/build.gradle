@@ -1,7 +1,7 @@
 ext {
     extName = 'HomeCine'
     extClass = '.HomeCine'
-    extVersionCode = 7
+    extVersionCode = 8
 }
 
 apply from: "$rootDir/common.gradle"
