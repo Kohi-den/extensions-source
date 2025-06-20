@@ -129,7 +129,7 @@ class AnimeOwl : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val document = response.asJsoup()
         val sub = document.select("#anime-cover-sub-content .episode-node").mapIndexed { idx, it ->
             EpisodeResponse.Episode(
-                id = it.attr("title").toDoubleOrNull(),
+                id = idx.toDouble(),
                 episodeIndex = idx.toString(),
                 name = it.attr("title"),
                 lang = "Sub",
@@ -138,7 +138,7 @@ class AnimeOwl : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
         val dub = document.select("#anime-cover-dub-content .episode-node").mapIndexed { idx, it ->
             EpisodeResponse.Episode(
-                id = it.attr("title").toDoubleOrNull(),
+                id = idx.toDouble(),
                 episodeIndex = idx.toString(),
                 name = it.attr("title"),
                 lang = "Dub",
@@ -301,6 +301,6 @@ class AnimeOwl : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_TITLE = "Preferred quality"
         private const val PREF_QUALITY_DEFAULT = "1080p"
-        private val PREF_QUALITY_LIST = arrayOf("1080p", "720p", "480p", "360p")
+        private val PREF_QUALITY_LIST = arrayOf("2K", "1080p", "720p", "480p", "360p")
     }
 }
