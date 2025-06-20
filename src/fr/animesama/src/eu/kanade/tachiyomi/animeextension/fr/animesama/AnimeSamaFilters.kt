@@ -9,10 +9,6 @@ object AnimeSamaFilters {
 
     private class CheckBoxVal(name: String, state: Boolean = false) : AnimeFilter.CheckBox(name, state)
 
-    open class TriStateFilterList(name: String, values: List<TriFilter>) : AnimeFilter.Group<AnimeFilter.TriState>(name, values)
-
-    class TriFilter(name: String) : AnimeFilter.TriState(name)
-
     private inline fun <reified R> AnimeFilterList.getFirst(): R {
         return this.filterIsInstance<R>().first()
     }
@@ -30,20 +26,6 @@ object AnimeSamaFilters {
             }
     }
 
-    private inline fun <reified R> AnimeFilterList.parseTriFilter(
-        options: Array<Pair<String, String>>,
-    ): List<List<String>> {
-        return (this.getFirst<R>() as TriStateFilterList).state
-            .filterNot { it.isIgnored() }
-            .map { filter -> filter.state to filter.name }
-            .groupBy { it.first }
-            .let {
-                val included = it.get(AnimeFilter.TriState.STATE_INCLUDE)?.map { options.find { o -> o.first == it.second }!!.second } ?: emptyList()
-                val excluded = it.get(AnimeFilter.TriState.STATE_EXCLUDE)?.map { options.find { o -> o.first == it.second }!!.second } ?: emptyList()
-                listOf(included, excluded)
-            }
-    }
-
     class TypesFilter : CheckBoxFilterList(
         "Type",
         AnimeSamaFiltersData.TYPES.map { CheckBoxVal(it.first, false) },
@@ -54,9 +36,9 @@ object AnimeSamaFilters {
         AnimeSamaFiltersData.LANGUAGES.map { CheckBoxVal(it.first, false) },
     )
 
-    class GenresFilter : TriStateFilterList(
+    class GenresFilter : CheckBoxFilterList(
         "Genre",
-        AnimeSamaFiltersData.GENRES.map { TriFilter(it.first) },
+        AnimeSamaFiltersData.GENRES.map { CheckBoxVal(it.first, false) },
     )
 
     val FILTER_LIST get() = AnimeFilterList(
@@ -68,19 +50,15 @@ object AnimeSamaFilters {
     data class SearchFilters(
         val types: List<String> = emptyList(),
         val language: List<String> = emptyList(),
-        val include: List<String> = emptyList(),
-        val exclude: List<String> = emptyList(),
+        val genres: List<String> = emptyList(),
     )
 
     fun getSearchFilters(filters: AnimeFilterList): SearchFilters {
         if (filters.isEmpty()) return SearchFilters()
-        val (include, exclude) = filters.parseTriFilter<GenresFilter>(AnimeSamaFiltersData.GENRES)
-
         return SearchFilters(
             filters.parseCheckbox<TypesFilter>(AnimeSamaFiltersData.TYPES),
             filters.parseCheckbox<LangFilter>(AnimeSamaFiltersData.LANGUAGES),
-            include,
-            exclude,
+            filters.parseCheckbox<GenresFilter>(AnimeSamaFiltersData.GENRES),
         )
     }
 
@@ -94,31 +72,111 @@ object AnimeSamaFilters {
         val LANGUAGES = arrayOf(
             Pair("VF", "VF"),
             Pair("VOSTFR", "VOSTFR"),
+            Pair("VASTFR", "VASTFR"),
         )
 
         val GENRES = arrayOf(
             Pair("Action", "Action"),
+            Pair("Adolescence", "Adolescence"),
+            Pair("Aliens / Extra-terrestres", "Aliens / Extra-terrestres"),
+            Pair("Amitié", "Amitié"),
+            Pair("Amour", "Amour"),
+            Pair("Apocalypse", "Apocalypse"),
+            Pair("Art", "Art"),
+            Pair("Arts martiaux", "Arts martiaux"),
+            Pair("Assassinat", "Assassinat"),
+            Pair("Autre monde", "Autre monde"),
             Pair("Aventure", "Aventure"),
             Pair("Combats", "Combats"),
             Pair("Comédie", "Comédie"),
+            Pair("Crime", "Crime"),
+            Pair("Cyberpunk", "Cyberpunk"),
+            Pair("Danse", "Danse"),
+            Pair("Démons", "Démons"),
+            Pair("Détective", "Détective"),
+            Pair("Donghua", "Donghua"),
             Pair("Drame", "Drame"),
             Pair("Ecchi", "Ecchi"),
-            Pair("École", "School-Life"),
-            Pair("Fantaisie", "Fantasy"),
+            Pair("Ecole", "Ecole"),
+            Pair("Enquête", "Enquête"),
+            Pair("Famille", "Famille"),
+            Pair("Fantastique", "Fantastique"),
+            Pair("Fantasy", "Fantasy"),
+            Pair("Fantômes", "Fantômes"),
+            Pair("Futur", "Futur"),
+            Pair("Ghibli", "Ghibli"),
+            Pair("Guerre", "Guerre"),
+            Pair("Harcèlement", "Harcèlement"),
+            Pair("Harem", "Harem"),
+            Pair("Harem inversé", "Harem inversé"),
+            Pair("Histoire", "Histoire"),
+            Pair("Historique", "Historique"),
             Pair("Horreur", "Horreur"),
             Pair("Isekai", "Isekai"),
+            Pair("Jeunesse", "Jeunesse"),
+            Pair("Jeux", "Jeux"),
+            Pair("Jeux vidéo", "Jeux vidéo"),
             Pair("Josei", "Josei"),
+            Pair("Journalisme", "Journalisme"),
+            Pair("Mafia", "Mafia"),
+            Pair("Magical girl", "Magical girl"),
+            Pair("Magie", "Magie"),
+            Pair("Maladie", "Maladie"),
+            Pair("Mariage", "Mariage"),
+            Pair("Mature", "Mature"),
+            Pair("Mechas", "Mechas"),
+            Pair("Médiéval", "Médiéval"),
+            Pair("Militaire", "Militaire"),
+            Pair("Monde virtuel", "Monde virtuel"),
+            Pair("Monstres", "Monstres"),
+            Pair("Musique", "Musique"),
             Pair("Mystère", "Mystère"),
+            Pair("Nekketsu", "Nekketsu"),
+            Pair("Ninjas", "Ninjas"),
+            Pair("Nostalgie", "Nostalgie"),
+            Pair("Paranormal", "Paranormal"),
+            Pair("Philosophie", "Philosophie"),
+            Pair("Pirates", "Pirates"),
+            Pair("Police", "Police"),
+            Pair("Politique", "Politique"),
+            Pair("Post-apocalyptique", "Post-apocalyptique"),
+            Pair("Pouvoirs psychiques", "Pouvoirs psychiques"),
+            Pair("Préhistoire", "Préhistoire"),
+            Pair("Prison", "Prison"),
             Pair("Psychologique", "Psychologique"),
-            Pair("Quotidien", "Slice-of-Life"),
+            Pair("Quotidien", "Quotidien"),
+            Pair("Religion", "Religion"),
+            Pair("Réincarnation / Transmigration", "Réincarnation / Transmigration"),
             Pair("Romance", "Romance"),
+            Pair("Samouraïs", "Samouraïs"),
+            Pair("School Life", "School Life"),
+            Pair("Science-Fantasy", "Science-Fantasy"),
+            Pair("Science-fiction", "Science-fiction"),
+            Pair("Scientifique", "Scientifique"),
             Pair("Seinen", "Seinen"),
-            Pair("Shônen", "Shônen"),
             Pair("Shôjo", "Shôjo"),
-            Pair("Sports", "Sports"),
+            Pair("Shônen", "Shônen"),
+            Pair("Shônen-Ai", "Shônen-Ai"),
+            Pair("Slice of Life", "Slice of Life"),
+            Pair("Société", "Société"),
+            Pair("Sport", "Sport"),
+            Pair("Super pouvoirs", "Super pouvoirs"),
+            Pair("Super-héros", "Super-héros"),
             Pair("Surnaturel", "Surnaturel"),
+            Pair("Survie", "Survie"),
+            Pair("Survival game", "Survival game"),
+            Pair("Technologies", "Technologies"),
+            Pair("Thriller", "Thriller"),
             Pair("Tournois", "Tournois"),
+            Pair("Travail", "Travail"),
+            Pair("Vampires", "Vampires"),
+            Pair("Vengeance", "Vengeance"),
+            Pair("Voyage", "Voyage"),
+            Pair("Voyage temporel", "Voyage temporel"),
+            Pair("Webcomic", "Webcomic"),
+            Pair("Yakuza", "Yakuza"),
             Pair("Yaoi", "Yaoi"),
+            Pair("Yokai", "Yokai"),
             Pair("Yuri", "Yuri"),
         )
     }

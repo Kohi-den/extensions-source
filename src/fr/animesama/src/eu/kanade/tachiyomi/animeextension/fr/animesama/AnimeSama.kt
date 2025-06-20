@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.SharedPreferences
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
+import app.cash.quickjs.QuickJs
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -17,6 +18,7 @@ import eu.kanade.tachiyomi.lib.vkextractor.VkExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMap
+import eu.kanade.tachiyomi.util.parallelFlatMapBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -49,12 +51,11 @@ class AnimeSama : ConfigurableAnimeSource, AnimeHttpSource() {
 
     // ============================== Popular ===============================
     override fun popularAnimeParse(response: Response): AnimesPage {
-        val doc = response.body.string()
+        val doc = response.asJsoup()
         val page = response.request.url.fragment?.toInt() ?: 0
-        val regex = Regex("^\\s*carteClassique\\(\\s*.*?\\s*,\\s*\"(.*?)\".*\\)", RegexOption.MULTILINE)
-        val chunks = regex.findAll(doc).chunked(5).toList()
+        val chunks = doc.select("#containerPepites > div a").chunked(5)
         val seasons = chunks.getOrNull(page - 1)?.flatMap {
-            val animeUrl = "$baseUrl/catalogue/${it.groupValues[1]}"
+            val animeUrl = "$baseUrl${it.attr("href")}"
             fetchAnimeSeasons(animeUrl)
         }?.toList().orEmpty()
         return AnimesPage(seasons, page < chunks.size)
@@ -72,7 +73,7 @@ class AnimeSama : ConfigurableAnimeSource, AnimeHttpSource() {
                 .removePathSegment(animeUrl.pathSize - 3)
                 .build()
             fetchAnimeSeasons(url.toString())
-        }
+        }.distinctBy { it.url }
         return AnimesPage(seasons, false)
     }
     override fun latestUpdatesRequest(page: Int): Request = GET(baseUrl)
@@ -80,29 +81,26 @@ class AnimeSama : ConfigurableAnimeSource, AnimeHttpSource() {
     // =============================== Search ===============================
     override fun getFilterList() = AnimeSamaFilters.FILTER_LIST
 
-    override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
-        if (query.startsWith(PREFIX_SEARCH)) {
-            return AnimesPage(fetchAnimeSeasons("$baseUrl/catalogue/${query.removePrefix(PREFIX_SEARCH)}/"), false)
-        }
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+        val url = "$baseUrl/catalogue/".toHttpUrl().newBuilder()
         val params = AnimeSamaFilters.getSearchFilters(filters)
-        val elements = database
-            .asSequence()
-            .filter { it.select("h1, p").fold(false) { v, e -> v || e.text().contains(query, true) } }
-            .filter { params.include.all { p -> it.className().contains(p) } }
-            .filter { params.exclude.none { p -> it.className().contains(p) } }
-            .filter { params.types.fold(params.types.isEmpty()) { v, p -> v || it.className().contains(p) } }
-            .filter { params.language.fold(params.language.isEmpty()) { v, p -> v || it.className().contains(p) } }
-            .chunked(5)
-            .toList()
-        if (elements.isEmpty()) return AnimesPage(emptyList(), false)
-        val animes = elements[page - 1].flatMap {
-            fetchAnimeSeasons(it.getElementsByTag("a").attr("href"))
-        }
-        return AnimesPage(animes, page < elements.size)
+        params.types.forEach { url.addQueryParameter("type[]", it) }
+        params.language.forEach { url.addQueryParameter("langue[]", it) }
+        params.genres.forEach { url.addQueryParameter("genre[]", it) }
+        url.addQueryParameter("search", query)
+        url.addQueryParameter("page", "$page")
+        return GET(url.build(), headers)
     }
 
-    override fun searchAnimeParse(response: Response): AnimesPage = throw UnsupportedOperationException()
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request = throw UnsupportedOperationException()
+    override fun searchAnimeParse(response: Response): AnimesPage {
+        val document = response.asJsoup()
+        val anime = document.select("#list_catalog > div a").parallelFlatMapBlocking {
+            fetchAnimeSeasons(it.attr("href"))
+        }
+        val page = response.request.url.queryParameterValues("page").first()
+        val hasNextPage = document.select("#list_pagination a:last-child").text() != page
+        return AnimesPage(anime, hasNextPage)
+    }
 
     // =========================== Anime Details ============================
     override suspend fun getAnimeDetails(anime: SAnime): SAnime = anime
@@ -121,6 +119,10 @@ class AnimeSama : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun episodeListParse(response: Response): List<SEpisode> = throw UnsupportedOperationException()
 
     // ============================ Video Links =============================
+    private val sibnetExtractor by lazy { SibnetExtractor(client) }
+    private val vkExtractor by lazy { VkExtractor(client, headers) }
+    private val sendvidExtractor by lazy { SendvidExtractor(client, headers) }
+
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
         val playerUrls = json.decodeFromString<List<List<String>>>(episode.url)
         val videos = playerUrls.flatMapIndexed { i, it ->
@@ -128,9 +130,9 @@ class AnimeSama : ConfigurableAnimeSource, AnimeHttpSource() {
             it.parallelCatchingFlatMap { playerUrl ->
                 with(playerUrl) {
                     when {
-                        contains("sibnet.ru") -> SibnetExtractor(client).videosFromUrl(playerUrl, prefix)
-                        contains("vk.") -> VkExtractor(client, headers).videosFromUrl(playerUrl, prefix)
-                        contains("sendvid.com") -> SendvidExtractor(client, headers).videosFromUrl(playerUrl, prefix)
+                        contains("sibnet.ru") -> sibnetExtractor.videosFromUrl(playerUrl, prefix)
+                        contains("vk.") -> vkExtractor.videosFromUrl(playerUrl, prefix)
+                        contains("sendvid.com") -> sendvidExtractor.videosFromUrl(playerUrl, prefix)
                         else -> emptyList()
                     }
                 }
@@ -140,21 +142,16 @@ class AnimeSama : ConfigurableAnimeSource, AnimeHttpSource() {
     }
 
     // ============================ Utils =============================
-    private fun sanitizeEpisodesJs(doc: String) = doc
-        .replace(Regex("[\"\t]"), "") // Fix trash format
-        .replace("'", "\"") // Fix quotes
-        .replace(Regex("/\\*.*?\\*/", setOf(RegexOption.MULTILINE, RegexOption.DOT_MATCHES_ALL)), "") // Remove block comments
-        .replace(Regex("(^|,|\\[)\\s*//.*?$", RegexOption.MULTILINE), "$1") // Remove line comments
-        .replace(Regex(",\\s*]"), "]") // Remove trailing comma
-
     override fun List<Video>.sort(): List<Video> {
         val voices = preferences.getString(PREF_VOICES_KEY, PREF_VOICES_DEFAULT)!!
         val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
+        val player = preferences.getString(PREF_PLAYER_KEY, PREF_PLAYER_DEFAULT)!!
 
         return this.sortedWith(
             compareBy(
                 { it.quality.contains(voices, true) },
                 { it.quality.contains(quality) },
+                { it.quality.contains(player, true) },
             ),
         ).reversed()
     }
@@ -164,14 +161,17 @@ class AnimeSama : ConfigurableAnimeSource, AnimeHttpSource() {
         return fetchAnimeSeasons(res)
     }
 
+    private val commentRegex by lazy { Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL) }
+    private val seasonRegex by lazy { Regex("^\\s*panneauAnime\\(\"(.*)\", \"(.*)\"\\)", RegexOption.MULTILINE) }
+
     private fun fetchAnimeSeasons(response: Response): List<SAnime> {
         val animeDoc = response.asJsoup()
         val animeUrl = response.request.url
         val animeName = animeDoc.getElementById("titreOeuvre")?.text() ?: ""
 
-        val seasonRegex = Regex("^\\s*panneauAnime\\(\"(.*)\", \"(.*)\"\\)", RegexOption.MULTILINE)
         val scripts = animeDoc.select("h2 + p + div > script, h2 + div > script").toString()
-        val animes = seasonRegex.findAll(scripts).flatMapIndexed { animeIndex, seasonMatch ->
+        val uncommented = commentRegex.replace(scripts, "")
+        val animes = seasonRegex.findAll(uncommented).flatMapIndexed { animeIndex, seasonMatch ->
             val (seasonName, seasonStem) = seasonMatch.destructured
             if (seasonStem.contains("film", true)) {
                 val moviesUrl = "$animeUrl/$seasonStem"
@@ -219,23 +219,16 @@ class AnimeSama : ConfigurableAnimeSource, AnimeHttpSource() {
 
     private fun fetchPlayers(url: String): List<List<String>> {
         val docUrl = "$url/episodes.js"
-        val players = mutableListOf<List<String>>()
-        val doc = client.newCall(GET(docUrl)).execute().run {
-            if (code != 200) {
-                close()
-                return listOf()
-            }
-            body.string()
+        val doc = client.newCall(GET(docUrl)).execute().use {
+            if (!it.isSuccessful) return emptyList()
+            it.body.string()
         }
-        val sanitizedDoc = sanitizeEpisodesJs(doc)
-        for (i in 1..8) {
-            val numPlayers = getPlayers("eps$i", sanitizedDoc)
-            if (numPlayers != null) players.add(numPlayers)
+        val urls = QuickJs.create().use { qjs ->
+            qjs.evaluate(doc)
+            val res = qjs.evaluate("JSON.stringify(Array.from({length: 10}, (e,i) => this[`eps\${i}`]).filter(e => e))")
+            json.decodeFromString<List<List<String>>>(res as String)
         }
-        val asPlayers = getPlayers("epsAS", sanitizedDoc)
-        if (asPlayers != null) players.add(asPlayers)
-        if (players.isEmpty()) return emptyList()
-        return List(players[0].size) { i -> players.mapNotNull { it.getOrNull(i) }.distinct() }
+        return List(urls[0].size) { i -> urls.mapNotNull { it.getOrNull(i) }.distinct() }
     }
 
     private fun getPlayers(playerName: String, doc: String): List<String>? {
@@ -276,6 +269,22 @@ class AnimeSama : ConfigurableAnimeSource, AnimeHttpSource() {
                 preferences.edit().putString(key, entry).commit()
             }
         }.also(screen::addPreference)
+
+        ListPreference(screen.context).apply {
+            key = PREF_PLAYER_KEY
+            title = "Lecteur par défaut"
+            entries = PLAYERS
+            entryValues = PLAYERS_VALUES
+            setDefaultValue(PREF_PLAYER_DEFAULT)
+            summary = "%s"
+
+            setOnPreferenceChangeListener { _, newValue ->
+                val selected = newValue as String
+                val index = findIndexOfValue(selected)
+                val entry = entryValues[index] as String
+                preferences.edit().putString(key, entry).commit()
+            }
+        }.also(screen::addPreference)
     }
 
     companion object {
@@ -291,10 +300,25 @@ class AnimeSama : ConfigurableAnimeSource, AnimeHttpSource() {
             "vf",
         )
 
+        private val PLAYERS = arrayOf(
+            "Sendvid",
+            "Sibnet",
+            "VK",
+        )
+
+        private val PLAYERS_VALUES = arrayOf(
+            "sendvid",
+            "sibnet",
+            "vk",
+        )
+
         private const val PREF_VOICES_KEY = "voices_preference"
         private const val PREF_VOICES_DEFAULT = "vostfr"
 
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_DEFAULT = "1080"
+
+        private const val PREF_PLAYER_KEY = "player_preference"
+        private const val PREF_PLAYER_DEFAULT = "sibnet"
     }
 }
