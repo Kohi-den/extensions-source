@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.zh.hanime1
 
 import android.app.Application
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -16,12 +17,15 @@ import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.util.asJsoup
 import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Cookie
@@ -65,14 +69,32 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     override fun animeDetailsParse(response: Response): SAnime {
-        val jsoup = response.asJsoup()
+        val doc = response.asJsoup()
         return SAnime.create().apply {
-            genre = jsoup.select(".single-video-tag").not("[data-toggle]").eachText().joinToString()
-            author = jsoup.select("#video-artist-name").text()
-            jsoup.select("script[type=application/ld+json]").first()?.data()?.let {
+            genre = doc.select(".single-video-tag").not("[data-toggle]").eachText().joinToString()
+            author = doc.select("#video-artist-name").text()
+            doc.select("script[type=application/ld+json]").first()?.data()?.let {
                 val info = json.decodeFromString<JsonElement>(it).jsonObject
                 title = info["name"]!!.jsonPrimitive.content
                 description = info["description"]!!.jsonPrimitive.content
+                thumbnail_url = info["thumbnailUrl"]?.jsonArray?.get(0)?.jsonPrimitive?.content
+            }
+            val type = doc.select("a#video-artist-name + a").text().trim()
+            if (type == "裏番" || type == "泡麵番") {
+                // Use the series cover image for bangumi entries instead of the episode image.
+                runBlocking {
+                    try {
+                        val animesPage =
+                            getSearchAnime(
+                                1,
+                                title,
+                                AnimeFilterList(GenreFilter(arrayOf("", type)).apply { state = 1 }),
+                            )
+                        thumbnail_url = animesPage.animes.first().thumbnail_url
+                    } catch (e: Exception) {
+                        Log.e(name, "Failed to get bangumi cover image")
+                    }
+                }
             }
         }
     }
@@ -137,7 +159,7 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override fun searchAnimeParse(response: Response): AnimesPage {
         val jsoup = response.asJsoup()
-        val nodes = jsoup.select("div.search-doujin-videos.hidden-xs")
+        val nodes = jsoup.select("div.search-doujin-videos.hidden-xs:not(:has(a[target=_blank]))")
         val list = if (nodes.isNotEmpty()) {
             nodes.map {
                 SAnime.create().apply {
@@ -216,11 +238,12 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
         return chain.proceed(chain.request())
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     private fun updateFilters() {
         filterUpdateState = FilterUpdateState.UPDATING
         val exceptionHandler =
             CoroutineExceptionHandler { _, _ -> filterUpdateState = FilterUpdateState.FAILED }
-        CoroutineScope(Dispatchers.IO + exceptionHandler).launch {
+        GlobalScope.launch(Dispatchers.IO + exceptionHandler) {
             val jsoup = client.newCall(GET("$baseUrl/search")).awaitSuccess().asJsoup()
             val genreList = jsoup.select("div.genre-option div.hentai-sort-options").eachText()
             val sortList =
