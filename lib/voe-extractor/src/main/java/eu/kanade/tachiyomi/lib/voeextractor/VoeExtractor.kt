@@ -18,14 +18,33 @@ class VoeExtractor(private val client: OkHttpClient) {
 
     private val playlistUtils by lazy { PlaylistUtils(clientDdos) }
 
-    private val linkRegex = "(http|https)://([\\w_-]+(?:\\.[\\w_-]+)+)([\\w.,@?^=%&:/~+#-]*[\\w@?^=%&/~+#-])".toRegex()
-
-    private val base64Regex = Regex("'.*'")
-
-    private val scriptBase64Regex = "(let|var)\\s+\\w+\\s*=\\s*'(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)';".toRegex()
-
     @Serializable
-    data class VideoLinkDTO(val file: String)
+    data class VideoLinkDTO(val source: String)
+
+    private fun decodeVoeData(data: String): String {
+        val shifted = data.map { char ->
+            when (char) {
+                in 'A'..'Z' -> 'A' + (char - 'A' + 13).mod(26)
+                in 'a'..'z' -> 'a' + (char - 'a' + 13).mod(26)
+                else -> char
+            }
+        }.joinToString()
+
+        val junk = listOf("@$", "^^", "~@", "%?", "*~", "!!", "#&")
+        var result = shifted
+        for (part in junk) {
+            result = result.replace(part, "_")
+        }
+        val clean = result.replace("_", "")
+
+        val transformed = String(Base64.decode(clean, Base64.DEFAULT)).map {
+            (it.code - 3).toChar()
+        }.joinToString().reversed()
+
+        val decoded = String(Base64.decode(transformed, Base64.DEFAULT))
+
+        return json.decodeFromString<VideoLinkDTO>(decoded).source
+    }
 
     fun videosFromUrl(url: String, prefix: String = ""): List<Video> {
         var document = clientDdos.newCall(GET(url)).execute().asJsoup()
@@ -38,25 +57,12 @@ class VoeExtractor(private val client: OkHttpClient) {
             document = clientDdos.newCall(GET(originalUrl)).execute().asJsoup()
         }
 
-        val alternativeScript = document.select("script").find { scriptBase64Regex.containsMatchIn(it.data()) }?.data()
-        val script = document.selectFirst("script:containsData(const sources), script:containsData(var sources), script:containsData(wc0)")?.data()
-            ?: alternativeScript
-            ?: return emptyList()
-        val playlistUrl = when {
-            // Layout 1
-            script.contains("sources") -> {
-                val link = script.substringAfter("hls': '").substringBefore("'")
-                if (linkRegex.matches(link)) link else String(Base64.decode(link, Base64.DEFAULT))
-            }
-            // Layout 2
-            script.contains("wc0") || alternativeScript != null -> {
-                val base64 = base64Regex.find(script)!!.value
-                val decoded = Base64.decode(base64, Base64.DEFAULT).let(::String)
+        val encodedVoeData = document.select("script").find { it.data().contains("MKGMa=\"")}?.data()
+            ?.substringAfter("MKGMa=\"")
+            ?.substringBefore('"') ?: return emptyList()
 
-                json.decodeFromString<VideoLinkDTO>(if (alternativeScript != null) decoded.reversed() else decoded).file
-            }
-            else -> return emptyList()
-        }
+        val playlistUrl = decodeVoeData(encodedVoeData)
+
         return playlistUtils.extractFromHls(playlistUrl,
             videoNameGen = { quality -> "${prefix}Voe:$quality" }
         )
