@@ -195,6 +195,10 @@ jobs:
       - name: Sync repo
         run: |
           rsync -a --delete --exclude .git --exclude .gitignore main/repo/ repo --exclude README.md --exclude repo.json
+          
+      - name: Increase buffer size
+        run: |
+          git config --global http.postBuffer 157286400
 
       - name: Deploy repo
         uses: https://github.com/EndBug/add-and-commit@v9
