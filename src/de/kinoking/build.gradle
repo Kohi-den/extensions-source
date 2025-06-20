@@ -3,7 +3,7 @@ ext {
     extClass = '.Kinoking'
     themePkg = 'dooplay'
     baseUrl = 'https://kinoking.cc'
-    overrideVersionCode = 25
+    overrideVersionCode = 26
 }
 
 apply from: "$rootDir/common.gradle"
