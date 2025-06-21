@@ -48,7 +48,7 @@ body:
           required: true
         - label: I have written a title with source name.
           required: true
-        - label: I have checked that the extension does not already exist by searching the [GitHub repository](https://github.com/Kohi-den/extensions-source) and verified it does not appear in the code base.
+        - label: I have checked that the extension does not already exist by searching the [Repository](https://kohiden.xyz/Kohi-den/extensions-source/src/branch/main/src) and verified it does not appear in the code base.
           required: true
         - label: I will fill out all of the requested information in this form.
           required: true
