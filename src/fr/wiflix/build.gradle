@@ -3,7 +3,7 @@ ext {
     extClass = '.Wiflix'
     themePkg = 'datalifeengine'
     baseUrl = 'https://wiflix.voto'
-    overrideVersionCode = 18
+    overrideVersionCode = 19
 }
 
 apply from: "$rootDir/common.gradle"
