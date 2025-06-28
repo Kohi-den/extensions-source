@@ -1,12 +1,14 @@
 package eu.kanade.tachiyomi.lib.voeextractor
 
 import android.util.Base64
+import android.util.Log
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import uy.kohesive.injekt.injectLazy
 
@@ -18,53 +20,83 @@ class VoeExtractor(private val client: OkHttpClient) {
 
     private val playlistUtils by lazy { PlaylistUtils(clientDdos) }
 
-    @Serializable
-    data class VideoLinkDTO(val source: String)
-
-    private fun decodeVoeData(data: String): String {
-        val shifted = data.map { char ->
-            when (char) {
-                in 'A'..'Z' -> 'A' + (char - 'A' + 13).mod(26)
-                in 'a'..'z' -> 'a' + (char - 'a' + 13).mod(26)
-                else -> char
-            }
-        }.joinToString()
-
-        val junk = listOf("@$", "^^", "~@", "%?", "*~", "!!", "#&")
-        var result = shifted
-        for (part in junk) {
-            result = result.replace(part, "_")
-        }
-        val clean = result.replace("_", "")
-
-        val transformed = String(Base64.decode(clean, Base64.DEFAULT)).map {
-            (it.code - 3).toChar()
-        }.joinToString().reversed()
-
-        val decoded = String(Base64.decode(transformed, Base64.DEFAULT))
-
-        return json.decodeFromString<VideoLinkDTO>(decoded).source
-    }
+    private val redirectRegex = Regex("""window.location.href\s*=\s*'([^']+)';""")
 
     fun videosFromUrl(url: String, prefix: String = ""): List<Video> {
+        val videoList = mutableListOf<Video>()
         var document = clientDdos.newCall(GET(url)).execute().asJsoup()
+        val scriptData = document.selectFirst("script")?.data()
+        val redirectMatch = scriptData?.let { redirectRegex.find(it) }
 
-        if (document.selectFirst("script")?.data()?.contains("if (typeof localStorage !== 'undefined')") == true) {
-            val originalUrl = document.selectFirst("script")?.data()
-                ?.substringAfter("window.location.href = '")
-                ?.substringBefore("';") ?: return emptyList()
-
+        if (redirectMatch != null) {
+            val originalUrl = redirectMatch.groupValues[1]
             document = clientDdos.newCall(GET(originalUrl)).execute().asJsoup()
         }
 
-        val encodedVoeData = document.select("script").find { it.data().contains("MKGMa=\"")}?.data()
-            ?.substringAfter("MKGMa=\"")
-            ?.substringBefore('"') ?: return emptyList()
+        val encodedString = document.selectFirst("script[type=application/json]")?.data()
+            ?.trim()?.substringAfter("[\"")?.substringBeforeLast("\"]") ?: return emptyList()
 
-        val playlistUrl = decodeVoeData(encodedVoeData)
+        val decryptedJson = decryptF7(encodedString) ?: return emptyList()
+        val m3u8 = decryptedJson["source"]?.jsonPrimitive?.content
+        val mp4 = decryptedJson["direct_access_url"]?.jsonPrimitive?.content
 
-        return playlistUtils.extractFromHls(playlistUrl,
-            videoNameGen = { quality -> "${prefix}Voe:$quality" }
-        )
+        if (m3u8 != null) {
+            playlistUtils.extractFromHls(m3u8,
+                videoNameGen = { quality -> "${prefix}Voe:$quality" }
+            ).let { videoList.addAll(it) }
+        }
+        if (mp4 != null) {
+            videoList.add(
+                Video(mp4, "${prefix}Voe:MP4", mp4)
+            )
+        }
+
+        return videoList
+    }
+
+    private fun decryptF7(p8: String): JsonObject? {
+        return try {
+            val vF = rot13(p8)
+            val vF2 = replacePatterns(vF)
+            val vF3 = removeUnderscores(vF2)
+            val vF4 = base64Decode(vF3)
+            val vF5 = charShift(vF4, 3)
+            val vF6 = reverse(vF5)
+            val vAtob = base64Decode(vF6)
+            json.decodeFromString<JsonObject>(vAtob)
+        } catch (e: Exception) {
+            Log.i("bruh error", "Decryption error: ${e.message}")
+            null
+        }
+    }
+
+    private fun rot13(input: String): String {
+        return input.map { c ->
+            when (c) {
+                in 'A'..'Z' -> ((c - 'A' + 13) % 26 + 'A'.code).toChar()
+                in 'a'..'z' -> ((c - 'a' + 13) % 26 + 'a'.code).toChar()
+                else -> c
+            }
+        }.joinToString("")
+    }
+
+    private fun replacePatterns(input: String): String {
+        val patterns = listOf("@$", "^^", "~@", "%?", "*~", "!!", "#&")
+        return patterns.fold(input) { result, pattern ->
+            result.replace(Regex(Regex.escape(pattern)), "_")
+        }
+    }
+
+    private fun removeUnderscores(input: String): String = input.replace("_", "")
+
+    private fun charShift(input: String, shift: Int): String {
+        return input.map { (it.code - shift).toChar() }.joinToString("")
+    }
+
+    private fun reverse(input: String): String = input.reversed()
+
+    private fun base64Decode(input: String): String {
+        val decodedBytes = Base64.decode(input, Base64.DEFAULT)
+        return String(decodedBytes, Charsets.ISO_8859_1)
     }
 }

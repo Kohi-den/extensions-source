@@ -24,13 +24,18 @@ class VidGuardExtractor(private val client: OkHttpClient) {
     fun videosFromUrl(url: String, prefix: String) = videosFromUrl(url) { "${prefix}VidGuard:$it" }
 
     fun videosFromUrl(url: String, videoNameGen: (String) -> String = { quality -> "VidGuard:$quality" }): List<Video> {
-        val res = client.newCall(GET(url)).execute().asJsoup()
-        val scriptData = res.selectFirst("script:containsData(eval)")?.data() ?: return emptyList()
+        try {
+            val res = client.newCall(GET(url)).execute().asJsoup()
+            val scriptData = res.selectFirst("script:containsData(eval)")?.data() ?: return emptyList()
 
-        val jsonStr2 = json.decodeFromString<SvgObject>(runJS2(scriptData))
-        val playlistUrl = sigDecode(jsonStr2.stream)
+            val jsonStr2 = json.decodeFromString<SvgObject>(runJS2(scriptData))
+            val playlistUrl = sigDecode(jsonStr2.stream)
 
-        return playlistUtils.extractFromHls(playlistUrl, videoNameGen = videoNameGen)
+            return playlistUtils.extractFromHls(playlistUrl, videoNameGen = videoNameGen)
+        }
+        catch (e:Exception) {
+            return emptyList()
+        }
     }
 
     private fun sigDecode(url: String): String {

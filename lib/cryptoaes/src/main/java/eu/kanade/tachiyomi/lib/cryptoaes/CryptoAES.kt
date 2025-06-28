@@ -10,6 +10,7 @@ package eu.kanade.tachiyomi.lib.cryptoaes
 
 // Thanks to Vlad on Stackoverflow: https://stackoverflow.com/a/63701411
 
+import android.annotation.SuppressLint
 import android.util.Base64
 import java.security.MessageDigest
 import java.util.Arrays
@@ -27,6 +28,7 @@ object CryptoAES {
     private const val IV_SIZE = 16 // 128 bits
     private const val SALT_SIZE = 8 // 64 bits
     private const val HASH_CIPHER = "AES/CBC/PKCS7PADDING"
+    private const val HASH_CIPHER_ECB = "AES/ECB/PKCS5PADDING"
     private const val HASH_CIPHER_FALLBACK = "AES/CBC/PKCS5PADDING"
     private const val AES = "AES"
     private const val KDF_DIGEST = "MD5"
@@ -207,6 +209,47 @@ object CryptoAES {
         } finally {
             // Clean out temporary data
             Arrays.fill(generatedData, 0.toByte())
+        }
+    }
+
+    fun decryptCbcIV(encryptedBase64: String, secretKey: String, isUtf8: Boolean = false): String? {
+        return try {
+            if (isUtf8) return decryptUtf8(encryptedBase64, secretKey)
+
+            val encryptedData = Base64.decode(encryptedBase64, Base64.DEFAULT)
+
+            val iv = encryptedData.copyOfRange(0, 16)
+            val cipherText = encryptedData.copyOfRange(16, encryptedData.size)
+
+            val keyBytes = secretKey.toByteArray(Charsets.UTF_8)
+            val secretKeySpec = SecretKeySpec(keyBytes, AES)
+            val ivSpec = IvParameterSpec(iv)
+
+            val cipher = Cipher.getInstance(HASH_CIPHER_FALLBACK)
+            cipher.init(Cipher.DECRYPT_MODE, secretKeySpec, ivSpec)
+
+            val decryptedBytes = cipher.doFinal(cipherText)
+            String(decryptedBytes, Charsets.UTF_8)
+        } catch (ex: Exception) {
+            ""
+        }
+    }
+
+    @SuppressLint("GetInstance")
+    private fun decryptUtf8(encryptedBase64: String, secretKey: String): String? {
+        return try {
+            val keyBytes = secretKey.toByteArray(Charsets.UTF_8)
+            val encryptedBytes = Base64.decode(encryptedBase64, Base64.DEFAULT)
+
+            val secretKeySpec = SecretKeySpec(keyBytes, AES)
+
+            val cipher = Cipher.getInstance(HASH_CIPHER_ECB)
+            cipher.init(Cipher.DECRYPT_MODE, secretKeySpec)
+
+            val decryptedBytes = cipher.doFinal(encryptedBytes)
+            String(decryptedBytes, Charsets.UTF_8)
+        } catch (ex: Exception) {
+            ""
         }
     }
 

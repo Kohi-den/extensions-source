@@ -3,7 +3,7 @@ ext {
     extClass = '.SoloLatino'
     themePkg = 'dooplay'
     baseUrl = 'https://sololatino.net'
-    overrideVersionCode = 10
+    overrideVersionCode = 11
 }
 
 apply from: "$rootDir/common.gradle"
@@ -16,5 +16,6 @@ dependencies {
     implementation(project(':lib:vidguard-extractor'))
     implementation(project(':lib:voe-extractor'))
     implementation(project(":lib:dood-extractor"))
+    implementation(project(":lib:filemoon-extractor"))
     implementation(project(':lib:cryptoaes'))
 }

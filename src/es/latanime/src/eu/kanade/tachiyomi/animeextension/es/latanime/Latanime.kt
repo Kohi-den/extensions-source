@@ -13,10 +13,15 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
+import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
+import eu.kanade.tachiyomi.lib.mixdropextractor.MixDropExtractor
 import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
+import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
 import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
+import eu.kanade.tachiyomi.lib.vidguardextractor.VidGuardExtractor
+import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.lib.youruploadextractor.YourUploadExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
@@ -108,6 +113,7 @@ class Latanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         "Año",
         arrayOf(
             Pair("Seleccionar", "false"),
+            Pair("2025", "2025"),
             Pair("2024", "2024"),
             Pair("2023", "2023"),
             Pair("2022", "2022"),
@@ -274,46 +280,58 @@ class Latanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         return episode
     }
 
+    /*--------------------------------Video extractors------------------------------------*/
+    private val okruExtractor by lazy { OkruExtractor(client) }
+    private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val uqloadExtractor by lazy { UqloadExtractor(client) }
+    private val doodExtractor by lazy { DoodExtractor(client) }
+    private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
+    private val filemoonExtractor by lazy { FilemoonExtractor(client) }
+    private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
+    private val vidGuardExtractor by lazy { VidGuardExtractor(client) }
+    private val mixDropExtractor by lazy { MixDropExtractor(client) }
+    private val universalExtractor by lazy { UniversalExtractor(client) }
+
     // ============================ Video Links =============================
 
     override fun videoListParse(response: Response): List<Video> {
-        val document = response.asJsoup()
         val videoList = mutableListOf<Video>()
-
+        val document = response.asJsoup()
         document.select(videoListSelector()).forEach { videoElement ->
+            val serverTitle = videoElement.ownText().trim()
             val url = String(Base64.decode(videoElement.attr("data-player"), Base64.DEFAULT))
-            val prefix = "${videoElement.text()} - "
-
-            when {
-                url.contains("ok.ru") -> {
-                    val videos = OkruExtractor(client).videosFromUrl(url, prefix = prefix)
-                    videoList.addAll(videos)
-                }
-                url.contains("mp4upload") -> {
-                    val videos = Mp4uploadExtractor(client).videosFromUrl(url, headers, prefix = "$prefix ")
-                    videoList.addAll(videos)
-                }
-                url.contains("uqload") -> {
-                    val videos = UqloadExtractor(client).videosFromUrl(url, prefix)
-                    videoList.addAll(videos)
-                }
-                url.contains("doodstream") -> {
-                    val videos = DoodExtractor(client).videosFromUrl(url)
-                    videoList.addAll(videos)
-                }
-                url.contains("yourupload") -> {
-                    val videos = YourUploadExtractor(client).videoFromUrl(url, headers = headers, name = "Original", prefix = prefix)
-                    videoList.addAll(videos)
-                }
-                else -> {
-                    val videos = UniversalExtractor(client).videosFromUrl(url, headers)
-                    videoList.addAll(videos)
-                }
-            }
+            val prefix = "$serverTitle - "
+            val matched = conventions.firstOrNull { (_, names) -> names.any { it.lowercase() in url.lowercase() || it.lowercase() in serverTitle.lowercase() } }?.first
+            when (matched) {
+                "voe" -> voeExtractor.videosFromUrl(url, "$prefix ")
+                "okru" -> okruExtractor.videosFromUrl(url, prefix)
+                "filemoon" -> filemoonExtractor.videosFromUrl(url, prefix = "$prefix Filemoon:")
+                "mp4upload" -> mp4uploadExtractor.videosFromUrl(url, headers, prefix = "$prefix ")
+                "uqload" -> uqloadExtractor.videosFromUrl(url, prefix)
+                "doodstream" -> doodExtractor.videosFromUrl(url, "$prefix DoodStream")
+                "yourupload" -> yourUploadExtractor.videoFromUrl(url, headers = headers, prefix = "$prefix ")
+                "streamwish" -> streamWishExtractor.videosFromUrl(url, videoNameGen = { "$prefix StreamWish:$it" })
+                "vidguard" -> vidGuardExtractor.videosFromUrl(url, prefix = "$prefix ")
+                "mixdrop" -> mixDropExtractor.videosFromUrl(url, prefix = prefix)
+                else -> universalExtractor.videosFromUrl(url, headers, prefix = "$prefix ")
+            }.also(videoList::addAll)
         }
-
-        return videoList.sort()
+        return videoList
     }
+
+    private val conventions = listOf(
+        "voe" to listOf("voe", "tubelessceliolymph", "simpulumlamerop", "urochsunloath", "nathanfromsubject", "yip.", "metagnathtuggers", "donaldlineelse"),
+        "okru" to listOf("ok.ru", "okru"),
+        "filemoon" to listOf("filemoon", "moonplayer", "moviesm4u", "files.im"),
+        "mp4upload" to listOf("mp4upload", "mp4"),
+        "uqload" to listOf("uqload"),
+        "doodstream" to listOf("doodstream", "dood.", "ds2play", "doods.", "ds2play", "ds2video", "dooood", "d000d", "d0000d"),
+        "yourupload" to listOf("yourupload", "upload"),
+        "streamwish" to listOf("wishembed", "streamwish", "strwish", "wish", "Kswplayer", "Swhoi", "Multimovies", "Uqloads", "neko-stream", "swdyu", "iplayerhls", "streamgg"),
+        "vidguard" to listOf("vembed", "guard", "listeamed", "bembed", "vgfplay", "bembed"),
+        "mixdrop" to listOf("mixdrop", "mxdrop"),
+    )
 
     override fun videoListSelector() = "li#play-video > a.play-video"
 

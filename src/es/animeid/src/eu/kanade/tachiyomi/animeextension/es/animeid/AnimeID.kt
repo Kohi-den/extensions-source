@@ -88,10 +88,10 @@ class AnimeID : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             val listCaps = jObject["list"]!!.jsonArray
             listCaps!!.forEach { cap ->
                 val capParsed = cap.jsonObject
-                val epNum = capParsed["numero"]!!.jsonPrimitive.content!!.toFloat()
+                val epNum = capParsed["numero"]!!.jsonPrimitive.content
                 val episode = SEpisode.create()
                 val dateUpload = manualDateParse(capParsed["date"]!!.jsonPrimitive.content!!.toString())
-                episode.episode_number = epNum
+                episode.episode_number = epNum.toFloat()
                 episode.name = "Episodio $epNum"
                 dateUpload!!.also { episode.date_upload = it }
                 episode.setUrlWithoutDomain(baseUrl + capParsed["href"]!!.jsonPrimitive.content!!.toString())
@@ -128,16 +128,25 @@ class AnimeID : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val videoList = mutableListOf<Video>()
         document.select("#partes div.container li.subtab div.parte").forEach { script ->
             val jsonString = script.attr("data")
+            val titleServer = script.closest(".subtab")?.attr("data-tab-id")?.let {
+                document.selectFirst("#mirrors [data-tab-id=\"$it\"]")?.ownText()?.trim()
+            } ?: ""
             val jsonUnescape = unescapeJava(jsonString)!!.replace("\\", "")
             val url = fetchUrls(jsonUnescape).firstOrNull()?.replace("\\\\", "\\") ?: ""
-            return when {
-                url.contains("streamtape") || url.contains("tape") || url.contains("stp") -> streamtapeExtractor.videosFromUrl(url)
-                url.contains("wish") || url.contains("fviplions") || url.contains("obeywish") -> streamwishExtractor.videosFromUrl(url, videoNameGen = { "StreamWish:$it" })
+            val matched = conventions.firstOrNull { (_, names) -> names.any { it.lowercase() in url.lowercase() || it.lowercase() in titleServer.lowercase() } }?.first
+            return when (matched) {
+                "streamtape" -> streamtapeExtractor.videosFromUrl(url)
+                "streamwish" -> streamwishExtractor.videosFromUrl(url, videoNameGen = { "StreamWish:$it" })
                 else -> universalExtractor.videosFromUrl(url, headers)
             }
         }
         return videoList
     }
+
+    private val conventions = listOf(
+        "streamwish" to listOf("wishembed", "streamwish", "strwish", "wish", "Kswplayer", "Swhoi", "Multimovies", "Uqloads", "neko-stream", "swdyu", "fviplions", "streamgg"),
+        "streamtape" to listOf("streamtape", "stp", "stape", "shavetape", "shg"),
+    )
 
     private fun unescapeJava(escaped: String): String {
         var escaped = escaped

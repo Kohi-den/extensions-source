@@ -144,14 +144,15 @@ class AnimeOnlineNinja : DooPlay(
 
     private fun extractVideos(url: String, lang: String): List<Video> {
         try {
-            return when {
-                arrayOf("saidochesto.top").any(url) || "MULTISERVER" in lang.uppercase() -> extractFromMulti(url)
-                arrayOf("filemoon", "filemooon", "moon").any(url) -> filemoonExtractor.videosFromUrl(url, "$lang Filemoon:", headers)
-                arrayOf("doodstream", "dood.", "ds2play", "doods.").any(url) -> doodExtractor.videosFromUrl(url, "$lang DoodStream", false)
-                arrayOf("streamtape", "stp", "stape").any(url) -> streamTapeExtractor.videosFromUrl(url, "$lang StreamTape")
-                arrayOf("mixdrop").any(url) -> mixDropExtractor.videoFromUrl(url, prefix = "$lang ")
-                arrayOf("uqload").any(url) -> uqloadExtractor.videosFromUrl(url, prefix = lang)
-                "wolfstream" in url -> {
+            val matched = conventions.firstOrNull { (_, names) -> names.any { it.lowercase() in url.lowercase() || it.lowercase() in lang.lowercase() } }?.first
+            return when (matched) {
+                "saidochesto", "multiserver" -> extractFromMulti(url)
+                "filemoon" -> filemoonExtractor.videosFromUrl(url, "$lang Filemoon:", headers)
+                "doodstream" -> doodExtractor.videosFromUrl(url, "$lang DoodStream", false)
+                "streamtape" -> streamTapeExtractor.videosFromUrl(url, "$lang StreamTape")
+                "mixdrop" -> mixDropExtractor.videoFromUrl(url, prefix = "$lang ")
+                "uqload" -> uqloadExtractor.videosFromUrl(url, prefix = lang)
+                "wolfstream" -> {
                     client.newCall(GET(url, headers)).execute()
                         .asJsoup()
                         .selectFirst("script:containsData(sources)")
@@ -161,15 +162,28 @@ class AnimeOnlineNinja : DooPlay(
                             listOf(Video(videoUrl, "$lang WolfStream", videoUrl, headers = headers))
                         }
                 }
-                arrayOf("mp4upload").any(url) -> mp4uploadExtractor.videosFromUrl(url, headers, prefix = "$lang ")
-                arrayOf("vidhide", "filelions.top", "vid.").any(url) -> vidHideExtractor.videosFromUrl(url) { "$lang VidHide:$it" }
-                arrayOf("wishembed", "streamwish", "strwish", "wish").any(url) -> streamWishExtractor.videosFromUrl(url, videoNameGen = { "$lang StreamWish:$it" })
+                "mp4upload" -> mp4uploadExtractor.videosFromUrl(url, headers, prefix = "$lang ")
+                "vidhide" -> vidHideExtractor.videosFromUrl(url) { "$lang VidHide:$it" }
+                "streamwish" -> streamWishExtractor.videosFromUrl(url, videoNameGen = { "$lang StreamWish:$it" })
                 else -> null
             } ?: emptyList()
         } catch (e: Exception) {
             return emptyList()
         }
     }
+
+    private val conventions = listOf(
+        "saidochesto" to listOf("saidochesto"),
+        "filemoon" to listOf("filemoon", "moonplayer", "moviesm4u", "files.im"),
+        "doodstream" to listOf("doodstream", "dood.", "ds2play", "doods.", "ds2play", "ds2video", "dooood", "d000d", "d0000d"),
+        "streamtape" to listOf("streamtape", "stp", "stape", "shavetape"),
+        "mixdrop" to listOf("mixdrop"),
+        "uqload" to listOf("uqload"),
+        "wolfstream" to listOf("wolfstream"),
+        "mp4upload" to listOf("mp4upload"),
+        "vidhide" to listOf("ahvsh", "streamhide", "guccihide", "streamvid", "vidhide", "kinoger", "smoothpre", "dhtpre", "peytonepre", "earnvids", "ryderjet"),
+        "streamwish" to listOf("wishembed", "streamwish", "strwish", "wish", "Kswplayer", "Swhoi", "Multimovies", "Uqloads", "neko-stream", "swdyu", "iplayerhls", "streamgg"),
+    )
 
     private fun Array<String>.any(url: String): Boolean = this.any { url.contains(it, ignoreCase = true) }
 

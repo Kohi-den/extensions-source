@@ -141,6 +141,7 @@ class Katanime : ConfigurableAnimeSource, AnimeHttpSource() {
         val videoList = mutableListOf<Video>()
         document.select("[data-player]:not([data-player-name=\"Mega\"])").forEach { element ->
             runCatching {
+                val serverTitle = element.ownText().trim()
                 val dataPlayer = element.attr("data-player")
                 val playerDocument = client.newCall(GET("$baseUrl/reproductor?url=$dataPlayer"))
                     .execute()
@@ -155,7 +156,7 @@ class Katanime : ConfigurableAnimeSource, AnimeHttpSource() {
                 val decryptedLink = CryptoAES.decryptWithSalt(json.ct!!, json.s!!, DECRYPTION_PASSWORD)
                     .replace("\\/", "/").replace("\"", "")
 
-                serverVideoResolver(decryptedLink).also(videoList::addAll)
+                serverVideoResolver(decryptedLink, serverTitle).also(videoList::addAll)
             }
         }
         return videoList
@@ -169,19 +170,31 @@ class Katanime : ConfigurableAnimeSource, AnimeHttpSource() {
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
     private val unpackerExtractor by lazy { UnpackerExtractor(client, headers) }
 
-    private fun serverVideoResolver(url: String): List<Video> {
-        return when {
-            arrayOf("wishembed", "streamwish", "strwish", "wish").any(url) -> StreamWishExtractor(client, headers).videosFromUrl(url, videoNameGen = { "StreamWish:$it" })
-            arrayOf("doodstream", "dood.", "ds2play", "doods.").any(url) -> doodExtractor.videosFromUrl(url, "DoodStream")
-            arrayOf("streamtape", "stp", "stape").any(url) -> streamTapeExtractor.videosFromUrl(url, quality = "StreamTape")
-            arrayOf("filemoon", "moonplayer").any(url) -> filemoonExtractor.videosFromUrl(url, prefix = "Filemoon:")
-            arrayOf("sendvid").any(url) -> sendvidExtractor.videosFromUrl(url)
-            arrayOf("lulu").any(url) -> unpackerExtractor.videosFromUrl(url)
-            arrayOf("vembed", "guard", "listeamed", "bembed", "vgfplay").any(url) -> vidGuardExtractor.videosFromUrl(url)
-            arrayOf("mp4upload").any(url) -> mp4uploadExtractor.videosFromUrl(url, headers)
+    private fun serverVideoResolver(url: String, serverOpt: String): List<Video> {
+        val matched = conventions.firstOrNull { (_, names) -> names.any { it.lowercase() in url.lowercase() || it.lowercase() in serverOpt.lowercase() } }?.first
+        return when (matched) {
+            "streamwish" -> StreamWishExtractor(client, headers).videosFromUrl(url, videoNameGen = { "StreamWish:$it" })
+            "doodstream" -> doodExtractor.videosFromUrl(url, "DoodStream")
+            "streamtape" -> streamTapeExtractor.videosFromUrl(url, quality = "StreamTape")
+            "filemoon" -> filemoonExtractor.videosFromUrl(url, prefix = "Filemoon:")
+            "sendvid" -> sendvidExtractor.videosFromUrl(url)
+            "lulu" -> unpackerExtractor.videosFromUrl(url)
+            "vidguard" -> vidGuardExtractor.videosFromUrl(url)
+            "mp4upload" -> mp4uploadExtractor.videosFromUrl(url, headers)
             else -> emptyList()
         }
     }
+
+    private val conventions = listOf(
+        "streamwish" to listOf("wishembed", "streamwish", "strwish", "wish", "Kswplayer", "Swhoi", "Multimovies", "Uqloads", "neko-stream", "swdyu", "iplayerhls", "streamgg", "streamw"),
+        "doodstream" to listOf("doodstream", "dood.", "ds2play", "doods.", "ds2play", "ds2video", "dooood", "d000d", "d0000d"),
+        "streamtape" to listOf("streamtape", "stp", "stape", "shavetape"),
+        "filemoon" to listOf("filemoon", "moonplayer", "moviesm4u", "files.im"),
+        "vidguard" to listOf("vembed", "guard", "listeamed", "bembed", "vgfplay", "bembed"),
+        "mp4upload" to listOf("mp4upload"),
+        "sendvid" to listOf("sendvid"),
+        "lulu" to listOf("lulu"),
+    )
 
     override fun List<Video>.sort(): List<Video> {
         val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
@@ -230,8 +243,6 @@ class Katanime : ConfigurableAnimeSource, AnimeHttpSource() {
             }
         }.also(screen::addPreference)
     }
-
-    private fun Array<String>.any(url: String): Boolean = this.any { url.contains(it, ignoreCase = true) }
 
     private fun String.toDate(): Long = runCatching { DATE_FORMATTER.parse(trim())?.time }.getOrNull() ?: 0L
 

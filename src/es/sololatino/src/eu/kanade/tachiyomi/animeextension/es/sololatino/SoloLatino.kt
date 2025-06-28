@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.cryptoaes.CryptoAES
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
+import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
 import eu.kanade.tachiyomi.lib.streamhidevidextractor.StreamHideVidExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
 import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
@@ -130,7 +131,7 @@ class SoloLatino : DooPlay(
             return emptyList()
         }
 
-        return links.flatMap { (link, languageCode) ->
+        return links.filter { it.first.isNotBlank() }.flatMap { (link, languageCode) ->
             extractVideosSafely(link, languageCode)
         }
     }
@@ -248,20 +249,20 @@ class SoloLatino : DooPlay(
     private val doodExtractor by lazy { DoodExtractor(client) }
     private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client, headers) }
     private val voeExtractor by lazy { VoeExtractor(client) }
+    private val filemoonExtractor by lazy { FilemoonExtractor(client) }
 
     private fun extractVideos(url: String, lang: String): List<Video> {
-        val vidHideDomains = listOf("vidhide", "VidHidePro", "luluvdo", "vidhideplus")
+        val prefix = if (lang == "unknown") "[UNK]" else lang
         try {
-            val videos = vidHideDomains.firstOrNull { it in url }?.let { domain ->
-                streamHideVidExtractor.videosFromUrl(url, videoNameGen = { "$lang - $domain : $it" })
-            } ?: emptyList()
-            return when {
-                videos.isNotEmpty() -> videos
-                "streamwish" in url -> streamWishExtractor.videosFromUrl(url, lang)
-                "uqload" in url -> uqloadExtractor.videosFromUrl(url, lang)
-                "vidguard" in url -> vidGuardExtractor.videosFromUrl(url, lang)
-                "dood" in url -> doodExtractor.videosFromUrl(url, "$lang - ")
-                "voe" in url -> voeExtractor.videosFromUrl(url, "$lang - ")
+            val matched = conventions.firstOrNull { (_, names) -> names.any { it.lowercase() in url.lowercase() } }?.first
+            return when (matched) {
+                "streamwish" -> streamWishExtractor.videosFromUrl(url, videoNameGen = { "$prefix StreamWish:$it" })
+                "uqload" -> uqloadExtractor.videosFromUrl(url, prefix)
+                "vidguard" -> vidGuardExtractor.videosFromUrl(url, "$prefix ")
+                "doodstream" -> doodExtractor.videosFromUrl(url, "$prefix ")
+                "voe" -> voeExtractor.videosFromUrl(url, "$prefix ")
+                "filemoon" -> filemoonExtractor.videosFromUrl(url, prefix = "$prefix Filemoon:")
+                "vidhide" -> streamHideVidExtractor.videosFromUrl(url, videoNameGen = { "$prefix - VidHide:$it" })
                 else -> emptyList()
             }
         } catch (e: Exception) {
@@ -269,6 +270,16 @@ class SoloLatino : DooPlay(
             return emptyList()
         }
     }
+
+    private val conventions = listOf(
+        "streamwish" to listOf("wishembed", "streamwish", "strwish", "wish", "Kswplayer", "Swhoi", "Multimovies", "Uqloads", "neko-stream", "swdyu", "iplayerhls", "streamgg"),
+        "uqload" to listOf("uqload"),
+        "vidguard" to listOf("vembed", "guard", "listeamed", "bembed", "vgfplay", "bembed"),
+        "doodstream" to listOf("doodstream", "dood.", "ds2play", "doods.", "ds2play", "ds2video", "dooood", "d000d", "d0000d"),
+        "voe" to listOf("voe", "tubelessceliolymph", "simpulumlamerop", "urochsunloath", "nathanfromsubject", "yip.", "metagnathtuggers", "donaldlineelse"),
+        "filemoon" to listOf("filemoon", "moonplayer", "moviesm4u", "files.im"),
+        "vidhide" to listOf("ahvsh", "streamhide", "guccihide", "streamvid", "vidhide", "kinoger", "smoothpre", "dhtpre", "peytonepre", "earnvids", "ryderjet"),
+    )
 
     private fun getFirstMatch(regex: Regex, input: String): String {
         return regex.find(input)?.groupValues?.get(1) ?: ""
@@ -295,14 +306,13 @@ class SoloLatino : DooPlay(
 
         val items = Json.decodeFromString<List<Item>>(jsLinksMatch)
 
-        // Diccionario de idiomas
-        val idiomas = mapOf("LAT" to "[LAT]", "ESP" to "[CAST]", "SUB" to "[SUB]")
+        val langs = mapOf("LAT" to "[LAT]", "ESP" to "[CAST]", "SUB" to "[SUB]")
 
         items.forEach { item ->
-            val languageCode = idiomas[item.video_language] ?: "unknown"
+            val languageCode = langs[item.video_language] ?: "unknown"
 
             item.sortedEmbeds.forEach { embed ->
-                val decryptedLink = CryptoAES.decrypt(embed.link, "Ak7qrvvH4WKYxV2OgaeHAEg2a5eh16vE")
+                val decryptedLink = CryptoAES.decryptCbcIV(embed.link, "Ak7qrvvH4WKYxV2OgaeHAEg2a5eh16vE") ?: ""
                 links.add(Pair(decryptedLink, languageCode))
             }
         }
@@ -489,7 +499,7 @@ class SoloLatino : DooPlay(
             compareBy(
                 { it.quality.contains(lang) },
                 { it.quality.contains(server, true) },
-                { it.quality.contains(quality) },
+                { it.quality.contains(quality.substringBefore("p")) },
             ),
         ).reversed()
     }

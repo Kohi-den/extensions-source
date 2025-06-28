@@ -15,7 +15,7 @@ class VidHideExtractor(private val client: OkHttpClient, private val headers: He
 
     private val playlistUtils by lazy { PlaylistUtils(client, headers) }
     private val json = Json { isLenient = true; ignoreUnknownKeys = true }
-    private val sourceRegex = Regex("""sources:\[\{file:"(.*?)"""")
+    private val sourceRegex = Regex(""""(http[^"]*?m3u8[^"]*?)"""")
 
     fun videosFromUrl(url: String, videoNameGen: (String) -> String = { quality -> "VidHide - $quality" }): List<Video> {
         val script = fetchAndExtractScript(url) ?: return emptyList()
