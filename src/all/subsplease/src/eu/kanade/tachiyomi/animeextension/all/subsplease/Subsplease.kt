@@ -128,7 +128,7 @@ class Subsplease : ConfigurableAnimeSource, AnimeHttpSource() {
         }
         val token = preferences.getString(PREF_TOKEN_KEY, null)
         val debridProvider = preferences.getString(PREF_DEBRID_KEY, "none")
-        return "https://torrentio.strem.fun/$debridProvider/$token/$infohash/null/0/$title"
+        return "https://torrentio.strem.fun/resolve/$debridProvider/$token/$infohash/null/0/$title"
     }
 
     private fun videosFromElement(jsonLine: String?, num: String): List<Video> {
