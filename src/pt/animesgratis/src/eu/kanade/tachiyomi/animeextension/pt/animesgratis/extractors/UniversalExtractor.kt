@@ -25,7 +25,7 @@ class UniversalExtractor(private val client: OkHttpClient) {
     private val handler by lazy { Handler(Looper.getMainLooper()) }
 
     @SuppressLint("SetJavaScriptEnabled")
-    fun videosFromUrl(origRequestUrl: String, origRequestHeader: Headers): List<Video> {
+    fun videosFromUrl(origRequestUrl: String, origRequestHeader: Headers, name: String?): List<Video> {
         Log.d(tag, "Fetching videos from: $origRequestUrl")
         val host = origRequestUrl.toHttpUrl().host.substringBefore(".").proper()
         val latch = CountDownLatch(1)
@@ -76,18 +76,20 @@ class UniversalExtractor(private val client: OkHttpClient) {
             webView = null
         }
 
+        val prefix = name ?: host
+
         return when {
             "m3u8" in resultUrl -> {
                 Log.d(tag, "m3u8 URL: $resultUrl")
-                playlistUtils.extractFromHls(resultUrl, origRequestUrl, videoNameGen = { "$host: $it" })
+                playlistUtils.extractFromHls(resultUrl, origRequestUrl, videoNameGen = { "$prefix: $it" })
             }
             "mpd" in resultUrl -> {
                 Log.d(tag, "mpd URL: $resultUrl")
-                playlistUtils.extractFromDash(resultUrl, { it -> "$host: $it" }, referer = origRequestUrl)
+                playlistUtils.extractFromDash(resultUrl, { it -> "$prefix: $it" }, referer = origRequestUrl)
             }
             "mp4" in resultUrl -> {
                 Log.d(tag, "mp4 URL: $resultUrl")
-                Video(resultUrl, "$host: mp4", resultUrl, Headers.headersOf("referer", origRequestUrl)).let(::listOf)
+                Video(resultUrl, "$prefix: MP4", resultUrl, Headers.headersOf("referer", origRequestUrl)).let(::listOf)
             }
             else -> emptyList()
         }
@@ -121,6 +123,8 @@ class UniversalExtractor(private val client: OkHttpClient) {
                         downloadButton.click()
                     }
                 }
+                // Default jwplayer instance
+                try { jwplayer(0).play(); } catch {}
             }, 2500)
             """.trimIndent()
         }

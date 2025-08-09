@@ -26,9 +26,13 @@ class NoaExtractor(private val client: OkHttpClient, private val headers: Header
                     .drop(1)
                     .map {
                         val label =
-                            it.substringAfter("label").substringAfter(":\"").substringBefore('"')
+                            it.substringAfter("label", "")
+                                .substringAfter(":\"")
+                                .substringBefore('"')
+                                .ifEmpty { "Default" }
                         val videoUrl = it.substringAfter("file")
-                            .substringAfter(":\"")
+                            .substringAfter(":")
+                            .substringAfter('"')
                             .substringBefore('"')
                             .replace("\\", "")
                         Video(videoUrl, "$name - $label", videoUrl, headers)

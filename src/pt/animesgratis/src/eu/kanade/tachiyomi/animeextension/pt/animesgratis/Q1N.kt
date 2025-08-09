@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.bloggerextractor.BloggerExtractor
 import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
+import eu.kanade.tachiyomi.lib.m3u8server.M3u8Integration
 import eu.kanade.tachiyomi.lib.mixdropextractor.MixDropExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
@@ -16,6 +17,7 @@ import eu.kanade.tachiyomi.multisrc.dooplay.DooPlay
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
+import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Response
 import org.jsoup.nodes.Document
@@ -39,10 +41,10 @@ class Q1N : DooPlay(
 
     // ============================== Popular ===============================
     override fun popularAnimeSelector() = "div.items.featured article div.poster"
-    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/a/", headers)
+    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/animes/", headers)
 
     // =============================== Latest ===============================
-    override val latestUpdatesPath = "e"
+    override val latestUpdatesPath = "episodio"
 
     // =============================== Search ===============================
     override fun searchAnimeSelector() = "div.result-item article div.thumbnail > a"
@@ -123,11 +125,13 @@ class Q1N : DooPlay(
     private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
     private val mixDropExtractor by lazy { MixDropExtractor(client) }
     private val universalExtractor by lazy { UniversalExtractor(client) }
+    private val m3u8Integration by lazy { M3u8Integration(client) }
 
     private fun getPlayerVideos(player: Element): List<Video> {
         val name = player.selectFirst("span.title")!!.text().lowercase()
         val url = getPlayerUrl(player) ?: return emptyList()
         Log.d(tag, "Fetching videos from: $url")
+
         return when {
             "ruplay" in name -> ruplayExtractor.videosFromUrl(url)
             "streamwish" in name -> streamWishExtractor.videosFromUrl(url)
@@ -135,9 +139,15 @@ class Q1N : DooPlay(
             "mixdrop" in name -> mixDropExtractor.videoFromUrl(url)
             "streamtape" in name -> streamTapeExtractor.videosFromUrl(url)
             "noa" in name -> noaExtractor.videosFromUrl(url)
-            "mdplayer" in name -> noaExtractor.videosFromUrl(url, "MDPLAYER")
+            "mdplayer" in name -> noaExtractor.videosFromUrl(url, name)
+            "/antivirus3/" in url -> noaExtractor.videosFromUrl(url, name)
             "/player/" in url -> bloggerExtractor.videosFromUrl(url, headers)
-            else -> universalExtractor.videosFromUrl(url, headers)
+            "blogger.com" in url -> bloggerExtractor.videosFromUrl(url, headers)
+            else -> {
+                val videos = universalExtractor.videosFromUrl(url, headers, name)
+                // Process M3U8 videos through local server (automatic detection)
+                return runBlocking { m3u8Integration.processVideoList(videos) }
+            }
         }
     }
 
@@ -186,7 +196,7 @@ class Q1N : DooPlay(
 
     private fun Element.tryGetAttr(vararg attributeKeys: String): String? {
         val attributeKey = attributeKeys.first { hasAttr(it) }
-        return attributeKey?.let { attr(attributeKey) }
+        return attr(attributeKey)
     }
 
     override fun List<Video>.sort(): List<Video> {
