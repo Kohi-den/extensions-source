@@ -92,32 +92,49 @@ class KickAssAnime : ConfigurableAnimeSource, AnimeHttpSource() {
             .parseAs()
     }
 
+    // --- FIXED EPISODE RETRIEVAL LOGIC ---
     override suspend fun getEpisodeList(anime: SAnime): List<SEpisode> {
+        // Fetch what languages are available for this anime
         val languages = client.newCall(
             GET("$apiUrl${anime.url}/language"),
-        ).execute().parseAs<LanguagesDto>()
+        ).execute().parseAs<LanguagesDto>().result
+
         val prefLang = preferences.getString(PREF_AUDIO_LANG_KEY, PREF_AUDIO_LANG_DEFAULT)!!
-        val lang = languages.result.firstOrNull { it == prefLang } ?: PREF_AUDIO_LANG_DEFAULT
 
-        val first = getEpisodeResponse(anime, 1, lang)
-        val items = buildList {
-            addAll(first.result)
+        // Try preferred language first, then others
+        val langOrder = buildList {
+            add(prefLang)
+            addAll(languages.filter { it != prefLang })
+        }.distinct()
 
-            first.pages.drop(1).forEachIndexed { index, _ ->
-                addAll(getEpisodeResponse(anime, index + 2, lang).result)
+        var foundEpisodes: List<SEpisode>? = null
+
+        for (lang in langOrder) {
+            val firstResponse = runCatching { getEpisodeResponse(anime, 1, lang) }.getOrNull()
+            if (firstResponse == null || firstResponse.result.isEmpty()) continue
+
+            val items = buildList {
+                addAll(firstResponse.result)
+                firstResponse.pages.drop(1).forEachIndexed { idx, _ ->
+                    addAll(getEpisodeResponse(anime, idx + 2, lang).result)
+                }
+            }
+
+            if (items.isNotEmpty()) {
+                foundEpisodes = items.map {
+                    SEpisode.create().apply {
+                        name = "Ep. ${it.episode_string} - ${it.title}"
+                        url = "${anime.url}/ep-${it.episode_string}-${it.slug}"
+                        episode_number = it.episode_string.toFloatOrNull() ?: 0F
+                        scanlator = lang.getLocale()
+                    }
+                }.reversed()
+                break
             }
         }
 
-        val episodes = items.map {
-            SEpisode.create().apply {
-                name = "Ep. ${it.episode_string} - ${it.title}"
-                url = "${anime.url}/ep-${it.episode_string}-${it.slug}"
-                episode_number = it.episode_string.toFloatOrNull() ?: 0F
-                scanlator = lang.getLocale()
-            }
-        }
-
-        return episodes.reversed()
+        // If nothing was found, return empty list
+        return foundEpisodes ?: emptyList()
     }
 
     override fun episodeListParse(response: Response): List<SEpisode> {
@@ -329,6 +346,7 @@ class KickAssAnime : ConfigurableAnimeSource, AnimeHttpSource() {
             Pair("en-US", "English"),
             Pair("es-ES", "Spanish (España)"),
             Pair("ja-JP", "Japanese"),
+            Pair("ch-CH", "Chinese"),
         )
 
         private const val PREF_SERVER_KEY = "preferred_server"
@@ -339,7 +357,7 @@ class KickAssAnime : ConfigurableAnimeSource, AnimeHttpSource() {
         private const val PREF_DOMAIN_KEY = "preferred_domain"
         private const val PREF_DOMAIN_TITLE = "Preferred domain (requires app restart)"
         private const val PREF_DOMAIN_DEFAULT = "https://kaa.to"
-        private val PREF_DOMAIN_ENTRIES = arrayOf("kaa.to", "kaa.mx", "kaas.to")
+        private val PREF_DOMAIN_ENTRIES = arrayOf("kaa.to", "kaa.am")
         private val PREF_DOMAIN_ENTRY_VALUES = PREF_DOMAIN_ENTRIES.map { "https://$it" }.toTypedArray()
 
         private const val PREF_HOSTER_KEY = "hoster_selection"
