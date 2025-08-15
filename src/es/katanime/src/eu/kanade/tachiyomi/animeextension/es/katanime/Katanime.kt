@@ -3,9 +3,12 @@ package eu.kanade.tachiyomi.animeextension.es.katanime
 
 import android.app.Application
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animeextension.es.katanime.extractors.UnpackerExtractor
+import eu.kanade.tachiyomi.animeextension.es.katanime.model.CryptoDto
+import eu.kanade.tachiyomi.animeextension.es.katanime.model.EpisodeList
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -24,8 +27,8 @@ import eu.kanade.tachiyomi.lib.vidguardextractor.VidGuardExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parseAs
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import okhttp3.FormBody
 import okhttp3.Request
 import okhttp3.Response
 import uy.kohesive.injekt.Injekt
@@ -33,6 +36,7 @@ import uy.kohesive.injekt.api.get
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.ceil
 
 class Katanime : ConfigurableAnimeSource, AnimeHttpSource() {
 
@@ -43,6 +47,8 @@ class Katanime : ConfigurableAnimeSource, AnimeHttpSource() {
     override val lang = "es"
 
     override val supportsLatest = true
+
+    private val json = Json { ignoreUnknownKeys = true }
 
     private val preferences: SharedPreferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
@@ -126,14 +132,60 @@ class Katanime : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val jsoup = response.asJsoup()
-        return jsoup.select("#c_list .cap_list").map {
-            SEpisode.create().apply {
-                name = it.selectFirst(".entry-title-h2")?.ownText() ?: ""
-                episode_number = it.selectFirst(".entry-title-h2")?.ownText()?.substringAfter("Capítulo")?.trim()?.toFloat() ?: 0F
-                date_upload = it.selectFirst(".timeago")?.attr("datetime")?.toDate() ?: 0L
-                setUrlWithoutDomain(it.attr("abs:href"))
+        val paginationUrl = jsoup.selectFirst("._pagination")?.attr("data-url") ?: return emptyList()
+        val token = jsoup.selectFirst("[name=\"csrf-token\"]")?.attr("content") ?: return emptyList()
+
+        val (episodes, pages) = getPageEpisodes(paginationUrl, token, "1", jsoup.location())
+        val episodeList = episodes.toMutableList()
+
+        if (pages > 1) {
+            (2..pages).forEach { currentPage ->
+                runCatching {
+                    episodeList += getPageEpisodes(paginationUrl, token, currentPage.toString(), jsoup.location()).first
+                }
             }
-        }.reversed()
+        }
+        return episodeList.reversed()
+    }
+
+    private fun getPageEpisodes(paginationUrl: String, token: String, page: String, referer: String): Pair<MutableList<SEpisode>, Int> {
+        val episodeList = mutableListOf<SEpisode>()
+        var pages = 1
+        try {
+            val formBody = FormBody.Builder()
+                .add("_token", token)
+                .add("pagina", page)
+                .build()
+
+            val request = Request.Builder()
+                .url(paginationUrl)
+                .post(formBody)
+                .header("Origin", baseUrl)
+                .header("Referer", referer)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .build()
+            val jsonString = client.newCall(request).execute().body.string()
+
+            val detailResponse = json.decodeFromString<EpisodeList>(jsonString)
+
+            if (page == "1") {
+                pages = ((detailResponse.ep?.total?.toDouble() ?: 0.0) / (detailResponse.ep?.perPage?.toDouble() ?: 0.0)).ceilPage()
+            }
+
+            detailResponse.ep?.data?.forEach { ep ->
+                episodeList.add(
+                    SEpisode.create().apply {
+                        name = "Episodio ${ep.numero}"
+                        episode_number = ep.numero?.toFloatOrNull() ?: 0f
+                        date_upload = ep.createdAt?.toDate() ?: 0L
+                        setUrlWithoutDomain(ep.url!!)
+                    },
+                )
+            }
+        } catch (e: Exception) {
+            Log.i("Bruh getPageEpisodes", e.message.toString())
+        }
+        return episodeList to pages
     }
 
     override fun videoListParse(response: Response): List<Video> {
@@ -244,6 +296,8 @@ class Katanime : ConfigurableAnimeSource, AnimeHttpSource() {
         }.also(screen::addPreference)
     }
 
+    private fun Double.ceilPage(): Int = if (this % 1 == 0.0) this.toInt() else ceil(this).toInt()
+
     private fun String.toDate(): Long = runCatching { DATE_FORMATTER.parse(trim())?.time }.getOrNull() ?: 0L
 
     private fun org.jsoup.nodes.Element.getImageUrl(): String? {
@@ -260,11 +314,4 @@ class Katanime : ConfigurableAnimeSource, AnimeHttpSource() {
         if (!hasAttr(attrName)) return false
         return !attr(attrName).contains("data:image/")
     }
-
-    @Serializable
-    data class CryptoDto(
-        @SerialName("ct") var ct: String? = null,
-        @SerialName("iv") var iv: String? = null,
-        @SerialName("s") var s: String? = null,
-    )
 }

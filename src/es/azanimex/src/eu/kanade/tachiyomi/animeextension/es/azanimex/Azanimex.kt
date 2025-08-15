@@ -6,14 +6,14 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
+import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
-import kotlinx.serialization.json.Json
 import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
-import java.net.URLEncoder
+import org.jsoup.parser.Parser
 
 class Azanimex : ParsedAnimeHttpSource() {
 
@@ -65,62 +65,19 @@ class Azanimex : ParsedAnimeHttpSource() {
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
 
-        val mainUrl = document.select("a.su-button[href*='.az-animex.com']").firstOrNull()
-            ?.attr("href") ?: throw Exception("No se encontró la URL de los episodios")
+        val mainUrl = document.select("a.su-button[href*='filemoon']").firstOrNull()
+            ?.attr("href") ?: return emptyList()
 
-        val updatedUrl = updateDomainInUrl(mainUrl)
+        val folderDocument = client.newCall(GET(mainUrl)).execute().asJsoup()
 
-        val path = getPathFromUrl(updatedUrl)
-
-        val url1 = updatedUrl.substringAfter("https://").substringBefore("/")
-
-        val apiUrl = "https://$url1/api?path=$path"
-
-        val apiResponse = client.newCall(
-            GET(apiUrl, headers = headers),
-        ).execute()
-
-        return try {
-            val json = Json { ignoreUnknownKeys = true }
-            val responseBody = apiResponse.body.string()
-            val result = json.decodeFromString<OneDriveResponse>(responseBody)
-
-            val episodes = mutableListOf<SEpisode>()
-
-            result.file?.let { file ->
-                if (file.name.endsWith(".mp4")) {
-                    val episode = SEpisode.create().apply {
-                        val animeurl = "https://$url1/api/raw/?path=$path"
-                        name = file.name.substringAfter("] ").substringBeforeLast(" [")
-                        episode_number = parseEpisodeNumber(file.name)
-                        Log.d("Azanimex", "URL del anime: $animeurl")
-
-                        url = animeurl
-                    }
-                    episodes.add(episode)
-                }
+        return folderDocument.select(".folder-share li").map {
+            val title = it.select(".name h4").text().substringAfter("] ").substringBeforeLast(" [")
+            SEpisode.create().apply {
+                name = title
+                episode_number = parseEpisodeNumber(title)
+                url = it.select(".action a").attr("abs:href")
             }
-
-            result.folder?.value?.forEach { file ->
-                if (file.name.endsWith(".mp4")) {
-                    val episode = SEpisode.create().apply {
-                        val fileUrl = URLEncoder.encode(file.name, "UTF-8")
-                        val animeurl = "https://$url1/api/raw/?path=$path/$fileUrl"
-
-                        // Ajuste para extraer correctamente el nombre del episodio
-                        name = file.name.substringAfter("] ").substringBeforeLast(" [")
-                        episode_number = parseEpisodeNumber(file.name)
-                        Log.d("Azanimex", "URL del anime: $animeurl")
-
-                        url = animeurl
-                    }
-                    episodes.add(episode)
-                }
-            }
-            episodes.sortedByDescending { it.name }
-        } catch (e: Exception) {
-            throw Exception("Error al procesar los episodios: ${e.message}, Respuesta JSON: ")
-        }
+        }.reversed()
     }
 
     private fun parseEpisodeNumber(filename: String): Float {
@@ -128,27 +85,17 @@ class Azanimex : ParsedAnimeHttpSource() {
         return regex.find(filename)?.groupValues?.get(1)?.toFloatOrNull() ?: 0f
     }
 
-    private fun updateDomainInUrl(url: String): String {
-        return when {
-            url.contains("series-am") -> url.replace("series-am", "series-am2")
-            url.contains("series-nz") -> url.replace("series-nz", "series-nz2")
-            else -> url
-        }
-    }
-
     // =========================== Anime Details ===========================
     override fun animeDetailsParse(document: Document): SAnime {
         return SAnime.create().apply {
-            title = document.select("span.post-info:contains(Título) + br").first()?.previousSibling()?.toString()?.trim() ?: ""
-
             val infoMap = document.select("span.post-info").associate { span ->
                 val label = span.text().trim()
                 val value = span.nextSibling()?.toString()?.trim() ?: ""
                 label to value
             }
 
+            title = Parser.unescapeEntities(document.select("span.post-info:contains(Título) + br").first()?.previousSibling()?.toString()?.trim().orEmpty(), false)
             description = document.select("div.su-spoiler-content").first()?.text()?.trim() ?: ""
-
             genre = infoMap["Géneros"]?.substringBefore(".")
             author = infoMap["Estudio"]
             status = when (infoMap["Episodios"]?.substringAfter("de ")?.trim()) {
@@ -213,10 +160,11 @@ class Azanimex : ParsedAnimeHttpSource() {
         throw Exception("Not used")
     }
 
+    private val filemoonExtractor by lazy { FilemoonExtractor(client) }
+
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
         val videoUrl = episode.url
-        val video = Video(videoUrl, "az-animex", videoUrl)
-        return listOf(video)
+        return filemoonExtractor.videosFromUrl(videoUrl, prefix = "Filemoon:")
     }
 
     // =============================== Latest ===============================

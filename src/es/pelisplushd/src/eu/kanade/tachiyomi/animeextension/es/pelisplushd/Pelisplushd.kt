@@ -125,43 +125,51 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
             val apiResponse = client.newCall(GET(opt)).execute()
             if (apiResponse.isSuccessful) {
                 val docResponse = apiResponse.asJsoup()
-                val cryptoScript = docResponse.selectFirst("script:containsData(const dataLink)")?.data() ?: return emptyList()
-                val jsLinksMatch = cryptoScript.substringAfter("const dataLink =").substringBefore("];") + "]"
-                val decryptUtf8 = cryptoScript.contains("decryptLink(encrypted){")
-                var key = cryptoScript.substringAfter("CryptoJS.AES.decrypt(encrypted, '").substringBefore("')")
-                if (!decryptUtf8) {
-                    key = cryptoScript.substringAfter("decryptLink(server.link, '").substringBefore("'),")
-                }
-                json.decodeFromString<List<DataLinkDto>>(jsLinksMatch).flatMap { embed ->
-                    embed.sortedEmbeds.map { item ->
-                        val link = CryptoAES.decryptCbcIV(item?.link ?: "", key, decryptUtf8) ?: ""
-                        val lng = embed.videoLanguage ?: ""
-                        val server = item?.servername ?: ""
-                        (server to lng) to link
+                val cryptoScript = docResponse.selectFirst("script:containsData(const dataLink)")?.data()
+                if (!cryptoScript.isNullOrBlank()) {
+                    val jsLinksMatch = cryptoScript.substringAfter("const dataLink =").substringBefore("];") + "]"
+                    val decryptUtf8 = cryptoScript.contains("decryptLink(encrypted){")
+                    var key = cryptoScript.substringAfter("CryptoJS.AES.decrypt(encrypted, '").substringBefore("')")
+                    if (!decryptUtf8) {
+                        key = cryptoScript.substringAfter("decryptLink(server.link, '").substringBefore("'),")
                     }
-                }.flatMap {
-                    runCatching {
-                        val url = it.third.substringAfter("go_to_player('")
-                            .substringAfter("go_to_playerVast('")
-                            .substringBefore("?cover_url=")
-                            .substringBefore("')")
-                            .substringBefore("',")
-                            .substringBefore("?poster")
-                            .substringBefore("?c_poster=")
-                            .substringBefore("?thumb=")
-                            .substringBefore("#poster=")
-
-                        val realUrl = if (!REGEX_LINK.containsMatchIn(url)) {
-                            String(Base64.decode(url, Base64.DEFAULT))
-                        } else if (url.contains("?data=")) {
-                            val apiPageSoup = client.newCall(GET(url)).execute().asJsoup()
-                            apiPageSoup.selectFirst("iframe")?.attr("src") ?: ""
-                        } else {
-                            url
+                    json.decodeFromString<List<DataLinkDto>>(jsLinksMatch).flatMap { embed ->
+                        embed.sortedEmbeds.map { item ->
+                            val link = CryptoAES.decryptCbcIV(item?.link ?: "", key, decryptUtf8) ?: ""
+                            val lng = embed.videoLanguage ?: ""
+                            val server = item?.servername ?: ""
+                            (server to lng) to link
                         }
-                        serverVideoResolver(realUrl, it.second, it.first)
-                    }.getOrNull() ?: emptyList()
-                }.also(videoList::addAll)
+                    }.flatMap {
+                        runCatching {
+                            val url = it.third.substringAfter("go_to_player('")
+                                .substringAfter("go_to_playerVast('")
+                                .substringBefore("?cover_url=")
+                                .substringBefore("')")
+                                .substringBefore("',")
+                                .substringBefore("?poster")
+                                .substringBefore("?c_poster=")
+                                .substringBefore("?thumb=")
+                                .substringBefore("#poster=")
+
+                            val realUrl = if (!REGEX_LINK.containsMatchIn(url)) {
+                                String(Base64.decode(url, Base64.DEFAULT))
+                            } else if (url.contains("?data=")) {
+                                val apiPageSoup = client.newCall(GET(url)).execute().asJsoup()
+                                apiPageSoup.selectFirst("iframe")?.attr("src") ?: ""
+                            } else {
+                                url
+                            }
+                            serverVideoResolver(realUrl, it.second, it.first)
+                        }.getOrNull() ?: emptyList()
+                    }.also(videoList::addAll)
+                } else {
+                    docResponse.select("li[onclick]")
+                        .flatMap { fetchUrls(it.attr("onclick")) }
+                        .forEach { realUrl ->
+                            serverVideoResolver(realUrl).also(videoList::addAll)
+                        }
+                }
             }
         }
         return videoList.sort()
@@ -361,6 +369,15 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
     private fun Array<String>.any(url: String): Boolean = this.any { url.contains(it, ignoreCase = true) }
 
     infix fun <A, B> Pair<A, B>.to(c: String): Triple<A, B, String> = Triple(this.first, this.second, c)
+
+    fun fetchUrls(text: String?): List<String> {
+        if (text.isNullOrEmpty()) {
+            return listOf()
+        }
+        val linkRegex =
+            Regex("""(https?://(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&/=]*))""")
+        return linkRegex.findAll(text).map { it.value.trim().removeSurrounding("\"") }.toList()
+    }
 
     @Serializable
     data class DataLinkDto(
