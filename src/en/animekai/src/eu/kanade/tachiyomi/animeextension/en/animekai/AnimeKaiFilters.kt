@@ -3,51 +3,43 @@ package eu.kanade.tachiyomi.animeextension.en.animekai
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 
-class AnimeKaiFilters {
-
-    companion object {
-        fun getFilterList(): AnimeFilterList {
-            return AnimeFilterList(
-                listOf(
-                    TypeGroup(),
-                    GenreGroup(),
-                    StatusGroup(),
-                    SortSelector(),
-                ),
-            )
-        }
-
-        // Sort Options Definition
-        // These options are used in the SortSelector filter.
-        enum class SortOption(val displayName: String, val id: String) {
-            UPDATED_DATE("Updated Date", "updated_desc"),
-            RELEASE_DATE("Release Date", "release_date"),
-            END_DATE("End Date", "end_date"),
-            TRENDING("Trending", "trending"),
-            TITLE_AZ("Name A-Z", "title_az"),
-            AVG_SCORE("Average Score", "avg_score"),
-            MAL_SCORE("MAL Score", "mal_score"),
-            TOTAL_VIEWS("Total Views", "total_views"),
-            TOTAL_BOOKMARKS("Total Bookmarks", "total_bookmarks"),
-            TOTAL_EPISODES("Total Episodes", "total_episodes"),
-            ;
-
-            override fun toString(): String = displayName
-        }
+object AnimeKaiFilters {
+    fun getFilterList(): AnimeFilterList {
+        return AnimeFilterList(
+            listOf(
+                TypeGroup(),
+                GenreGroup(),
+                StatusGroup(),
+                SortSelector(),
+            ),
+        )
     }
 
-    // Sort Selector Definition
-    class SortSelector() : AnimeFilter.Select<SortOption>(
+    enum class SortOption(val displayName: String, val id: String) {
+        UPDATED_DATE("Updated Date", "updated_desc"),
+        RELEASE_DATE("Release Date", "release_date"),
+        END_DATE("End Date", "end_date"),
+        TRENDING("Trending", "trending"),
+        TITLE_AZ("Name A-Z", "title_az"),
+        AVG_SCORE("Average Score", "avg_score"),
+        MAL_SCORE("MAL Score", "mal_score"),
+        TOTAL_VIEWS("Total Views", "total_views"),
+        TOTAL_BOOKMARKS("Total Bookmarks", "total_bookmarks"),
+        TOTAL_EPISODES("Total Episodes", "total_episodes"),
+        ;
+
+        override fun toString(): String = displayName
+    }
+
+    class SortSelector : AnimeFilter.Select<SortOption>(
         name = "Sort By",
         values = SortOption.values(),
         state = SortOption.UPDATED_DATE.ordinal,
     )
 
-    // Filter Type Implementations
     class IdCheckBox(val id: String, name: String) : AnimeFilter.CheckBox(name)
     class IdTriState(val id: String, name: String) : AnimeFilter.TriState(name)
 
-    // Genre Filters Definition
     class GenreGroup : AnimeFilter.Group<IdTriState>(
         "Genres",
         listOf(
@@ -95,7 +87,6 @@ class AnimeKaiFilters {
         ),
     )
 
-    // Status Filter Definition
     class StatusGroup : AnimeFilter.Group<IdCheckBox>(
         "Status",
         listOf(

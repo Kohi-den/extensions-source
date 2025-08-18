@@ -40,6 +40,17 @@ class AnimeKai : AnimeHttpSource() {
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val searchParams = mutableListOf<String>()
         filters.forEach { filter ->
+            if (filter is AnimeKaiFilters.TypeGroup) {
+                filter.state.forEach { type ->
+                    when (type.state) {
+                        true -> searchParams.add("type[]=${type.id}")
+                        else -> {
+                            // Ignore false state
+                        }
+                    }
+                }
+                return@forEach
+            }
             if (filter is AnimeKaiFilters.GenreGroup) {
                 filter.state.forEach { genre ->
                     when (genre.state) {
@@ -52,9 +63,20 @@ class AnimeKai : AnimeHttpSource() {
                 }
                 return@forEach
             }
+            if (filter is AnimeKaiFilters.StatusGroup) {
+                filter.state.forEach { status ->
+                    when (status.state) {
+                        true -> searchParams.add("status[]=${status.id}")
+                        else -> {
+                            // Ignore false state
+                        }
+                    }
+                }
+                return@forEach
+            }
             if (filter is AnimeKaiFilters.SortSelector) {
                 val sortOrdinal = filter.state
-                val sortOption = AnimeKaiFilters.Companion.SortOption.values()[sortOrdinal]
+                val sortOption = AnimeKaiFilters.SortOption.values()[sortOrdinal]
                 searchParams.add("sort=${sortOption.id}")
                 return@forEach
             }
