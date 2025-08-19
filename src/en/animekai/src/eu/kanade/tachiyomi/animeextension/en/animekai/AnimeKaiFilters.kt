@@ -40,6 +40,8 @@ object AnimeKaiFilters {
     class IdCheckBox(val id: String, name: String) : AnimeFilter.CheckBox(name)
     class IdTriState(val id: String, name: String) : AnimeFilter.TriState(name)
 
+    // IDs pulled directly from the website's HTML source manually.
+    // If the IDs change, the filters will need to be updated.
     class GenreGroup : AnimeFilter.Group<IdTriState>(
         "Genres",
         listOf(
