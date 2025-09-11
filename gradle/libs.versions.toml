@@ -1,10 +1,13 @@
 [versions]
 agp_version = "8.2.1"
 coroutines_version = "1.7.1"
+duktapeAndroidVersion = "1.4.0"
 kotlin_version = "1.8.22"
 serialization_version = "1.5.1"
+firebaseCrashlyticsBuildtoolsVersion = "3.0.6"
 
 [libraries]
+duktape-android = { module = "com.squareup.duktape:duktape-android", version.ref = "duktapeAndroidVersion" }
 gradle-agp = { module = "com.android.tools.build:gradle", version.ref = "agp_version" }
 gradle-kotlin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin_version" }
 gradle-kotlin-serialization = { module = "org.jetbrains.kotlin:kotlin-serialization", version.ref = "kotlin_version" }
@@ -25,6 +28,7 @@ jsoup = { module = "org.jsoup:jsoup", version = "1.16.1" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version = "5.0.0-alpha.11" }
 quickjs = { module = "app.cash.quickjs:quickjs-android", version = "0.9.2" }
 jsunpacker = { module = "dev.datlag.jsunpacker:jsunpacker", version = "1.0.1" }
+firebase-crashlytics-buildtools = { group = "com.google.firebase", name = "firebase-crashlytics-buildtools", version.ref = "firebaseCrashlyticsBuildtoolsVersion" }
 
 [bundles]
 common = ["kotlin-stdlib", "injekt", "rxjava", "kotlin-protobuf", "kotlin-json", "jsoup", "okhttp", "aniyomi-lib", "quickjs", "coroutines-core", "coroutines-android"]
