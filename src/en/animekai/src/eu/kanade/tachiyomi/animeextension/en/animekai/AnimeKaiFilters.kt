@@ -16,7 +16,8 @@ object AnimeKaiFilters {
     }
 
     enum class SortOption(val displayName: String, val id: String) {
-        UPDATED_DATE("Updated Date", "updated_desc"),
+        MOST_RELEVANCE("Most Relevance", "most_relevance"),
+        UPDATED_DATE("Updated Date", "updated_date"),
         RELEASE_DATE("Release Date", "release_date"),
         END_DATE("End Date", "end_date"),
         TRENDING("Trending", "trending"),
@@ -34,7 +35,7 @@ object AnimeKaiFilters {
     class SortSelector : AnimeFilter.Select<SortOption>(
         name = "Sort By",
         values = SortOption.values(),
-        state = SortOption.UPDATED_DATE.ordinal,
+        state = SortOption.MOST_RELEVANCE.ordinal,
     )
 
     class IdCheckBox(val id: String, name: String) : AnimeFilter.CheckBox(name)

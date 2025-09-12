@@ -172,6 +172,9 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
 
         val episodes = episodeElements.map { ep ->
             SEpisode.create().apply {
+                val isFiller = ep.hasClass("filler")
+                val langs = ep.attr("langs")
+
                 episode_number = ep.attr("num").toFloatOrNull() ?: 0f
                 val episodeNum = ep.attr("num")
                 val episodeTitle = ep.selectFirst("span[data-jp]")?.text()
@@ -180,6 +183,12 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 } else {
                     "Episode $episodeNum"
                 }
+                val label = when (langs) {
+                    "3", "2" -> "Sub & Dub "
+                    "1" -> "Sub "
+                    else -> ""
+                } + if (isFiller) "Filler " else ""
+                scanlator = label.trim()
                 // instead of decoding the episode token, we set it in the url for later decoding upon fetching video links
                 val extractedToken = ep.attr("token")
                 setUrlWithoutDomain("${response.request.url}?token=$extractedToken")
