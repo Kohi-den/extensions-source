@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
+import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -286,7 +287,13 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val document = response.asJsoup()
         val animeElements = document.select("div.aitem")
 
-        val animes = animeElements.map { element ->
+        val animes = animeElements.mapNotNull { element ->
+            if (!preferences.getBoolean(PREF_ADULT_KEY, PREF_ADULT_DEFAULT)) {
+                // If user has disabled adult content, Skip anime if it has an adult tag
+                val tagsDiv = element.selectFirst("div.tags")
+                val isAdult = tagsDiv?.selectFirst("div.adult") != null
+                if (isAdult) return@mapNotNull null
+            }
             SAnime.create().apply {
                 val url = element.selectFirst("a")!!.attr("href")
                 setUrlWithoutDomain(url)
@@ -381,8 +388,22 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             }
         }
 
+        val adultPref = androidx.preference.SwitchPreferenceCompat(screen.context).apply {
+            key = PREF_ADULT_KEY
+            title = "Show Adult Anime"
+            summary = "Enable to show adult anime in search and popular (may contain NSFW content)"
+            setDefaultValue(PREF_ADULT_DEFAULT)
+            isChecked = preferences.getBoolean(key, PREF_ADULT_DEFAULT)
+            setOnPreferenceChangeListener { _, newValue ->
+                val isChecked = newValue as Boolean
+                preferences.edit().putBoolean(key, isChecked).commit()
+                true
+            }
+        }
+
         screen.addPreference(domainPref)
         screen.addPreference(customDomainPref)
+        screen.addPreference(adultPref)
         screen.addPreference(typePref)
     }
 
@@ -412,5 +433,8 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val PREF_ENABLED_TYPES_ENTRIES = arrayOf("Sub", "Dub")
         val PREF_ENABLED_TYPES_VALUES = arrayOf("sub", "dub")
         val PREF_ENABLED_TYPES_DEFAULT = setOf("sub", "dub")
+
+        val PREF_ADULT_KEY = "show_adult"
+        val PREF_ADULT_DEFAULT = false
     }
 }
