@@ -156,7 +156,6 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val document = response.asJsoup()
         val aniId = document.selectFirst("div.rate-box")?.attr("data-id")
             ?: throw Exception("animeID not found")
-        //Log.d("AnimeKai", "Extracted aniID: $aniId")
 
         // then use this url to make a request to get the token
         val token = get("https://ilovekai.simplepostrequest.workers.dev/?ilovefeet=$aniId").trim()
@@ -168,11 +167,8 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         // Parse the HTML fragment
         val episodesDoc = parseBodyFragment(resultHtml)
         val episodesDiv = episodesDoc.selectFirst("div.eplist.titles")
-        // Log.d("AnimeKai", "Parsed episodesDiv: $episodesDiv")
 
-        // Select all episode <a> elements
         val episodeElements = episodesDiv?.select("ul.range li > a[num][slug][token]") ?: emptyList()
-        // Log.d("AnimeKai", "Found ${episodeElements.size} episode elements")
 
         val episodes = episodeElements.map { ep ->
             SEpisode.create().apply {
@@ -189,29 +185,27 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 setUrlWithoutDomain("${response.request.url}?token=$extractedToken")
             }
         }
-        // Log.d("AnimeKai", "Returning ${episodes.size} episodes")
         return episodes.reversed()
     }
 
     // ============================ Video Links =============================
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
-        // Log.d("AnimeKai", "Starting getVideoList for episode: ${episode.name}, url: ${episode.url}")
         val urlParts = episode.url.split("?token=")
         val watchUrl = urlParts[0]
         val episodeToken = urlParts.getOrNull(1) ?: throw Exception("Token not found")
-        // Log.d("AnimeKai", "Parsed watchUrl: $watchUrl, episodeToken: $episodeToken")
+
 
         // Get the secondary token from the worker endpoint
         val secondaryToken = get("https://ilovekai.simplepostrequest.workers.dev/?ilovefeet=$episodeToken").trim()
-        // Log.d("AnimeKai", "Secondary token: $secondaryToken")
+
 
         // Fetch the episode server links list
         val resultHtml = getJsonValue(get("$baseUrl/ajax/links/list?token=$episodeToken&_=$secondaryToken", watchUrl), "result")
 
         val linksDoc = parseBodyFragment(resultHtml)
         val serverDivs = linksDoc.select("div.server-items")
-        // Log.d("AnimeKai", "Found ${serverDivs.size} server divs")
+
 
         val serverGroups = mutableListOf<EpisodeServerGroup>()
 
@@ -220,7 +214,6 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         for (serverDiv in serverDivs) {
             val type = serverDiv.attr("data-id")
             if (type !in enabledTypes) {
-                // Log.d("AnimeKai", "Skipping disabled type: $type")
                 continue
             }
             val serverSpans = serverDiv.select("span.server[data-lid]")
@@ -230,12 +223,12 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 val serverName = span.text()
                 val serverId = span.attr("data-lid")
                 val streamToken = get("https://ilovekai.simplepostrequest.workers.dev/?ilovefeet=$serverId").trim()
-                // Log.d("AnimeKai", "Stream token for server $serverName ($type): $streamToken"
+
                 val streamUrl = "$baseUrl/ajax/links/view?id=$serverId&_=$streamToken"
 
                 val streamJson = get(streamUrl, baseUrl)
                 val encodedLink = getJsonValue(streamJson, "result").trim()
-                // Log.d("AnimeKai", "encodedLink for $serverName: $encodedLink"
+
                 val decryptedJson = get("https://ilovekai.simplepostrequest.workers.dev/?ilovearmpits=$encodedLink")
                 val decryptedLink = getJsonValue(decryptedJson, "url").trim()
                 Log.d("AnimeKai", "Decrypted link for $serverName: $decryptedLink")
@@ -243,13 +236,11 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 val epServer = EpisodeServer(serverName, decryptedLink)
                 episodeServers.add(epServer)
 
-                // Log.d("AnimeKai", "Found episode source - Type: $type, Server Name: $serverName, Server ID: $serverId, Stream URL: $decryptedLink"
             }
             val serverGroup = EpisodeServerGroup(type, episodeServers)
             serverGroups.add(serverGroup)
         }
 
-        // Use new Extractor on the first available streamUrl for testing
         val extractor = Extractor(client)
         val videos = mutableListOf<Video>()
 
