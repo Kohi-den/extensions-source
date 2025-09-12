@@ -14,8 +14,11 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -23,6 +26,8 @@ import okhttp3.Response
 import org.jsoup.Jsoup.parseBodyFragment
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 
 class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
     override val name = "AnimeKai"
@@ -36,6 +41,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     override val client: OkHttpClient = network.client
+    private val universalExtractor = UniversalExtractor(client)
 
     override val lang = "en"
     override val supportsLatest = true
@@ -247,20 +253,20 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 val serverName = span.text()
                 val serverId = span.attr("data-lid")
                 val streamToken = get("https://ilovekai.simplepostrequest.workers.dev/?ilovefeet=$serverId").trim()
-                // Log.d("AnimeKai", "Stream token for server $serverName ($type): $streamToken")
+                // Log.d("AnimeKai", "Stream token for server $serverName ($type): $streamToken"
                 val streamUrl = "$baseUrl/ajax/links/view?id=$serverId&_=$streamToken"
 
                 val streamJson = get(streamUrl, baseUrl)
                 val encodedLink = getJsonValue(streamJson, "result").trim()
-                // Log.d("AnimeKai", "encodedLink for $serverName: $encodedLink")
+                // Log.d("AnimeKai", "encodedLink for $serverName: $encodedLink"
                 val decryptedJson = get("https://ilovekai.simplepostrequest.workers.dev/?ilovearmpits=$encodedLink")
                 val decryptedLink = getJsonValue(decryptedJson, "url").trim()
-                // Log.d("AnimeKai", "Decrypted link for $serverName: $decryptedLink")
+                // Log.d("AnimeKai", "Decrypted link for $serverName: $decryptedLink"
 
                 val epServer = EpisodeServer(serverName, decryptedLink)
                 episodeServers.add(epServer)
 
-                // Log.d("AnimeKai", "Found episode source - Type: $type, Server Name: $serverName, Server ID: $serverId, Stream URL: $decryptedLink")
+                // Log.d("AnimeKai", "Found episode source - Type: $type, Server Name: $serverName, Server ID: $serverId, Stream URL: $decryptedLink"
             }
             val serverGroup = EpisodeServerGroup(type, episodeServers)
             serverGroups.add(serverGroup)
@@ -274,9 +280,19 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             }
         }
 
+        // Use new Extractor on the first available streamUrl for testing
+        val extractor = Extractor(client)
+        val firstStreamUrl = serverGroups.firstOrNull()?.servers?.firstOrNull()?.streamUrl
+        if (firstStreamUrl != null) {
+            return withContext(Dispatchers.Main) {
+                suspendCoroutine { continuation ->
+                    extractor.extractVideosFromUrl(firstStreamUrl) { videos ->
+                        continuation.resume(videos)
+                    }
+                }
+            }
+        }
         return emptyList()
-
-
     }
 
     data class EpisodeServerGroup(
@@ -306,7 +322,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 val thumbnailUrl = element.select(".poster img").attr("data-src")
                 this.thumbnail_url = thumbnailUrl
 
-                // Log.v("AnimeKai", "Parsed Anime: $title, URL: $url, Thumbnail: $thumbnail_url")
+                // Log.v("AnimeKai", "Parsed Anime: $title, URL: $url, Thumbnail: $thumbnail_url"
             }
         }
 
