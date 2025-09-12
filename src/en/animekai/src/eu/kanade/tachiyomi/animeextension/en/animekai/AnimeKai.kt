@@ -159,7 +159,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
 
         // then use this url to make a request to get the token
         val token = get("https://ilovekai.simplepostrequest.workers.dev/?ilovefeet=$aniId").trim()
-        //Log.d("AnimeKai", "Extracted token: $token")
+        // Log.d("AnimeKai", "Extracted token: $token")
 
         // from that response, extract the token and make a request to get episodes
         val resultHtml = getJsonValue(get("$baseUrl/ajax/episodes/list?ani_id=$aniId&_=$token", response.request.url.toString()), "result")
@@ -195,17 +195,14 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val watchUrl = urlParts[0]
         val episodeToken = urlParts.getOrNull(1) ?: throw Exception("Token not found")
 
-
         // Get the secondary token from the worker endpoint
         val secondaryToken = get("https://ilovekai.simplepostrequest.workers.dev/?ilovefeet=$episodeToken").trim()
-
 
         // Fetch the episode server links list
         val resultHtml = getJsonValue(get("$baseUrl/ajax/links/list?token=$episodeToken&_=$secondaryToken", watchUrl), "result")
 
         val linksDoc = parseBodyFragment(resultHtml)
         val serverDivs = linksDoc.select("div.server-items")
-
 
         val serverGroups = mutableListOf<EpisodeServerGroup>()
 
@@ -235,7 +232,6 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
 
                 val epServer = EpisodeServer(serverName, decryptedLink)
                 episodeServers.add(epServer)
-
             }
             val serverGroup = EpisodeServerGroup(type, episodeServers)
             serverGroups.add(serverGroup)
