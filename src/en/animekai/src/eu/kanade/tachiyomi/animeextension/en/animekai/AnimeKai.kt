@@ -156,36 +156,14 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val document = response.asJsoup()
         val aniId = document.selectFirst("div.rate-box")?.attr("data-id")
             ?: throw Exception("animeID not found")
-        Log.d("AnimeKai", "Extracted aniID: $aniId")
+        //Log.d("AnimeKai", "Extracted aniID: $aniId")
 
         // then use this url to make a request to get the token
-        val tokenUrl = "https://ilovekai.simplepostrequest.workers.dev/?ilovefeet=$aniId"
-        val tokenRequest = Request.Builder()
-            .url(tokenUrl)
-            .headers(Headers.headersOf("Referer", response.request.url.toString()))
-            .build()
-        val tokenResponse = client.newCall(tokenRequest).execute()
-        val token = tokenResponse.body.string().trim()
-        Log.d("AnimeKai", "Extracted token: $token")
+        val token = get("https://ilovekai.simplepostrequest.workers.dev/?ilovefeet=$aniId").trim()
+        //Log.d("AnimeKai", "Extracted token: $token")
 
         // from that response, extract the token and make a request to get episodes
-        val episodesUrl = "$baseUrl/ajax/episodes/list?ani_id=$aniId&_=$token"
-        val episodesRequest = Request.Builder()
-            .url(episodesUrl)
-            .headers(Headers.headersOf("Referer", response.request.url.toString()))
-            .build()
-        val episodesResponse = client.newCall(episodesRequest).execute()
-        val episodesJson = episodesResponse.body.string()
-        Log.d("AnimeKai", "Episodes JSON Response: $episodesJson")
-
-        // Parse JSON and extract the 'result' field
-        val resultHtml = try {
-            org.json.JSONObject(episodesJson).getString("result")
-        } catch (e: Exception) {
-            Log.w("AnimeKai", "Failed to parse episodes JSON: ${e.message}")
-            ""
-        }
-        // Log.d("AnimeKai", "Extracted result HTML: $resultHtml")
+        val resultHtml = getJsonValue(get("$baseUrl/ajax/episodes/list?ani_id=$aniId&_=$token", response.request.url.toString()), "result")
 
         // Parse the HTML fragment
         val episodesDoc = parseBodyFragment(resultHtml)
@@ -194,7 +172,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
 
         // Select all episode <a> elements
         val episodeElements = episodesDiv?.select("ul.range li > a[num][slug][token]") ?: emptyList()
-        Log.d("AnimeKai", "Found ${episodeElements.size} episode elements")
+        // Log.d("AnimeKai", "Found ${episodeElements.size} episode elements")
 
         val episodes = episodeElements.map { ep ->
             SEpisode.create().apply {
@@ -211,23 +189,11 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 setUrlWithoutDomain("${response.request.url}?token=$extractedToken")
             }
         }
-        Log.d("AnimeKai", "Returning ${episodes.size} episodes")
+        // Log.d("AnimeKai", "Returning ${episodes.size} episodes")
         return episodes.reversed()
     }
 
     // ============================ Video Links =============================
-
-    private fun get(url: String, referer: String? = null): String {
-        val builder = Request.Builder().url(url)
-        if (referer != null) {
-            builder.headers(Headers.headersOf("Referer", referer))
-        }
-        return client.newCall(builder.build()).execute().body.string()
-    }
-
-    private fun getJsonValue(json: String, key: String): String {
-        return org.json.JSONObject(json).getString(key)
-    }
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
         // Log.d("AnimeKai", "Starting getVideoList for episode: ${episode.name}, url: ${episode.url}")
@@ -248,8 +214,15 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         // Log.d("AnimeKai", "Found ${serverDivs.size} server divs")
 
         val serverGroups = mutableListOf<EpisodeServerGroup>()
+
+        val enabledTypes = preferences.getStringSet(PREF_ENABLED_TYPES_KEY, PREF_ENABLED_TYPES_DEFAULT) ?: PREF_ENABLED_TYPES_DEFAULT
+
         for (serverDiv in serverDivs) {
             val type = serverDiv.attr("data-id")
+            if (type !in enabledTypes) {
+                // Log.d("AnimeKai", "Skipping disabled type: $type")
+                continue
+            }
             val serverSpans = serverDiv.select("span.server[data-lid]")
 
             val episodeServers = mutableListOf<EpisodeServer>()
@@ -265,7 +238,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 // Log.d("AnimeKai", "encodedLink for $serverName: $encodedLink"
                 val decryptedJson = get("https://ilovekai.simplepostrequest.workers.dev/?ilovearmpits=$encodedLink")
                 val decryptedLink = getJsonValue(decryptedJson, "url").trim()
-                // Log.d("AnimeKai", "Decrypted link for $serverName: $decryptedLink"
+                Log.d("AnimeKai", "Decrypted link for $serverName: $decryptedLink")
 
                 val epServer = EpisodeServer(serverName, decryptedLink)
                 episodeServers.add(epServer)
@@ -276,29 +249,29 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             serverGroups.add(serverGroup)
         }
 
-        // Log Server Groups and their servers
+        // Use new Extractor on the first available streamUrl for testing
+        val extractor = Extractor(client)
+        val videos = mutableListOf<Video>()
+
         serverGroups.forEach { group ->
-            Log.d("AnimeKai", "Type: ${group.type}")
+            val typeDisplay = getTypeDisplayName(group.type)
             group.servers.forEach { server ->
-                Log.d("AnimeKai", "  Server: ${server.serverName}, URL: ${server.streamUrl}")
+                videos.addAll(
+                    withContext(Dispatchers.Main) {
+                        suspendCoroutine { continuation ->
+                            extractor.extractVideosFromUrl(
+                                url = server.streamUrl,
+                                prefix = "$typeDisplay | ${server.serverName} | ",
+                            ) { vids ->
+                                continuation.resume(vids)
+                            }
+                        }
+                    },
+                )
             }
         }
 
-        // Use new Extractor on the first available streamUrl for testing
-        val extractor = Extractor(client)
-        val firstGroup = serverGroups.firstOrNull()
-        val firstServer = firstGroup?.servers?.firstOrNull()
-        val firstStreamUrl = firstServer?.streamUrl
-        if (firstStreamUrl != null) {
-            return withContext(Dispatchers.Main) {
-                suspendCoroutine { continuation ->
-                    extractor.extractVideosFromUrl(url = firstStreamUrl, prefix = "${firstGroup.type.capitalize()} - ${firstServer.serverName} - ") { videos ->
-                        continuation.resume(videos)
-                    }
-                }
-            }
-        }
-        return emptyList()
+        return videos
     }
 
     data class EpisodeServerGroup(
@@ -338,6 +311,18 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         )
     }
 
+    private fun get(url: String, referer: String? = null): String {
+        val builder = Request.Builder().url(url)
+        if (referer != null) {
+            builder.headers(Headers.headersOf("Referer", referer))
+        }
+        return client.newCall(builder.build()).execute().body.string()
+    }
+
+    private fun getJsonValue(json: String, key: String): String {
+        return org.json.JSONObject(json).getString(key)
+    }
+
     // ============================== Preferences ===============================
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
@@ -353,6 +338,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 val value = newValue as String
                 summary = value
                 preferences.edit().putString(key, value).commit()
+                true
             }
         }
 
@@ -372,11 +358,46 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 customDomainPref.setVisible(entry == "custom")
 
                 preferences.edit().putString(key, entry).commit()
+                true
+            }
+        }
+
+        val typePref = androidx.preference.MultiSelectListPreference(screen.context).apply {
+            key = PREF_ENABLED_TYPES_KEY
+            title = PREF_ENABLED_TYPES_TITLE
+            entries = PREF_ENABLED_TYPES_ENTRIES
+            entryValues = PREF_ENABLED_TYPES_VALUES
+            setDefaultValue(PREF_ENABLED_TYPES_DEFAULT) // Only HardSub and Dub by default
+            // Helper to map values to entries
+            fun getDisplayNames(selected: Set<String>?): String {
+                if (selected == null) return ""
+                return PREF_ENABLED_TYPES_VALUES.mapIndexedNotNull { idx, value ->
+                    if (selected.contains(value)) PREF_ENABLED_TYPES_ENTRIES[idx] else null
+                }.joinToString(", ")
+            }
+            val selected = preferences.getStringSet(key, PREF_ENABLED_TYPES_DEFAULT)
+            summary = getDisplayNames(selected)
+            setOnPreferenceChangeListener { _, newValue ->
+                val selected = newValue as Set<String>
+                summary = getDisplayNames(selected)
+                preferences.edit().putStringSet(key, selected).commit()
+                true
             }
         }
 
         screen.addPreference(domainPref)
         screen.addPreference(customDomainPref)
+        screen.addPreference(typePref)
+    }
+
+    // Helper to map type to display name
+    private fun getTypeDisplayName(type: String): String {
+        return when (type) {
+            "sub" -> "Subtitled"
+            "dub" -> "Dubbed"
+            "softsub" -> "Soft Sub"
+            else -> type.replaceFirstChar { it.uppercase() }
+        }
     }
 
     companion object {
@@ -389,5 +410,11 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val PREF_CUSTOM_DOMAIN_KEY = "custom_domain"
         val PREF_CUSTOM_DOMAIN_TITLE = "Custom Domain (requires app restart)"
         val PREF_CUSTOM_DOMAIN_DEFAULT = "https://animekai.to"
+
+        val PREF_ENABLED_TYPES_KEY = "enabled_types"
+        val PREF_ENABLED_TYPES_TITLE = "Enabled Video Types (Less is faster)"
+        val PREF_ENABLED_TYPES_ENTRIES = arrayOf("Sub", "Dub")
+        val PREF_ENABLED_TYPES_VALUES = arrayOf("sub", "dub")
+        val PREF_ENABLED_TYPES_DEFAULT = setOf("sub", "dub")
     }
 }
