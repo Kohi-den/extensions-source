@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.SharedPreferences
 import android.util.Log
 import android.widget.Toast
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -14,7 +15,6 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
-import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import kotlinx.coroutines.Dispatchers
@@ -37,11 +37,15 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     override val baseUrl by lazy {
-        preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!!
+        val selected = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT) ?: PREF_DOMAIN_DEFAULT
+        if (selected == "custom") {
+            preferences.getString(PREF_CUSTOM_DOMAIN_KEY, PREF_CUSTOM_DOMAIN_DEFAULT) ?: PREF_CUSTOM_DOMAIN_DEFAULT
+        } else {
+            selected
+        }
     }
 
     override val client: OkHttpClient = network.client
-    private val universalExtractor = UniversalExtractor(client)
 
     override val lang = "en"
     override val supportsLatest = true
@@ -282,11 +286,13 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
 
         // Use new Extractor on the first available streamUrl for testing
         val extractor = Extractor(client)
-        val firstStreamUrl = serverGroups.firstOrNull()?.servers?.firstOrNull()?.streamUrl
+        val firstGroup = serverGroups.firstOrNull()
+        val firstServer = firstGroup?.servers?.firstOrNull()
+        val firstStreamUrl = firstServer?.streamUrl
         if (firstStreamUrl != null) {
             return withContext(Dispatchers.Main) {
                 suspendCoroutine { continuation ->
-                    extractor.extractVideosFromUrl(firstStreamUrl) { videos ->
+                    extractor.extractVideosFromUrl(url = firstStreamUrl, prefix = "${firstGroup.type.capitalize()} - ${firstServer.serverName} - ") { videos ->
                         continuation.resume(videos)
                     }
                 }
@@ -335,6 +341,21 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
     // ============================== Preferences ===============================
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        val customDomainPref = EditTextPreference(screen.context).apply {
+            key = PREF_CUSTOM_DOMAIN_KEY
+            title = PREF_CUSTOM_DOMAIN_TITLE
+            dialogTitle = PREF_CUSTOM_DOMAIN_TITLE
+            setDefaultValue(PREF_CUSTOM_DOMAIN_DEFAULT)
+            summary = preferences.getString(key, PREF_CUSTOM_DOMAIN_DEFAULT)
+            setVisible(preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT) == "custom")
+            setOnPreferenceChangeListener { _, newValue ->
+                Toast.makeText(screen.context, "App Restart Required", Toast.LENGTH_SHORT).show()
+                val value = newValue as String
+                summary = value
+                preferences.edit().putString(key, value).commit()
+            }
+        }
+
         val domainPref = ListPreference(screen.context).apply {
             key = PREF_DOMAIN_KEY
             title = PREF_DOMAIN_TITLE
@@ -347,17 +368,26 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 val selected = newValue as String
                 val index = findIndexOfValue(selected)
                 val entry = entryValues[index] as String
+
+                customDomainPref.setVisible(entry == "custom")
+
                 preferences.edit().putString(key, entry).commit()
             }
         }
+
         screen.addPreference(domainPref)
+        screen.addPreference(customDomainPref)
     }
 
     companion object {
         val PREF_DOMAIN_KEY = "preffered_domain"
         val PREF_DOMAIN_TITLE = "Preferred Domain (requires app restart)"
         val PREF_DOMAIN_DEFAULT = "https://animekai.bz"
-        val PREF_DOMAIN_ENTRIES = arrayOf("animekai.to", "animekai.bz", "animekai.cc", "animekai.ac")
-        val PREF_DOMAIN_VALUES = arrayOf("https://animekai.to", "https://animekai.bz", "https://animekai.cc", "https://animekai.ac")
+        val PREF_DOMAIN_ENTRIES = arrayOf("animekai.to", "animekai.bz", "animekai.cc", "animekai.ac", "Custom")
+        val PREF_DOMAIN_VALUES = arrayOf("https://animekai.to", "https://animekai.bz", "https://animekai.cc", "https://animekai.ac", "custom")
+
+        val PREF_CUSTOM_DOMAIN_KEY = "custom_domain"
+        val PREF_CUSTOM_DOMAIN_TITLE = "Custom Domain (requires app restart)"
+        val PREF_CUSTOM_DOMAIN_DEFAULT = "https://animekai.to"
     }
 }

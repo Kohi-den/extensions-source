@@ -19,9 +19,11 @@ class Extractor(private val client: OkHttpClient) {
     @SuppressLint("SetJavaScriptEnabled")
     fun extractVideosFromUrl(
         url: String,
+        prefix: String = "",
         onResult: (List<Video>) -> Unit,
     ) {
         val videoResults = mutableListOf<Video>()
+        var masterPlaylistFound = false
 
         val webView = WebView(context)
         webView.settings.javaScriptEnabled = true
@@ -33,8 +35,40 @@ class Extractor(private val client: OkHttpClient) {
             ): android.webkit.WebResourceResponse? {
                 val reqUrl = request?.url.toString()
                 if (reqUrl.endsWith(".m3u8")) {
-                    val vid = Video(url, "Unknown quality", reqUrl)
-                    videoResults.add(vid)
+                    // If master playlist already found, ignore further .m3u8 requests
+                    if (masterPlaylistFound) return super.shouldInterceptRequest(view, request)
+                    try {
+                        val response = client.newCall(okhttp3.Request.Builder().url(reqUrl).build()).execute()
+                        val playlistContent = response.body.string()
+                        if (playlistContent.contains("#EXT-X-STREAM-INF")) {
+                            // Master playlist: parse qualities
+                            masterPlaylistFound = true
+                            videoResults.clear() // Discard any previously added unknowns
+                            val lines = playlistContent.lines()
+                            var currentQuality: String? = null
+                            val pattern = Regex("RESOLUTION=(\\d+)x(\\d+)")
+                            for (i in lines.indices) {
+                                val line = lines[i]
+                                if (line.startsWith("#EXT-X-STREAM-INF")) {
+                                    val match = pattern.find(line)
+                                    if (match != null) {
+                                        val height = match.groupValues[2]
+                                        currentQuality = "${height}p"
+                                    }
+                                    val streamUrl = lines.getOrNull(i + 1)?.trim()
+                                    if (!streamUrl.isNullOrEmpty() && currentQuality != null) {
+                                        val absoluteUrl = if (streamUrl.startsWith("http")) streamUrl else reqUrl.substringBeforeLast("/") + "/" + streamUrl
+                                        videoResults.add(Video(reqUrl, prefix + currentQuality, absoluteUrl))
+                                    }
+                                }
+                            }
+                        } else {
+                            // Not a master playlist, fallback
+                            videoResults.add(Video(url, prefix + "Unknown quality", reqUrl))
+                        }
+                    } catch (e: Exception) {
+                        videoResults.add(Video(url, prefix + "Unknown quality", reqUrl))
+                    }
                 }
                 return super.shouldInterceptRequest(view, request)
             }
