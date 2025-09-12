@@ -6,6 +6,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
+import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -129,7 +130,11 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val document = response.asJsoup()
         return SAnime.create().apply {
             // Title
-            title = document.selectFirst("h1.title")?.text() ?: ""
+            if (preferences.getString(PREF_TITLE_KEY, PREF_TITLE_DEFAULT) == "en") {
+                title = document.selectFirst("h1.title")?.text() ?: ""
+            } else {
+                title = document.selectFirst("h1.title")?.attr("data-jp") ?: ""
+            }
             // Poster/Thumbnail
             thumbnail_url = document.selectFirst(".poster img")?.attr("src")
             // Description (main)
@@ -297,10 +302,12 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             SAnime.create().apply {
                 val url = element.selectFirst("a")!!.attr("href")
                 setUrlWithoutDomain(url)
-
                 val titleElement = element.selectFirst("a.title")
-                this.title = titleElement?.attr("title") ?: ""
-
+                if (preferences.getString(PREF_TITLE_KEY, PREF_TITLE_DEFAULT) == "en") {
+                    this.title = titleElement?.attr("title") ?: ""
+                } else {
+                    this.title = titleElement?.attr("data-jp") ?: ""
+                }
                 val thumbnailUrl = element.select(".poster img").attr("data-src")
                 this.thumbnail_url = thumbnailUrl
 
@@ -365,7 +372,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             }
         }
 
-        val typePref = androidx.preference.MultiSelectListPreference(screen.context).apply {
+        val typePref = MultiSelectListPreference(screen.context).apply {
             key = PREF_ENABLED_TYPES_KEY
             title = PREF_ENABLED_TYPES_TITLE
             entries = PREF_ENABLED_TYPES_ENTRIES
@@ -388,9 +395,9 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             }
         }
 
-        val adultPref = androidx.preference.SwitchPreferenceCompat(screen.context).apply {
+        val adultPref = SwitchPreferenceCompat(screen.context).apply {
             key = PREF_ADULT_KEY
-            title = "Show Adult Anime"
+            title = PREF_ADULT_TITLE
             summary = "Enable to show adult anime in search and popular (may contain NSFW content)"
             setDefaultValue(PREF_ADULT_DEFAULT)
             isChecked = preferences.getBoolean(key, PREF_ADULT_DEFAULT)
@@ -401,10 +408,25 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             }
         }
 
+        val titlePref = ListPreference(screen.context).apply {
+            key = PREF_TITLE_KEY
+            title = PREF_TITLE_TITLE
+            entries = PREF_TITLE_ENTRIES
+            entryValues = PREF_TITLE_VALUES
+            setDefaultValue(PREF_TITLE_DEFAULT)
+            summary = "%s"
+            setOnPreferenceChangeListener { _, newValue ->
+                val selected = newValue as String
+                preferences.edit().putString(key, selected).commit()
+                true
+            }
+        }
+
         screen.addPreference(domainPref)
         screen.addPreference(customDomainPref)
         screen.addPreference(adultPref)
         screen.addPreference(typePref)
+        screen.addPreference(titlePref)
     }
 
     // Helper to map type to display name
@@ -435,6 +457,13 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val PREF_ENABLED_TYPES_DEFAULT = setOf("sub", "dub")
 
         val PREF_ADULT_KEY = "show_adult"
+        val PREF_ADULT_TITLE = "Show Adult Anime"
         val PREF_ADULT_DEFAULT = false
+
+        val PREF_TITLE_KEY = "title_preference"
+        val PREF_TITLE_TITLE = "Title Display Preference"
+        val PREF_TITLE_ENTRIES = arrayOf("English", "Romaji")
+        val PREF_TITLE_VALUES = arrayOf("en", "romaji")
+        val PREF_TITLE_DEFAULT = "en"
     }
 }
