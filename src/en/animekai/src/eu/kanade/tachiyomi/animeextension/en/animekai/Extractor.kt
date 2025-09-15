@@ -89,6 +89,20 @@ class Extractor(private val client: OkHttpClient) {
             }
         }
 
-        webView.loadUrl(url)
+        // Instead of loading the URL directly, embed it in an iframe with the correct base URL
+        val html = """
+            <html style='height:100%;margin:0;padding:0;'>
+              <body style='height:100%;margin:0;padding:0;'>
+                <iframe src='$url' style='width:100vw;height:100vh;border:none;'></iframe>
+              </body>
+            </html>
+        """
+        webView.loadDataWithBaseURL(
+            "https://animekai.to", // base URL (referer)
+            html,
+            "text/html",
+            "UTF-8",
+            null,
+        )
     }
 }
