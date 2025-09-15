@@ -279,7 +279,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     data class EpisodeServerGroup(
-        val type: String, // "sub", "dub"
+        val type: String, // "sub", "dub", "softsub"
         val servers: List<EpisodeServer>,
     )
 
@@ -496,6 +496,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         return when (type) {
             "sub" -> "Subtitled"
             "dub" -> "Dubbed"
+            "softsub" -> "Softsubed"
             else -> type.replaceFirstChar { it.uppercase() }
         }
     }
@@ -517,9 +518,9 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
 
         val PREF_ENABLED_TYPES_KEY = "enabled_types"
         val PREF_ENABLED_TYPES_TITLE = "Enabled Video Types (Less is faster)"
-        val PREF_ENABLED_TYPES_ENTRIES = arrayOf("Sub", "Dub")
-        val PREF_ENABLED_TYPES_VALUES = arrayOf("sub", "dub")
-        val PREF_ENABLED_TYPES_DEFAULT = setOf("sub", "dub")
+        val PREF_ENABLED_TYPES_ENTRIES = arrayOf("Sub", "Dub", "Soft Sub")
+        val PREF_ENABLED_TYPES_VALUES = arrayOf("sub", "dub", "softsub")
+        val PREF_ENABLED_TYPES_DEFAULT = setOf("sub", "dub", "softsub")
 
         val PREF_ADULT_KEY = "show_adult"
         val PREF_ADULT_TITLE = "Show Adult Anime"
@@ -539,8 +540,8 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
 
         val PREF_SUB_KEY = "preferred_sub"
         val PREF_SUB_TITLE = "Preferred Sub/Dub"
-        val PREF_SUB_ENTRIES = arrayOf("Sub", "Dub")
-        val PREF_SUB_VALUES = arrayOf("Subtitled", "Dubbed")
+        val PREF_SUB_ENTRIES = arrayOf("Sub", "Dub", "Soft Sub")
+        val PREF_SUB_VALUES = arrayOf("Subtitled", "Dubbed", "Softsubed")
         val PREF_SUB_DEFAULT = "Subtitled"
 
         val PREF_SERVER_KEY = "preferred_server"

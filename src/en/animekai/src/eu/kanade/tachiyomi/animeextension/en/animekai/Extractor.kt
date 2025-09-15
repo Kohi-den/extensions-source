@@ -4,9 +4,11 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import okhttp3.OkHttpClient
 import uy.kohesive.injekt.injectLazy
@@ -23,6 +25,8 @@ class Extractor(private val client: OkHttpClient) {
         onResult: (List<Video>) -> Unit,
     ) {
         val videoResults = mutableListOf<Video>()
+        val subtitleResults = mutableListOf<Track>()
+
         var masterPlaylistFound = false
 
         val webView = WebView(context)
@@ -69,6 +73,11 @@ class Extractor(private val client: OkHttpClient) {
                     } catch (e: Exception) {
                         videoResults.add(Video(url, prefix + "Unknown quality", reqUrl))
                     }
+                } else if (reqUrl.endsWith(".vtt") && !reqUrl.contains("thumbnails", ignoreCase = true)) {
+                    // Subtitle file
+                    val lang = extractLabelFromUrl(reqUrl)
+                    Log.d("AnimeKai", "Found subtitle: $lang -> $reqUrl")
+                    subtitleResults.add(Track(reqUrl, lang))
                 }
                 return super.shouldInterceptRequest(view, request)
             }
@@ -83,6 +92,20 @@ class Extractor(private val client: OkHttpClient) {
                 """
                 view?.evaluateJavascript(js, null)
                 handler.postDelayed({
+                    if (subtitleResults.isNotEmpty()) {
+                        // Attach a copy of subtitles to each video by constructing new Video objects
+                        for (i in videoResults.indices) {
+                            val v = videoResults[i]
+                            videoResults[i] = Video(
+                                url = v.url,
+                                quality = v.quality,
+                                videoUrl = v.videoUrl,
+                                headers = v.headers,
+                                subtitleTracks = subtitleResults.toList(),
+                                audioTracks = v.audioTracks,
+                            )
+                        }
+                    }
                     onResult(videoResults)
                     view?.destroy()
                 }, 2000)
@@ -104,5 +127,34 @@ class Extractor(private val client: OkHttpClient) {
             "UTF-8",
             null,
         )
+    }
+
+    // Helper to extract language label from subtitle URL
+    private fun extractLabelFromUrl(url: String): String {
+        val file = url.substringAfterLast("/")
+        return when (val code = file.substringBefore("_").lowercase()) {
+            "eng" -> "English"
+            "ger", "deu" -> "German"
+            "spa" -> "Spanish"
+            "fre", "fra" -> "French"
+            "ita" -> "Italian"
+            "jpn" -> "Japanese"
+            "chi", "zho" -> "Chinese"
+            "kor" -> "Korean"
+            "rus" -> "Russian"
+            "ara" -> "Arabic"
+            "hin" -> "Hindi"
+            "por" -> "Portuguese"
+            "vie" -> "Vietnamese"
+            "pol" -> "Polish"
+            "ukr" -> "Ukrainian"
+            "swe" -> "Swedish"
+            "ron", "rum" -> "Romanian"
+            "ell", "gre" -> "Greek"
+            "hun" -> "Hungarian"
+            "fas", "per" -> "Persian"
+            "tha" -> "Thai"
+            else -> code.uppercase()
+        }
     }
 }
