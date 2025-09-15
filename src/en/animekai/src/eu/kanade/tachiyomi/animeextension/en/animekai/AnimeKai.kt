@@ -432,6 +432,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             setDefaultValue(PREF_TITLE_DEFAULT)
             summary = "%s"
             setOnPreferenceChangeListener { _, newValue ->
+                Toast.makeText(screen.context, "Clear source database to reload all titles.", Toast.LENGTH_SHORT).show()
                 val selected = newValue as String
                 preferences.edit().putString(key, selected).apply()
                 true
