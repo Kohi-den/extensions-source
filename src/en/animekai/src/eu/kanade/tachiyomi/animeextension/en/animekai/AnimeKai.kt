@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.animeextension.en.animekai
 
 import android.app.Application
 import android.content.SharedPreferences
-import android.util.Log
 import android.widget.Toast
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
@@ -164,7 +163,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             ?: throw Exception("animeID not found")
 
         // then use this url to make a request to get the token
-        val token = get("https://ilovekai.simplepostrequest.workers.dev/?ilovefeet=$aniId").trim()
+        val token = get("${DECODE1_URL}$aniId").trim()
         // Log.d("AnimeKai", "Extracted token: $token")
 
         // from that response, extract the token and make a request to get episodes
@@ -211,7 +210,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val episodeToken = urlParts.getOrNull(1) ?: throw Exception("Token not found")
 
         // Get the secondary token from the worker endpoint
-        val secondaryToken = get("https://ilovekai.simplepostrequest.workers.dev/?ilovefeet=$episodeToken").trim()
+        val secondaryToken = get("${DECODE1_URL}$episodeToken").trim()
 
         // Fetch the episode server links list
         val resultHtml = getJsonValue(get("$baseUrl/ajax/links/list?token=$episodeToken&_=$secondaryToken", watchUrl), "result")
@@ -222,10 +221,12 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val serverGroups = mutableListOf<EpisodeServerGroup>()
 
         val enabledTypes = preferences.getStringSet(PREF_ENABLED_TYPES_KEY, PREF_ENABLED_TYPES_DEFAULT) ?: PREF_ENABLED_TYPES_DEFAULT
-
+        // Log.d("AnimeKai", "Enabled types: $enabledTypes")
         for (serverDiv in serverDivs) {
             val type = serverDiv.attr("data-id")
+            // Log.d("AnimeKai", "Found server type: $type")
             if (type !in enabledTypes) {
+                // Log.d("AnimeKai", "Skipping: $type")
                 continue
             }
             val serverSpans = serverDiv.select("span.server[data-lid]")
@@ -234,16 +235,17 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             for (span in serverSpans) {
                 val serverName = span.text()
                 val serverId = span.attr("data-lid")
-                val streamToken = get("https://ilovekai.simplepostrequest.workers.dev/?ilovefeet=$serverId").trim()
+                val streamToken = get("${DECODE1_URL}$serverId").trim()
 
                 val streamUrl = "$baseUrl/ajax/links/view?id=$serverId&_=$streamToken"
 
                 val streamJson = get(streamUrl, baseUrl)
                 val encodedLink = getJsonValue(streamJson, "result").trim()
 
-                val decryptedJson = get("https://ilovekai.simplepostrequest.workers.dev/?ilovearmpits=$encodedLink")
+                // Log.d("AnimeKai", "Encoded link for $serverName: $encodedLink")
+                val decryptedJson = get("${DECODE2_URL}$encodedLink")
                 val decryptedLink = getJsonValue(decryptedJson, "url").trim()
-                Log.d("AnimeKai", "Decrypted link for $serverName: $decryptedLink")
+                // Log.d("AnimeKai", "Decrypted link for $serverName: $decryptedLink")
 
                 val epServer = EpisodeServer(serverName, decryptedLink)
                 episodeServers.add(epServer)
@@ -277,7 +279,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     data class EpisodeServerGroup(
-        val type: String, // "sub", "softsub", "dub"
+        val type: String, // "sub", "dub"
         val servers: List<EpisodeServer>,
     )
 
@@ -285,6 +287,20 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val serverName: String,
         val streamUrl: String,
     )
+
+    // Video list sort
+    override fun List<Video>.sort(): List<Video> {
+        val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
+        val type = preferences.getString(PREF_SUB_KEY, PREF_SUB_DEFAULT)!!
+        val server = preferences.getString(PREF_SERVER_KEY, PREF_SERVER_DEFAULT)!!
+        return sortedWith(
+            compareBy(
+                { it.quality.contains(quality) },
+                { it.quality.contains(type) },
+                { it.quality.contains(server) },
+            ),
+        ).reversed()
+    }
 
     // ============================== Extension Functions ===============================
 
@@ -347,7 +363,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 Toast.makeText(screen.context, "App Restart Required", Toast.LENGTH_SHORT).show()
                 val value = newValue as String
                 summary = value
-                preferences.edit().putString(key, value).commit()
+                preferences.edit().putString(key, value).apply()
                 true
             }
         }
@@ -367,7 +383,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
 
                 customDomainPref.setVisible(entry == "custom")
 
-                preferences.edit().putString(key, entry).commit()
+                preferences.edit().putString(key, entry).apply()
                 true
             }
         }
@@ -390,7 +406,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             setOnPreferenceChangeListener { _, newValue ->
                 val selected = newValue as Set<String>
                 summary = getDisplayNames(selected)
-                preferences.edit().putStringSet(key, selected).commit()
+                preferences.edit().putStringSet(key, selected).apply()
                 true
             }
         }
@@ -403,7 +419,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             isChecked = preferences.getBoolean(key, PREF_ADULT_DEFAULT)
             setOnPreferenceChangeListener { _, newValue ->
                 val isChecked = newValue as Boolean
-                preferences.edit().putBoolean(key, isChecked).commit()
+                preferences.edit().putBoolean(key, isChecked).apply()
                 true
             }
         }
@@ -417,7 +433,49 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             summary = "%s"
             setOnPreferenceChangeListener { _, newValue ->
                 val selected = newValue as String
-                preferences.edit().putString(key, selected).commit()
+                preferences.edit().putString(key, selected).apply()
+                true
+            }
+        }
+
+        val qualityPref = ListPreference(screen.context).apply {
+            key = PREF_QUALITY_KEY
+            title = PREF_QUALITY_TITLE
+            entries = PREF_QUALITY_ENTRIES
+            entryValues = PREF_QUALITY_VALUES
+            setDefaultValue(PREF_QUALITY_DEFAULT)
+            summary = "%s"
+            setOnPreferenceChangeListener { _, newValue ->
+                val selected = newValue as String
+                preferences.edit().putString(key, selected).apply()
+                true
+            }
+        }
+
+        val subPref = ListPreference(screen.context).apply {
+            key = PREF_SUB_KEY
+            title = PREF_SUB_TITLE
+            entries = PREF_SUB_ENTRIES
+            entryValues = PREF_SUB_VALUES
+            setDefaultValue(PREF_SUB_DEFAULT)
+            summary = "%s"
+            setOnPreferenceChangeListener { _, newValue ->
+                val selected = newValue as String
+                preferences.edit().putString(key, selected).apply()
+                true
+            }
+        }
+
+        val serverPref = ListPreference(screen.context).apply {
+            key = PREF_SERVER_KEY
+            title = PREF_SERVER_TITLE
+            entries = PREF_SERVER_ENTRIES
+            entryValues = PREF_SERVER_VALUES
+            setDefaultValue(PREF_SERVER_DEFAULT)
+            summary = "%s"
+            setOnPreferenceChangeListener { _, newValue ->
+                val selected = newValue as String
+                preferences.edit().putString(key, selected).apply()
                 true
             }
         }
@@ -427,6 +485,9 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         screen.addPreference(adultPref)
         screen.addPreference(typePref)
         screen.addPreference(titlePref)
+        screen.addPreference(qualityPref)
+        screen.addPreference(subPref)
+        screen.addPreference(serverPref)
     }
 
     // Helper to map type to display name
@@ -434,12 +495,15 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         return when (type) {
             "sub" -> "Subtitled"
             "dub" -> "Dubbed"
-            "softsub" -> "Soft Sub"
             else -> type.replaceFirstChar { it.uppercase() }
         }
     }
 
     companion object {
+        // Courtesy of 50n50 for the decoding api
+        val DECODE1_URL = "https://ilovekai.simplepostrequest.workers.dev/?ilovefeet="
+        val DECODE2_URL = "https://ilovekai.simplepostrequest.workers.dev/?ilovearmpits="
+
         val PREF_DOMAIN_KEY = "preffered_domain"
         val PREF_DOMAIN_TITLE = "Preferred Domain (requires app restart)"
         val PREF_DOMAIN_DEFAULT = "https://animekai.bz"
@@ -465,5 +529,23 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val PREF_TITLE_ENTRIES = arrayOf("English", "Romaji")
         val PREF_TITLE_VALUES = arrayOf("en", "romaji")
         val PREF_TITLE_DEFAULT = "en"
+
+        val PREF_QUALITY_KEY = "preferred_quality"
+        val PREF_QUALITY_TITLE = "Preferred Quality"
+        val PREF_QUALITY_ENTRIES = arrayOf("1080p", "720p", "360p")
+        val PREF_QUALITY_VALUES = arrayOf("1080", "720", "360")
+        val PREF_QUALITY_DEFAULT = "1080"
+
+        val PREF_SUB_KEY = "preferred_sub"
+        val PREF_SUB_TITLE = "Preferred Sub/Dub"
+        val PREF_SUB_ENTRIES = arrayOf("Sub", "Dub")
+        val PREF_SUB_VALUES = arrayOf("Subtitled", "Dubbed")
+        val PREF_SUB_DEFAULT = "Subtitled"
+
+        val PREF_SERVER_KEY = "preferred_server"
+        val PREF_SERVER_TITLE = "Preferred Server"
+        val PREF_SERVER_ENTRIES = arrayOf("Server 1", "Server 2")
+        val PREF_SERVER_VALUES = arrayOf("Server 1", "Server 2")
+        val PREF_SERVER_DEFAULT = "Server 1"
     }
 }
