@@ -27,6 +27,7 @@ import okhttp3.Response
 import org.jsoup.Jsoup.parseBodyFragment
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.net.URLEncoder
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
@@ -68,6 +69,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
     // ============================== Search Anime ===============================
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+        val safeQuery = URLEncoder.encode(query, "UTF-8")
         val searchParams = mutableListOf<String>()
         filters.forEach { filter ->
             if (filter is AnimeKaiFilters.TypeGroup) {
@@ -113,6 +115,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         }
         val genreQuery = if (searchParams.isNotEmpty()) "&" + searchParams.joinToString("&") else ""
         return GET("$baseUrl/browser?keyword=$query&page=$page$genreQuery")
+        return GET("$baseUrl/browser?keyword=$safeQuery&page=$page$genreQuery")
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage {
