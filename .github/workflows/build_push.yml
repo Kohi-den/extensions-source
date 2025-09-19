@@ -16,12 +16,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CI_CHUNK_SIZE: 288
+  CI_CHUNK_SIZE: 65
 
 jobs:
   prepare:
     name: Prepare job
-    runs-on: docker
+    runs-on: ubuntu-latest
     outputs:
       individualMatrix: ${{ steps.generate-matrices.outputs.individualMatrix }}
     steps:
@@ -77,7 +77,7 @@ jobs:
   build_individual:
     name: Build individual modules
     needs: prepare
-    runs-on: docker
+    runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.prepare.outputs.individualMatrix) }}
     steps:
@@ -91,11 +91,6 @@ jobs:
         with:
           java-version: 17
           distribution: temurin
-          
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3 # v3
-        with:
-          packages: ""
 
       - name: Prepare signing key
         run: |
@@ -147,7 +142,7 @@ jobs:
     needs:
       - build_individual
     if: ${{ github.repository == 'Kohi-den/extensions-source' }}
-    runs-on: docker
+    runs-on: ubuntu-latest
     steps:
       - name: Setup rsync
         run: |
@@ -163,11 +158,6 @@ jobs:
         with:
           java-version: 17
           distribution: temurin
-          
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3 # v3
-        with:
-          packages: "build-tools;34.0.0"
                 
       - name: Checkout main branch
         uses: actions/checkout@v4 # v4
@@ -200,10 +190,6 @@ jobs:
       - name: Sync repo
         run: |
           rsync -a --delete --exclude .git --exclude .gitignore main/repo/ repo --exclude README.md --exclude repo.json
-          
-      - name: Increase buffer size
-        run: |
-          git config --global http.postBuffer 157286400
 
       - name: Deploy repo
         uses: EndBug/add-and-commit@v9
