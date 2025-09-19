@@ -114,7 +114,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             }
         }
         val genreQuery = if (searchParams.isNotEmpty()) "&" + searchParams.joinToString("&") else ""
-        return GET("$baseUrl/browser?keyword=$query&page=$page$genreQuery")
+        // Log.d("AnimeKai", "Search URL: $baseUrl/browser?keyword=$safeQuery&page=$page$genreQuery")
         return GET("$baseUrl/browser?keyword=$safeQuery&page=$page$genreQuery")
     }
 
