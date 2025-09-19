@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CI_CHUNK_SIZE: 288
+  CI_CHUNK_SIZE: 65
 
 jobs:
   prepare:
@@ -52,7 +52,7 @@ jobs:
   build_individual:
     name: Build individual modules
     needs: prepare
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     strategy:
       matrix: ${{ fromJSON(needs.prepare.outputs.individualMatrix) }}
     steps:
@@ -65,10 +65,10 @@ jobs:
           java-version: 17
           distribution: temurin
       
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3 # v3
-        with:
-          packages: "build-tools;34.0.0"
+      # - name: Set up Android SDK
+      #   uses: android-actions/setup-android@v3 # v3
+      #   with:
+      #     packages: "build-tools;34.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v3 # v3
