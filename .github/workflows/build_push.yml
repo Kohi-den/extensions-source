@@ -132,7 +132,7 @@ jobs:
           key: build-cache-${{ github.sha }}-${{ matrix.chunk }}
 
       - name: Upload APKs
-        uses: https://code.forgejo.org/forgejo/upload-artifact@16871d9e8cfcf27ff31822cac382bbb5450f1e1e # v4-patch
+        uses: actions/upload-artifact@v4
         if: ${{ github.repository == 'Kohi-den/extensions-source' }}
         with:
           name: "individual-apks-${{ matrix.chunk }}"
@@ -154,7 +154,7 @@ jobs:
           sudo apt-get update && sudo apt install rsync -y
       
       - name: Download APK artifacts
-        uses: https://code.forgejo.org/forgejo/download-artifact@d8d0a99033603453ad2255e58720b460a0555e1e # v4-patch
+        uses: actions/download-artifact@v4
         with:
           path: ~/apk-artifacts
           
