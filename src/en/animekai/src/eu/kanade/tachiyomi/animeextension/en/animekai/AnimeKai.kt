@@ -9,7 +9,6 @@ import androidx.preference.MultiSelectListPreference
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
-import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -72,50 +71,26 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val safeQuery = URLEncoder.encode(query, "UTF-8")
         val searchParams = mutableListOf<String>()
         filters.forEach { filter ->
-            if (filter is AnimeKaiFilters.TypeGroup) {
-                filter.state.forEach { type ->
-                    when (type.state) {
-                        true -> searchParams.add("type[]=${type.id}")
-                        else -> {
-                            // Ignore false state
-                        }
-                    }
-                }
-                return@forEach
-            }
-            if (filter is AnimeKaiFilters.GenreGroup) {
-                filter.state.forEach { genre ->
-                    when (genre.state) {
-                        AnimeFilter.TriState.STATE_INCLUDE -> searchParams.add("genre[]=${genre.id}")
-                        AnimeFilter.TriState.STATE_EXCLUDE -> searchParams.add("genre[]=-${genre.id}")
-                        else -> {
-                            // Ignore STATE_IGNORE
-                        }
-                    }
-                }
-                return@forEach
-            }
-            if (filter is AnimeKaiFilters.StatusGroup) {
-                filter.state.forEach { status ->
-                    when (status.state) {
-                        true -> searchParams.add("status[]=${status.id}")
-                        else -> {
-                            // Ignore false state
-                        }
-                    }
-                }
-                return@forEach
-            }
-            if (filter is AnimeKaiFilters.SortSelector) {
-                val sortOrdinal = filter.state
-                val sortOption = AnimeKaiFilters.SortOption.values()[sortOrdinal]
-                searchParams.add("sort=${sortOption.id}")
+            if (filter is AnimeKaiFilters.KaiFilter) {
+                searchParams.addAll(filter.getParams())
                 return@forEach
             }
         }
-        val genreQuery = if (searchParams.isNotEmpty()) "&" + searchParams.joinToString("&") else ""
+
+        if (searchParams.contains("sort=auto")) {
+            searchParams.remove("sort=auto")
+            if (safeQuery.isNotEmpty()) {
+                // Log.d("AnimeKai", "Search query detected, changing sort=auto to sort=most_relevance")
+                searchParams.add("sort=most_relevance") // use most_relevance sort
+            } else {
+                // Log.d("AnimeKai", "No search query, changing sort=auto to sort=trending")
+                searchParams.add("sort=trending")
+            }
+        }
+
+        val filterQuerys = if (searchParams.isNotEmpty()) "&" + searchParams.joinToString("&") else ""
         // Log.d("AnimeKai", "Search URL: $baseUrl/browser?keyword=$safeQuery&page=$page$genreQuery")
-        return GET("$baseUrl/browser?keyword=$safeQuery&page=$page$genreQuery")
+        return GET("$baseUrl/browser?keyword=$safeQuery&page=$page$filterQuerys")
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage {
