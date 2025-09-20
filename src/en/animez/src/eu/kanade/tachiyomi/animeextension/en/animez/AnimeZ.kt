@@ -1,3 +1,5 @@
+// This code is inspired by Phisher98 Animez
+
 package eu.kanade.tachiyomi.animeextension.en.animez
 
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
