@@ -1,4 +1,4 @@
-// This code is inspired from Phisher98's Animez
+// This code is inspiration from Phisher98's AnimeZ
 
 package eu.kanade.tachiyomi.animeextension.en.animez
 
