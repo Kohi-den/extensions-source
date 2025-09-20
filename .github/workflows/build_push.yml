@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@v4 # v4
         with:
           ref: main
-          token: ${{ secrets.BOT_PAT }}
+          token: ${{ secrets.TOKEN_GITHUB }}
           
       - name: Get number of modules
         run: |
@@ -85,6 +85,7 @@ jobs:
         uses: actions/checkout@v4 # v4
         with:
           ref: main
+          token: ${{ secrets.TOKEN_GITHUB }}
 
       - name: Set up JDK
         uses: actions/setup-java@v4 # v4
@@ -164,6 +165,7 @@ jobs:
         with:
           ref: main
           path: main
+          token: ${{ secrets.TOKEN_GITHUB }}
           
       - name: Create repo artifacts
         run: |
@@ -177,19 +179,28 @@ jobs:
       - name: Checkout repo branch
         uses: actions/checkout@v4 # v4
         with:
-          repository: https://kohiden.xyz/Kohi-den/extensions
-          token: ${{ secrets.BOT_PAT }}
+          repository: Kohi-den/extensions-source  #just to initialize the folder
+          token: ${{ secrets.TOKEN_GITHUB }}
           ref: main
           path: repo
 
       - name: Set Forgejo remote URL
         run: |
           cd repo
-          git remote set-url origin https://kohiden.xyz/Kohi-den/extensions.git
+          git remote set-url origin https://${{ secrets.FORGEJO_USERNAME }}:${{ secrets.FORGEJO_TOKEN }}@kohiden.xyz/Kohi-den/extensions.git
+
+      - name: Pull latest changes
+        run: |
+          cd repo
+          git pull --rebase origin main    
 
       - name: Sync repo
         run: |
           rsync -a --delete --exclude .git --exclude .gitignore main/repo/ repo --exclude README.md --exclude repo.json
+
+      - name: Increase buffer size
+        run: |
+          git config --global http.postBuffer 157286400
 
       - name: Deploy repo
         uses: EndBug/add-and-commit@v9
@@ -198,4 +209,3 @@ jobs:
           cwd: "./repo"
           committer_name: Kohi-den-bot
           committer_email: kohi-den-bot@noreply.localhost
-          
