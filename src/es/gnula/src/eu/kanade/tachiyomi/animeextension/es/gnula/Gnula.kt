@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.animeextension.es.gnula
 
 import android.app.Application
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -294,7 +293,6 @@ class Gnula : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             var url = ""
             client.newCall(GET(it.result)).execute().asJsoup().select("script").map { sc ->
                 if (sc.data().contains("var url = '")) {
-                    Log.i("bruh url", sc.data().substringAfter("var url = '").substringBefore("';"))
                     url = sc.data().substringAfter("var url = '").substringBefore("';")
                 }
             }
