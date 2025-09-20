@@ -480,7 +480,7 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     companion object {
-        // Courtesy of 50n50 for the decoding api
+        // Courtesy of 50n50 for the decoding api.
         val DECODE1_URL = "https://ilovekai.simplepostrequest.workers.dev/?ilovefeet="
         val DECODE2_URL = "https://ilovekai.simplepostrequest.workers.dev/?ilovearmpits="
 
