@@ -1,7 +1,7 @@
 ext {
     extName = 'Gnula'
     extClass = '.Gnula'
-    extVersionCode = 36
+    extVersionCode = 37
 }
 
 apply from: "$rootDir/common.gradle"
@@ -18,8 +18,10 @@ dependencies {
     implementation(project(':lib:fastream-extractor'))
     implementation(project(':lib:upstream-extractor'))
     implementation(project(':lib:burstcloud-extractor'))
-    implementation(project(':lib:streamhidevid-extractor'))
     implementation(project(':lib:filemoon-extractor'))
     implementation(project(':lib:streamwish-extractor'))
+    implementation(project(':lib:streamsilk-extractor'))
+    implementation(project(':lib:vidguard-extractor'))
+    implementation(project(':lib:vidhide-extractor'))
     implementation(project(':lib:universal-extractor'))
 }
