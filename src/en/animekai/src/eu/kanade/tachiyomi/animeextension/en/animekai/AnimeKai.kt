@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.en.animekai
 
 import android.app.Application
 import android.content.SharedPreferences
+import android.util.Log
 import android.widget.Toast
 import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
@@ -17,8 +18,6 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -27,8 +26,6 @@ import org.jsoup.Jsoup.parseBodyFragment
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.net.URLEncoder
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
 
 class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
     override val name = "AnimeKai"
@@ -186,9 +183,11 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val urlParts = episode.url.split("?token=")
         val watchUrl = urlParts[0]
         val episodeToken = urlParts.getOrNull(1) ?: throw Exception("Token not found")
+        Log.d("AnimeKai", "Episode token: $episodeToken")
 
         // Get the secondary token from the worker endpoint
         val secondaryToken = get("${DECODE1_URL}$episodeToken").trim()
+        Log.d("AnimeKai", "Secondary token: $secondaryToken")
 
         // Fetch the episode server links list
         val resultHtml = getJsonValue(get("$baseUrl/ajax/links/list?token=$episodeToken&_=$secondaryToken", watchUrl), "result")
@@ -199,14 +198,9 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         val serverGroups = mutableListOf<EpisodeServerGroup>()
 
         val enabledTypes = preferences.getStringSet(PREF_ENABLED_TYPES_KEY, PREF_ENABLED_TYPES_DEFAULT) ?: PREF_ENABLED_TYPES_DEFAULT
-        // Log.d("AnimeKai", "Enabled types: $enabledTypes")
         for (serverDiv in serverDivs) {
             val type = serverDiv.attr("data-id")
-            // Log.d("AnimeKai", "Found server type: $type")
-            if (type !in enabledTypes) {
-                // Log.d("AnimeKai", "Skipping: $type")
-                continue
-            }
+            if (type !in enabledTypes) continue
             val serverSpans = serverDiv.select("span.server[data-lid]")
 
             val episodeServers = mutableListOf<EpisodeServer>()
@@ -214,17 +208,12 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
                 val serverName = span.text()
                 val serverId = span.attr("data-lid")
                 val streamToken = get("${DECODE1_URL}$serverId").trim()
-
                 val streamUrl = "$baseUrl/ajax/links/view?id=$serverId&_=$streamToken"
-
                 val streamJson = get(streamUrl, baseUrl)
                 val encodedLink = getJsonValue(streamJson, "result").trim()
-
-                // Log.d("AnimeKai", "Encoded link for $serverName: $encodedLink")
                 val decryptedJson = get("${DECODE2_URL}$encodedLink")
                 val decryptedLink = getJsonValue(decryptedJson, "url").trim()
-                // Log.d("AnimeKai", "Decrypted link for $serverName: $decryptedLink")
-
+                Log.d("AnimeKai", "Decrypted link for $type $serverName: $decryptedLink")
                 val epServer = EpisodeServer(serverName, decryptedLink)
                 episodeServers.add(epServer)
             }
@@ -232,27 +221,26 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             serverGroups.add(serverGroup)
         }
 
-        val extractor = Extractor(client)
+        val megaUp = MegaUp(client)
         val videos = mutableListOf<Video>()
+        val userAgent = headersBuilder().build()["User-Agent"] ?: ""
 
         serverGroups.forEach { group ->
             val typeDisplay = getTypeDisplayName(group.type)
             group.servers.forEach { server ->
-                videos.addAll(
-                    withContext(Dispatchers.Main) {
-                        suspendCoroutine { continuation ->
-                            extractor.extractVideosFromUrl(
-                                url = server.streamUrl,
-                                prefix = "$typeDisplay | ${server.serverName} | ",
-                            ) { vids ->
-                                continuation.resume(vids)
-                            }
-                        }
-                    },
-                )
+                try {
+                    val vids = megaUp.processUrl(
+                        server.streamUrl,
+                        userAgent,
+                        "$typeDisplay | ${server.serverName} | ",
+                        baseUrl, // pass the anime website baseUrl as referer
+                    )
+                    videos.addAll(vids)
+                } catch (e: Exception) {
+                    Log.e("AnimeKai", "Error extracting videos for ${server.serverName}: ${e.message}")
+                }
             }
         }
-
         return videos
     }
 
