@@ -3,7 +3,7 @@ ext {
     extClass = '.FlixLatam'
     themePkg = 'dooplay'
     baseUrl = 'https://flixlatam.com'
-    overrideVersionCode = 10
+    overrideVersionCode = 11
 }
 
 apply from: "$rootDir/common.gradle"
