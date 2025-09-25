@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.es.flixlatam
 
+import android.util.Log
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -64,6 +65,7 @@ class FlixLatam : DooPlay(
         players.parallelFlatMapBlocking { player ->
             val url = getPlayerUrl(player)
                 ?: return@parallelFlatMapBlocking emptyList<Video>()
+            Log.i("bruh url", url)
             if (url.contains("embed69")) {
                 val htmlContent = client.newCall(GET(url)).execute().body.string()
                 val links = extractNewExtractorLinks(document, htmlContent) ?: return@parallelFlatMapBlocking emptyList<Video>()
