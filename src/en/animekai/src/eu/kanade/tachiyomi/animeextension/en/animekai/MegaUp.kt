@@ -8,11 +8,12 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.Headers
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import uy.kohesive.injekt.injectLazy
 import java.net.URL
-import java.net.URLEncoder
 import kotlin.getValue
 
 class MegaUp(private val client: OkHttpClient) {
@@ -52,11 +53,17 @@ class MegaUp(private val client: OkHttpClient) {
         val response = client.newCall(okhttp3.Request.Builder().url(reqUrl).build()).execute()
         val responseBody = response.body.string()
         val megaToken = JSONObject(responseBody).getString("result")
-        val encodedUserAgent = URLEncoder.encode(userAgent, "UTF-8")
-        val decodeUrl = "https://azartx-tools.vercel.app/api/megadecode?text=$megaToken&agent=$encodedUserAgent"
-        val decodeResponse = client.newCall(okhttp3.Request.Builder().url(decodeUrl).build()).execute()
-        val decodeResponseBody = decodeResponse.body.string()
-        val decodedResult = JSONObject(decodeResponseBody).getString("result")
+        val postBody = MegaDecodePostBody(megaToken, userAgent)
+        val postRequest = okhttp3.Request.Builder()
+            .url("https://enc-dec.app/api/dec-mega")
+            .post(
+                Json.encodeToString(MegaDecodePostBody.serializer(), postBody)
+                    .toRequestBody("application/json".toMediaTypeOrNull()),
+            )
+            .build()
+        val postResponse = client.newCall(postRequest).execute()
+        val postResponseBody = postResponse.body.string()
+        val decodedResult = JSONObject(postResponseBody).getString("result")
         val megaUpResult = Json.decodeFromString<MegaUpResult>(decodedResult)
         val masterPlaylistUrl = megaUpResult.sources.firstOrNull { it.file.contains("list") && it.file.endsWith(".m3u8") }?.file
             ?: megaUpResult.sources.firstOrNull()?.file
@@ -160,5 +167,11 @@ class MegaUp(private val client: OkHttpClient) {
         val label: String? = null,
         val kind: String,
         val default: Boolean = false,
+    )
+
+    @Serializable
+    data class MegaDecodePostBody(
+        val text: String,
+        val agent: String,
     )
 }
