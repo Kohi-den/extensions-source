@@ -37,7 +37,7 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override val name = "MonosChinos"
 
-    override val baseUrl = "https://monoschinos2.net"
+    override val baseUrl = "https://wwv.monoschinos2.net"
 
     override val id = 6957694006954649296
 
