@@ -159,16 +159,16 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
     )
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        if (query.isNotBlank()) {
-            val url = realUrl.toHttpUrl().newBuilder()
-                .addPathSegments("search/wd/$query/page/$page.html")
-            return GET(url.build())
-        }
         val url = realUrl.toHttpUrl().newBuilder()
-            .addPathSegments("show/${filters[1]}")
-            .addPathSegments("class/${filters[2]}")
-        filters[3].toString().takeUnless("全部"::equals)?.let { url.addPathSegments("year/$it") }
-        return POST(url.build().toString())
+        if (query.isNotBlank()) {
+            url.addPathSegments("search/wd/$query")
+        } else {
+            url.addPathSegments("show/${filters[1]}")
+            if (filters[2].toString() != "全部") url.addPathSegments("class/${filters[2]}")
+            if (filters[3].toString() != "全部") url.addPathSegments("year/${filters[3]}")
+        }
+        url.addPathSegments("page/$page.html")
+        return GET(url.build())
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage {
