@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
+import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -97,13 +98,57 @@ class Pandrama : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun latestUpdatesParse(response: Response) = popularAnimeParse(response)
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+        val filterList = if (filters.isEmpty()) getFilterList() else filters
+        val genreFilter = filterList.find { it is GenreFilter } as GenreFilter
         return when {
-            query.isNotBlank() -> GET("$baseUrl/buscar/media/-------------/?wd=$query")
+            query.isNotBlank() -> GET("$baseUrl/buscar/media/$query----------$page---/")
+            genreFilter.state != 0 -> GET("$baseUrl${genreFilter.toUriPart().replace("page", "$page")}")
             else -> popularAnimeRequest(page)
         }
     }
 
     override fun searchAnimeParse(response: Response) = popularAnimeParse(response)
+
+    override fun getFilterList(): AnimeFilterList = AnimeFilterList(
+        AnimeFilter.Header("La busqueda por texto ignora el filtro"),
+        GenreFilter(),
+    )
+
+    private class GenreFilter : UriPartFilter(
+        "Género",
+        arrayOf(
+            Pair("<Seleccionar>", ""),
+            Pair("Acción", "/explorar/Dramas---Acción-----page---/"),
+            Pair("Comedia", "/explorar/Dramas---Comedia-----page---/"),
+            Pair("Crimen", "/explorar/Dramas---Crimen-----page---/"),
+            Pair("BL", "/explorar/Dramas---BL-----page---/"),
+            Pair("GL", "/explorar/Dramas---GL-----page---/"),
+            Pair("Investigación", "/explorar/Dramas---Investigación-----page---/"),
+            Pair("Drama", "/explorar/Dramas---Drama-----page---/"),
+            Pair("Familiar", "/explorar/Dramas---Familiar-----page---/"),
+            Pair("Fantasía", "/explorar/Dramas---Fantasía-----page---/"),
+            Pair("De época", "/explorar/Dramas---De+época-----page---/"),
+            Pair("Juvenil", "/explorar/Dramas---Juvenil-----page---/"),
+            Pair("Legal", "/explorar/Dramas---Legal-----page---/"),
+            Pair("Maduro", "/explorar/Dramas---Maduro-----page---/"),
+            Pair("Médico", "/explorar/Dramas---Médico-----page---/"),
+            Pair("Melodrama", "/explorar/Dramas---Melodrama-----page---/"),
+            Pair("Militar", "/explorar/Dramas---Militar-----page---/"),
+            Pair("Misterio", "/explorar/Dramas---Misterio-----page---/"),
+            Pair("Musical", "/explorar/Dramas---Musical-----page---/"),
+            Pair("Oficina", "/explorar/Dramas---Oficina-----page---/"),
+            Pair("Politica", "/explorar/Dramas---Politica-----page---/"),
+            Pair("Psicológico", "/explorar/Dramas---Psicológico-----page---/"),
+            Pair("Romance", "/explorar/Dramas---Romance-----page---/"),
+            Pair("Rom&Com", "/explorar/Dramas---Rom%26Com-----page---/"),
+            Pair("Escolar", "/explorar/Dramas---Escolar-----page---/"),
+            Pair("Ciencia Ficción", "/explorar/Dramas---Ciencia+Ficción-----page---/"),
+            Pair("Deportes", "/explorar/Dramas---Deportes-----page---/"),
+            Pair("Sobrenatural", "/explorar/Dramas---Sobrenatural-----page---/"),
+            Pair("Suspenso", "/explorar/Dramas---Suspenso-----page---/"),
+            Pair("Terror", "/explorar/Dramas---Terror-----page---/"),
+        ),
+    )
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
@@ -190,6 +235,11 @@ class Pandrama : ConfigurableAnimeSource, AnimeHttpSource() {
                 preferences.edit().putString(key, entry).commit()
             }
         }.also(screen::addPreference)
+    }
+
+    private open class UriPartFilter(displayName: String, val vals: Array<Pair<String, String>>) :
+        AnimeFilter.Select<String>(displayName, vals.map { it.first }.toTypedArray()) {
+        fun toUriPart() = vals[state].second
     }
 
     private val base64DecodeChars = intArrayOf(
