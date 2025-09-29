@@ -53,6 +53,7 @@ class AnimeAv1 : ConfigurableAnimeSource, AnimeHttpSource() {
         private const val PREF_SERVER_DEFAULT = "PixelDrain"
         private val SERVER_LIST = arrayOf(
             "PixelDrain",
+            "HLS",
             "StreamWish",
             "Voe",
             "YourUpload",
@@ -99,8 +100,10 @@ class AnimeAv1 : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun latestUpdatesParse(response: Response) = popularAnimeParse(response)
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+        val params = AnimeAv1Filters.getSearchParameters(filters)
         return when {
             query.isNotBlank() -> GET("$baseUrl/catalogo?search=$query&page=$page", headers)
+            params.filter.isNotBlank() -> GET("$baseUrl/catalogo${params.getQuery().run { if (isNotBlank()) "$this&page=$page" else this }}", headers)
             else -> popularAnimeRequest(page)
         }
     }
@@ -125,6 +128,8 @@ class AnimeAv1 : ConfigurableAnimeSource, AnimeHttpSource() {
 
         return episodes.reversed()
     }
+
+    override fun getFilterList(): AnimeFilterList = AnimeAv1Filters.FILTER_LIST
 
     override fun videoListParse(response: Response): List<Video> {
         val doc = response.asJsoup()
