@@ -30,6 +30,8 @@ import java.net.URLDecoder
 
 class Pandrama : ConfigurableAnimeSource, AnimeHttpSource() {
 
+    override val id: Long = 8290662435507939982
+
     override val name = "Pandrama"
 
     override val baseUrl = "https://pandrama.com"
