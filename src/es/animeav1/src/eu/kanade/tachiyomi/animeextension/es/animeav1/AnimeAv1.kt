@@ -53,6 +53,7 @@ class AnimeAv1 : ConfigurableAnimeSource, AnimeHttpSource() {
         private const val PREF_SERVER_DEFAULT = "PixelDrain"
         private val SERVER_LIST = arrayOf(
             "PixelDrain",
+            "HLS",
             "StreamWish",
             "Voe",
             "YourUpload",
@@ -99,8 +100,10 @@ class AnimeAv1 : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun latestUpdatesParse(response: Response) = popularAnimeParse(response)
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+        val params = AnimeAv1Filters.getSearchParameters(filters)
         return when {
             query.isNotBlank() -> GET("$baseUrl/catalogo?search=$query&page=$page", headers)
+            params.filter.isNotBlank() -> GET("$baseUrl/catalogo${params.getQuery().run { if (isNotBlank()) "$this&page=$page" else this }}", headers)
             else -> popularAnimeRequest(page)
         }
     }
@@ -125,6 +128,8 @@ class AnimeAv1 : ConfigurableAnimeSource, AnimeHttpSource() {
 
         return episodes.reversed()
     }
+
+    override fun getFilterList(): AnimeFilterList = AnimeAv1Filters.FILTER_LIST
 
     override fun videoListParse(response: Response): List<Video> {
         val doc = response.asJsoup()
@@ -169,6 +174,10 @@ class AnimeAv1 : ConfigurableAnimeSource, AnimeHttpSource() {
                 "mp4upload" -> mp4uploadExtractor.videosFromUrl(url, headers, prefix = "$prefix ")
                 "streamwish" -> streamWishExtractor.videosFromUrl(url, videoNameGen = { "$prefix StreamWish:$it" })
                 "yourupload" -> yourUploadExtractor.videoFromUrl(url, headers = headers, prefix = "$prefix ")
+                "player.zilla" -> {
+                    val m3u = url.replace("play/", "m3u8/")
+                    listOf(Video(m3u, "$prefix HLS", m3u))
+                }
                 else -> universalExtractor.videosFromUrl(url, headers, prefix = "$prefix ")
             }
         }.getOrNull() ?: emptyList()
@@ -178,6 +187,7 @@ class AnimeAv1 : ConfigurableAnimeSource, AnimeHttpSource() {
         "voe" to listOf("voe", "tubelessceliolymph", "simpulumlamerop", "urochsunloath", "nathanfromsubject", "yip.", "metagnathtuggers", "donaldlineelse"),
         "mp4upload" to listOf("mp4upload"),
         "pixeldrain" to listOf("pixeldrain"),
+        "player.zilla" to listOf("player.zilla"),
         "streamwish" to listOf("wishembed", "streamwish", "strwish", "wish", "Kswplayer", "Swhoi", "Multimovies", "Uqloads", "neko-stream", "swdyu", "iplayerhls", "streamgg"),
         "doodstream" to listOf("doodstream", "dood.", "ds2play", "doods.", "ds2play", "ds2video", "dooood", "d000d", "d0000d"),
         "streamlare" to listOf("streamlare", "slmaxed"),
