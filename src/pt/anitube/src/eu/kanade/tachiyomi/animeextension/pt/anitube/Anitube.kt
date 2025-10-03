@@ -146,7 +146,9 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val infos = content.selectFirst("div.anime_infos")!!
 
         title = doc.selectFirst("div.anime_container_titulo")!!.text()
-        thumbnail_url = content.selectFirst("img")?.attr("src")
+        thumbnail_url = content.selectFirst("img")
+            ?.attr("src")
+            ?.replace(".webp", ".jpg")
         genre = infos.getInfo("Gêneros")
         author = infos.getInfo("Autor")
         artist = infos.getInfo("Estúdio")
@@ -185,7 +187,7 @@ class Anitube : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             .text()
             .substringAfter(" ")
             .toFloatOrNull() ?: 0F
-        name = element.selectFirst("div.animepag_episodios_item_nome")!!.text()
+        name = element.selectFirst("div.animepag_episodios_item_views")!!.text()
         date_upload = element.selectFirst("div.animepag_episodios_item_date")!!
             .text()
             .toDate()
