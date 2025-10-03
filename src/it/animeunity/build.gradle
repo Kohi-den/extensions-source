@@ -1,0 +1,7 @@
+ext {
+    extName = 'AnimeUnity'
+    extClass = '.AnimeUnity'
+    extVersionCode = 9
+}
+
+apply from: "$rootDir/common.gradle"

@@ -1,0 +1,12 @@
+ext {
+    extName = 'NimeGami'
+    extClass = '.NimeGami'
+    extVersionCode = 3
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(libs.jsunpacker)
+    implementation(project(":lib:synchrony"))
+}

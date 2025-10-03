@@ -1,0 +1,11 @@
+ext {
+    extName = 'Cycity'
+    extClass = '.Cycity'
+    extVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:cryptoaes'))
+}

@@ -1,0 +1,7 @@
+ext {
+    extName = 'AnimesROLL'
+    extClass = '.AnimesROLL'
+    extVersionCode = 5
+}
+
+apply from: "$rootDir/common.gradle"

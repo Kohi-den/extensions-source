@@ -1,0 +1,87 @@
+name: PR build check
+
+on:
+  pull_request:
+    paths:
+      - '**'
+      - '!**.md'
+      - '!.github/**'
+      - '.github/workflows/build_pull_request.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  CI_CHUNK_SIZE: 65
+
+jobs:
+  prepare:
+    name: Prepare job
+    runs-on: ubuntu-22.04
+    outputs:
+      individualMatrix: ${{ steps.generate-matrices.outputs.individualMatrix }}
+    steps:
+      - name: Clone repo
+        uses: actions/checkout@v4 # v4
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/wrapper-validation-action@v2 # v2
+
+      - name: Get number of modules
+        run: |
+          set -x
+          projects=(src/*/*)
+
+          echo "NUM_INDIVIDUAL_MODULES=${#projects[@]}" >> $GITHUB_ENV
+
+      - id: generate-matrices
+        name: Create output matrices
+        uses: actions/github-script@v7 # v7
+        with:
+          script: |
+            const numIndividualModules = process.env.NUM_INDIVIDUAL_MODULES;
+            const chunkSize = process.env.CI_CHUNK_SIZE;
+
+            const numIndividualChunks = Math.ceil(numIndividualModules / chunkSize);
+
+            console.log(`Individual modules: ${numIndividualModules} (${numIndividualChunks} chunks of ${chunkSize})`);
+
+            core.setOutput('individualMatrix', JSON.stringify({ 'chunk': [...Array(numIndividualChunks).keys()] }));
+
+  build_individual:
+    name: Build individual modules
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJSON(needs.prepare.outputs.individualMatrix) }}
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4 # v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4 # v4
+        with:
+          java-version: 17
+          distribution: temurin
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3 # v3
+        with:
+          cache-read-only: true
+
+      - name: Restore build cache
+        uses: actions/cache/restore@v3
+        with:
+          path: |
+            src/**/build
+            !src/**/build/outputs
+          key: build-cache-${{ github.event.pull_request.base.sha }}-${{ matrix.chunk }}
+          restore-keys: |
+            build-cache-${{ github.event.pull_request.base.sha }}-
+            build-cache-
+
+      - name: Build extensions
+        env:
+          CI_CHUNK_NUM: ${{ matrix.chunk }}
+        run: chmod +x ./gradlew && ./gradlew -p src assembleDebug

@@ -1,0 +1,13 @@
+ext {
+    extName = 'Anime1.me'
+    extClass = '.Anime1'
+    extVersionCode = 3
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(":lib:bangumi-scraper"))
+    //noinspection UseTomlInstead
+    implementation "com.github.houbb:opencc4j:1.8.1"
+}

@@ -1,0 +1,11 @@
+ext {
+    extName = 'FilmPalast'
+    extClass = '.FilmPalast'
+    extVersionCode = 23
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:voe-extractor'))
+}

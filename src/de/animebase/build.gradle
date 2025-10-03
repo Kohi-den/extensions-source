@@ -1,0 +1,16 @@
+ext {
+    extName = 'Anime-Base'
+    extClass = '.AnimeBase'
+    extVersionCode = 36
+    isNsfw = true
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(":lib:voe-extractor"))
+    implementation(project(":lib:streamwish-extractor"))
+    implementation(project(":lib:vidguard-extractor"))
+    implementation(project(":lib:playlist-utils"))
+    implementation(libs.jsunpacker)
+}

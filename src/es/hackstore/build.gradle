@@ -1,0 +1,18 @@
+ext {
+    extName = 'Hackstore'
+    extClass = '.Hackstore'
+    extVersionCode = 30
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:streamtape-extractor'))
+    implementation(project(':lib:voe-extractor'))
+    implementation(project(':lib:filemoon-extractor'))
+    implementation(project(':lib:streamwish-extractor'))
+    implementation(project(':lib:dood-extractor'))
+    implementation(project(':lib:vidhide-extractor'))
+    implementation(project(':lib:goodstream-extractor'))
+    implementation(project(':lib:universal-extractor'))
+}

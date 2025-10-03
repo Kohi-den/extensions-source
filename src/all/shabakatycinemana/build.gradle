@@ -1,0 +1,11 @@
+ext {
+    extName = 'ShabakatyCinemana'
+    extClass = '.ShabakatyCinemana'
+    extVersionCode = 3
+    isNsfw = false
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+}

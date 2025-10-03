@@ -1,0 +1,11 @@
+ext {
+    extName = 'az-animex'
+    extClass = '.Azanimex'
+    extVersionCode = 3
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:filemoon-extractor'))
+}

@@ -1,0 +1,7 @@
+ext {
+    extName = 'KimoiTV'
+    extClass = '.KimoiTV'
+    extVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"

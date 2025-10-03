@@ -1,0 +1,15 @@
+ext {
+    extName = 'PinoyMoviePedia'
+    extClass = '.PinoyMoviePedia'
+    themePkg = 'dooplay'
+    baseUrl = 'https://pinoymoviepedia.ru'
+    overrideVersionCode = 2
+    isNsfw = true
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:mixdrop-extractor'))
+    implementation(project(':lib:dood-extractor'))
+}

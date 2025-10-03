@@ -1,0 +1,14 @@
+ext {
+    extName = 'KissAnime'
+    extClass = '.KissAnime'
+    extVersionCode = 8
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:dailymotion-extractor'))
+    implementation(project(':lib:mp4upload-extractor'))
+    implementation(project(':lib:yourupload-extractor'))
+    implementation(libs.jsunpacker)
+}

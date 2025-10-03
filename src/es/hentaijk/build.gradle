@@ -1,0 +1,12 @@
+ext {
+    extName = 'Hentaijk'
+    extClass = '.Hentaijk'
+    extVersionCode = 14
+    isNsfw = true
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:okru-extractor'))
+}

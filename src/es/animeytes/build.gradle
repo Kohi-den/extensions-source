@@ -1,0 +1,19 @@
+ext {
+    extName = 'AnimeYT.es'
+    extClass = '.AnimeYTES'
+    themePkg = 'animestream'
+    baseUrl = 'https://animeyt.pro'
+    overrideVersionCode = 12
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(":lib:okru-extractor"))
+    implementation(project(":lib:streamtape-extractor"))
+    implementation(project(":lib:sendvid-extractor"))
+    implementation(project(":lib:yourupload-extractor"))
+    implementation(project(":lib:burstcloud-extractor"))
+    implementation(project(":lib:filemoon-extractor"))
+    implementation(project(":lib:universal-extractor"))
+}

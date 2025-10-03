@@ -1,0 +1,7 @@
+ext {
+    extName = 'Wcofun'
+    extClass = '.Wcofun'
+    extVersionCode = 14
+}
+
+apply from: "$rootDir/common.gradle"

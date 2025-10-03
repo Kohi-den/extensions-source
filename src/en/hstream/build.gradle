@@ -1,0 +1,8 @@
+ext {
+    extName = 'Hstream'
+    extClass = '.Hstream'
+    extVersionCode = 9
+    isNsfw = true
+}
+
+apply from: "$rootDir/common.gradle"
