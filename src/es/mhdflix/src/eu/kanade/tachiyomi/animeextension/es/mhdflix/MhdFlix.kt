@@ -252,7 +252,7 @@ open class MhdFlix : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     private val vidHideExtractor by lazy { VidHideExtractor(client, headers) }
-    private val voeExtractor by lazy { VoeExtractor(client,headers) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val uqloadExtractor by lazy { UqloadExtractor(client) }
     private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
     private val doodExtractor by lazy { DoodExtractor(client) }
