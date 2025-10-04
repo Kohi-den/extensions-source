@@ -22,10 +22,10 @@ import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
 import eu.kanade.tachiyomi.lib.vidhideextractor.VidHideExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
+import eu.kanade.tachiyomi.util.parallelFlatMapBlocking
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -317,7 +317,14 @@ open class MhdFlix : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override fun videoListParse(response: Response): List<Video> {
         val payload = response.parseAs<LinksResponse>()
-        return payload.data.flatMap { it.toVideos() }.sort()
+        val uniqueLinks = payload.data.distinctBy { it.link }
+        if (uniqueLinks.isEmpty()) return emptyList()
+
+        val videos = uniqueLinks.parallelFlatMapBlocking { link ->
+            link.toVideos()
+        }.distinctBy { it.url }
+
+        return videos.sort()
     }
 
     private fun fetchMediaSummary(mediaId: Int): MediaDto? {
