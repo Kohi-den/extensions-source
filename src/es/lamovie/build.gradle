@@ -1,0 +1,22 @@
+ext {
+    extName = 'LaMovie'
+    extClass = '.LaMovie'
+    themePkg = 'dopeflix'
+    baseUrl = 'https://la.movie'
+    overrideVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(":lib:playlist-utils"))
+    implementation(project(':lib:streamwish-extractor'))
+    implementation(project(':lib:streamhidevid-extractor'))
+    implementation(project(':lib:voe-extractor'))
+    implementation(project(':lib:pixeldrain-extractor'))
+    implementation(project(':lib:mp4upload-extractor'))
+    implementation(project(':lib:yourupload-extractor'))
+    implementation(project(':lib:filemoon-extractor'))
+    implementation(project(':lib:goodstream-extractor'))
+    implementation(libs.jsunpacker)
+}

@@ -86,7 +86,7 @@ class Wiflix : DataLifeEngine(
                     contains("streamvid.net") -> StreamHideVidExtractor(client, headers).videosFromUrl(this)
                     contains("upstream.to") -> UpstreamExtractor(client).videosFromUrl(this)
                     contains("streamdav.com") -> StreamDavExtractor(client).videosFromUrl(this)
-                    contains("voe.sx") -> VoeExtractor(client).videosFromUrl(this)
+                    contains("voe.sx") -> VoeExtractor(client, headers).videosFromUrl(this)
                     else -> emptyList()
                 }
             }

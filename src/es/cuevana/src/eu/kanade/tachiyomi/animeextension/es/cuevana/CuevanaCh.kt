@@ -150,7 +150,7 @@ class CuevanaCh(override val name: String, override val baseUrl: String) : Confi
     private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
     private val doodExtractor by lazy { DoodExtractor(client) }
     private val okruExtractor by lazy { OkruExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
     private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
     private val filemoonExtractor by lazy { FilemoonExtractor(client) }

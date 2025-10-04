@@ -159,7 +159,7 @@ class Okanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val doodExtractor by lazy { DoodExtractor(client) }
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
     private val okruExtractor by lazy { OkruExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val vidBomExtractor by lazy { VidBomExtractor(client) }
 
     private fun extractVideosFromUrl(url: String, quality: String, selection: Set<String>): List<Video> {

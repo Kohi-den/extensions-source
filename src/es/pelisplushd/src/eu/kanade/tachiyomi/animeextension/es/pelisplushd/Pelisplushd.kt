@@ -176,7 +176,7 @@ open class Pelisplushd(override val name: String, override val baseUrl: String) 
     }
 
     /*--------------------------------Video extractors------------------------------------*/
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val okruExtractor by lazy { OkruExtractor(client) }
     private val filemoonExtractor by lazy { FilemoonExtractor(client) }
     private val uqloadExtractor by lazy { UqloadExtractor(client) }

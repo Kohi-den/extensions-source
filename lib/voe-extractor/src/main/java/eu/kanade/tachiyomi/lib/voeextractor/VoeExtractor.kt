@@ -9,28 +9,29 @@ import eu.kanade.tachiyomi.util.asJsoup
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.Headers
 import okhttp3.OkHttpClient
 import uy.kohesive.injekt.injectLazy
 
-class VoeExtractor(private val client: OkHttpClient) {
+class VoeExtractor(private val client: OkHttpClient, private val headers: Headers) {
 
     private val json: Json by injectLazy()
 
     private val clientDdos by lazy { client.newBuilder().addInterceptor(DdosGuardInterceptor(client)).build() }
 
-    private val playlistUtils by lazy { PlaylistUtils(clientDdos) }
+    private val playlistUtils by lazy { PlaylistUtils(clientDdos, headers) }
 
     private val redirectRegex = Regex("""window.location.href\s*=\s*'([^']+)';""")
 
     fun videosFromUrl(url: String, prefix: String = ""): List<Video> {
         val videoList = mutableListOf<Video>()
-        var document = clientDdos.newCall(GET(url)).execute().asJsoup()
+        var document = clientDdos.newCall(GET(url, headers)).execute().asJsoup()
         val scriptData = document.selectFirst("script")?.data()
         val redirectMatch = scriptData?.let { redirectRegex.find(it) }
 
         if (redirectMatch != null) {
             val originalUrl = redirectMatch.groupValues[1]
-            document = clientDdos.newCall(GET(originalUrl)).execute().asJsoup()
+            document = clientDdos.newCall(GET(originalUrl, headers)).execute().asJsoup()
         }
 
         val encodedString = document.selectFirst("script[type=application/json]")?.data()
@@ -65,7 +66,7 @@ class VoeExtractor(private val client: OkHttpClient) {
             val vAtob = base64Decode(vF6)
             json.decodeFromString<JsonObject>(vAtob)
         } catch (e: Exception) {
-            Log.i("bruh error", "Decryption error: ${e.message}")
+            Log.e("VoeExtractor", "Decryption error: ${e.message}")
             null
         }
     }
@@ -80,11 +81,10 @@ class VoeExtractor(private val client: OkHttpClient) {
         }.joinToString("")
     }
 
+    private val patternsRegex = listOf("@$", "^^", "~@", "%?", "*~", "!!", "#&").joinToString("|") { Regex.escape(it) }.toRegex()
+
     private fun replacePatterns(input: String): String {
-        val patterns = listOf("@$", "^^", "~@", "%?", "*~", "!!", "#&")
-        return patterns.fold(input) { result, pattern ->
-            result.replace(Regex(Regex.escape(pattern)), "_")
-        }
+        return input.replace(patternsRegex, "_")
     }
 
     private fun removeUnderscores(input: String): String = input.replace("_", "")

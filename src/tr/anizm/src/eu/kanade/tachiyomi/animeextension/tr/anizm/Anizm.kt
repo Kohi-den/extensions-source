@@ -245,7 +245,7 @@ class Anizm : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     private val sibnetExtractor by lazy { SibnetExtractor(client) }
     private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
     private val uqloadExtractor by lazy { UqloadExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
 
     private fun getVideosFromUrl(firstUrl: String): List<Video> {

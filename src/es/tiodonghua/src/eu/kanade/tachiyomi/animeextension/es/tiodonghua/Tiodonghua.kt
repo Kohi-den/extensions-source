@@ -15,7 +15,7 @@ class Tiodonghua : AnimeStream(
 
     // ============================ Video Links =============================
     private val okruExtractor by lazy { OkruExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val youruploadExtractor by lazy { YourUploadExtractor(client) }
     private val mixdropExtractor by lazy { MixDropExtractor(client) }
 

@@ -203,7 +203,7 @@ class Zonaleros : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun getFilterList(): AnimeFilterList = ZonalerosFilters.FILTER_LIST
 
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val streamwishExtractor by lazy { StreamWishExtractor(client, headers) }
     private val filemoonExtractor by lazy { FilemoonExtractor(client) }
     private val mixdropExtractor by lazy { MixDropExtractor(client) }

@@ -237,7 +237,7 @@ class AnimeMovil : ConfigurableAnimeSource, AnimeHttpSource() {
         try {
             return when {
                 embedUrl.contains("voe") -> {
-                    VoeExtractor(client).videosFromUrl(url).also(videoList::addAll)
+                    VoeExtractor(client, headers).videosFromUrl(url).also(videoList::addAll)
                 }
                 embedUrl.contains("filemoon") || embedUrl.contains("moonplayer") -> {
                     FilemoonExtractor(client).videosFromUrl(url, prefix = "Filemoon:").also(videoList::addAll)

@@ -283,7 +283,7 @@ class Latanime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     /*--------------------------------Video extractors------------------------------------*/
     private val okruExtractor by lazy { OkruExtractor(client) }
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val uqloadExtractor by lazy { UqloadExtractor(client) }
     private val doodExtractor by lazy { DoodExtractor(client) }
     private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
