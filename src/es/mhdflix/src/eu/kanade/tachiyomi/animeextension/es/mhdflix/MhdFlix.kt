@@ -22,8 +22,6 @@ import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
 import eu.kanade.tachiyomi.lib.vidhideextractor.VidHideExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -655,108 +653,6 @@ open class MhdFlix : AnimeHttpSource(), ConfigurableAnimeSource {
         val timestamp: Long,
         val entries: List<EpisodeDto>,
     )
-
-    @Serializable
-    private data class SeoMediaListResponse(
-        val status: Int? = null,
-        val data: List<SeoMediaDto> = emptyList(),
-    )
-
-    @Serializable
-    private data class SeoMediaDto(
-        @SerialName("idMedia") val idMedia: Int? = null,
-        val slug: String? = null,
-        val type: String? = null,
-        @SerialName("createad_at") val createadAt: String? = null,
-    )
-
-    @Serializable
-    private data class MediaListResponse(
-        val status: Int? = null,
-        @SerialName("message") val message: String? = null,
-        @SerialName("totalPage") val totalPage: Int? = null,
-        @SerialName("currentPage") val currentPage: Int? = null,
-        @SerialName("data") val data: JsonElement? = null,
-    )
-
-    @Serializable
-    private data class MediaDetailResponse(
-        val status: Int? = null,
-        val data: MediaDto? = null,
-    )
-
-    @Serializable
-    private data class SeasonListResponse(
-        val data: List<SeasonDto> = emptyList(),
-    )
-
-    @Serializable
-    private data class EpisodeListResponse(
-        val status: Int? = null,
-        @SerialName("totalPage") val totalPage: Int? = null,
-        val data: List<EpisodeDto> = emptyList(),
-    )
-
-    @Serializable
-    private data class LinksResponse(
-        val status: Int? = null,
-        val data: List<LinkDto> = emptyList(),
-    )
-
-    @Serializable
-    private data class MediaDto(
-        @SerialName("idMedia") val idMedia: Int? = null,
-        val title: String? = null,
-        val slug: String? = null,
-        val type: String? = null,
-        @SerialName("poster_path") val posterPath: String? = null,
-        @SerialName("backdrop_path") val backdropPath: String? = null,
-        @SerialName("release_date") val releaseDate: String? = null,
-        val content: String? = null,
-        val status: String? = null,
-        val runtime: Int? = null,
-        val vote: Double? = null,
-        val adult: Boolean? = null,
-        val genders: List<String>? = null,
-        val genre: List<String>? = null,
-    )
-
-    @Serializable
-    private data class SeasonDto(
-        @SerialName("idSeasson") val idSeasson: Int? = null,
-        val name: String? = null,
-        val overview: String? = null,
-        @SerialName("num") val num: Int? = null,
-    )
-
-    @Serializable
-    private data class EpisodeDto(
-        @SerialName("idEpisodios") val idEpisodios: Int? = null,
-        val title: String? = null,
-        val overview: String? = null,
-        @SerialName("air_date") val airDate: String? = null,
-        @SerialName("poster_path") val posterPath: String? = null,
-        @SerialName("numEpisode") val numEpisode: Double? = null,
-        @SerialName("numSeasson") val numSeasson: Int? = null,
-        @SerialName("serieId") val serieId: Int? = null,
-        @SerialName("idSerie") val idSerie: Int? = null,
-        @SerialName("idMedia") val idMedia: Int? = null,
-    )
-
-    @Serializable
-    private data class LinkDto(
-        @SerialName("idLink") val idLink: Int? = null,
-        val link: String? = null,
-        val language: LanguageDto? = null,
-        val quality: QualityDto? = null,
-        val server: ServerDto? = null,
-    )
-
-    @Serializable private data class LanguageDto(@SerialName("name") val name: String? = null)
-
-    @Serializable private data class QualityDto(@SerialName("name") val name: String? = null)
-
-    @Serializable private data class ServerDto(@SerialName("name") val name: String? = null)
 
     private inline fun <reified T> Response.parseAs(): T = use { json.decodeFromString(it.body.string()) }
 
