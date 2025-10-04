@@ -314,7 +314,6 @@ open class MhdFlix : AnimeHttpSource(), ConfigurableAnimeSource {
         return apiGet(endpoint)
     }
 
-
     override fun videoListParse(response: Response): List<Video> {
         val payload = response.parseAs<LinksResponse>()
         val uniqueLinks = payload.data.distinctBy { it.link }
