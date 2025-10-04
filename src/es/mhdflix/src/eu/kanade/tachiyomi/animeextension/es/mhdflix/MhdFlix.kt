@@ -23,7 +23,6 @@ import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
 import eu.kanade.tachiyomi.lib.vidhideextractor.VidHideExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.util.parallelFlatMapBlocking
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -315,14 +314,7 @@ open class MhdFlix : AnimeHttpSource(), ConfigurableAnimeSource {
         return apiGet(endpoint)
     }
 
-    private val vidHideExtractor by lazy { VidHideExtractor(client, headers) }
-    private val voeExtractor by lazy { VoeExtractor(client, headers) }
-    private val uqloadExtractor by lazy { UqloadExtractor(client) }
-    private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
-    private val doodExtractor by lazy { DoodExtractor(client) }
-    private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
-    private val mixDropExtractor by lazy { MixDropExtractor(client) }
-    private val universalExtractor by lazy { UniversalExtractor(client) }
+
     override fun videoListParse(response: Response): List<Video> {
         val payload = response.parseAs<LinksResponse>()
         val uniqueLinks = payload.data.distinctBy { it.link }
@@ -415,7 +407,7 @@ open class MhdFlix : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     private val vidHideExtractor by lazy { VidHideExtractor(client, headers) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val uqloadExtractor by lazy { UqloadExtractor(client) }
     private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
     private val doodExtractor by lazy { DoodExtractor(client) }
