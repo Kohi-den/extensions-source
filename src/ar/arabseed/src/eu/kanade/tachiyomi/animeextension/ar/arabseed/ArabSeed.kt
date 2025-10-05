@@ -98,7 +98,7 @@ class ArabSeed : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     private val doodExtractor by lazy { DoodExtractor(client) }
     private val streamwishExtractor by lazy { StreamWishExtractor(client, headers) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
 
     private fun getVideosFromUrl(url: String, quality: String): List<Video> {
         return when {

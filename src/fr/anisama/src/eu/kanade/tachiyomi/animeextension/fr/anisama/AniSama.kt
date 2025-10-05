@@ -180,7 +180,7 @@ class AniSama : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     private val filemoonExtractor by lazy { FilemoonExtractor(client) }
     private val sibnetExtractor by lazy { SibnetExtractor(client) }
     private val sendvidExtractor by lazy { SendvidExtractor(client, headers) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val vidCdnExtractor by lazy { VidCdnExtractor(client) }
     private val doodExtractor by lazy { DoodExtractor(client) }
     private val streamHideVidExtractor by lazy { StreamHideVidExtractor(client, headers) }

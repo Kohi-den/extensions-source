@@ -90,7 +90,7 @@ open class TioanimeH(override val name: String, override val baseUrl: String) : 
     override fun episodeFromElement(element: Element) = throw UnsupportedOperationException()
 
     /*--------------------------------Video extractors------------------------------------*/
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val vidGuardExtractor by lazy { VidGuardExtractor(client) }
     private val okruExtractor by lazy { OkruExtractor(client) }
     private val yourUploadExtractor by lazy { YourUploadExtractor(client) }

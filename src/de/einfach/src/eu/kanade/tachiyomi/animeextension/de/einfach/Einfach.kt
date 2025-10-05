@@ -196,7 +196,7 @@ class Einfach : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
     private val streamwishExtractor by lazy { StreamWishExtractor(client, headers) }
     private val vidozaExtractor by lazy { VidozaExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
 
     private fun getVideosFromUrl(name: String, url: String): List<Video> {
         return when (name) {

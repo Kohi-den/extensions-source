@@ -197,7 +197,7 @@ class Hackstore : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     /*--------------------------------Video extractors------------------------------------*/
     private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val filemoonExtractor by lazy { FilemoonExtractor(client) }
     private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
     private val doodExtractor by lazy { DoodExtractor(client) }

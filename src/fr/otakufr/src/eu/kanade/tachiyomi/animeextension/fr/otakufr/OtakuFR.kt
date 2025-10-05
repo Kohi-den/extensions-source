@@ -148,7 +148,7 @@ class OtakuFR : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val upstreamExtractor by lazy { UpstreamExtractor(client) }
     private val okruExtractor by lazy { OkruExtractor(client) }
     private val doodExtractor by lazy { DoodExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val sibnetExtractor by lazy { SibnetExtractor(client) }
 
     override fun videoListParse(response: Response): List<Video> {

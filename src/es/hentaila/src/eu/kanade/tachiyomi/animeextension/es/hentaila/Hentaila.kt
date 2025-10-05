@@ -124,7 +124,7 @@ class Hentaila : ConfigurableAnimeSource, AnimeHttpSource() {
 
     /*--------------------------------Video extractors------------------------------------*/
     private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
     private val burstCloudExtractor by lazy { BurstCloudExtractor(client) }

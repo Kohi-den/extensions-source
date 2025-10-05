@@ -205,7 +205,7 @@ class MetroSeries : ConfigurableAnimeSource, AnimeHttpSource() {
                     YourUploadExtractor(client).videoFromUrl(src, headers, prefix = "$prefix ").let { videoList.addAll(it) }
                 }
                 if (src.contains("voe")) {
-                    VoeExtractor(client).videosFromUrl(src, prefix = "$prefix ").also(videoList::addAll)
+                    VoeExtractor(client, headers).videosFromUrl(src, prefix = "$prefix ").also(videoList::addAll)
                 }
                 if (src.contains("wishembed") || src.contains("streamwish") || src.contains("wish")) {
                     StreamWishExtractor(client, headers).videosFromUrl(src) { "$prefix StreamWish:$it" }.also(videoList::addAll)

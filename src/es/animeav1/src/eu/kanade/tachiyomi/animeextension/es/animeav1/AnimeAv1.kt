@@ -157,7 +157,7 @@ class AnimeAv1 : ConfigurableAnimeSource, AnimeHttpSource() {
     }
 
     /*--------------------------------Video extractors------------------------------------*/
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val pixelDrainExtractor by lazy { PixelDrainExtractor(client) }
     private val mp4uploadExtractor by lazy { Mp4uploadExtractor(client) }
     private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }

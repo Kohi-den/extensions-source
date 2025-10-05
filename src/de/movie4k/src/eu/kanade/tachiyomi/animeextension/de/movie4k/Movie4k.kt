@@ -221,7 +221,7 @@ class Movie4k : ConfigurableAnimeSource, AnimeHttpSource() {
                         link.contains("//voe.sx") || link.contains("//launchreliantcleaverriver") ||
                             link.contains("//fraudclatterflyingcar") ||
                             link.contains("//uptodatefinishconferenceroom") || link.contains("//realfinanceblogcenter") && hosterSelection?.contains("voe") == true -> {
-                            videoList.addAll(VoeExtractor(client).videosFromUrl(if (link.contains("https:")) link else "https:$link"))
+                            videoList.addAll(VoeExtractor(client, headers).videosFromUrl(if (link.contains("https:")) link else "https:$link"))
                         }
                     }
                 }
@@ -304,7 +304,7 @@ class Movie4k : ConfigurableAnimeSource, AnimeHttpSource() {
                     link.contains("//voe.sx") || link.contains("//launchreliantcleaverriver") ||
                         link.contains("//fraudclatterflyingcar") ||
                         link.contains("//uptodatefinishconferenceroom") || link.contains("//realfinanceblogcenter") && hosterSelection?.contains("voe") == true -> {
-                        videoList.addAll(VoeExtractor(client).videosFromUrl(if (link.contains("https:")) link else "https:$link"))
+                        videoList.addAll(VoeExtractor(client, headers).videosFromUrl(if (link.contains("https:")) link else "https:$link"))
                     }
                 }
             }

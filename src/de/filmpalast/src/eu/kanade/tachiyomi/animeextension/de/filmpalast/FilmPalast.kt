@@ -87,7 +87,7 @@ class FilmPalast : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             }
             when {
                 url.contains("voe") && hosterSelection.contains("voe") ->
-                    VoeExtractor(client).videosFromUrl(url)
+                    VoeExtractor(client, headers).videosFromUrl(url)
 
                 url.contains("upstream") && hosterSelection.contains("up") ->
                     UpstreamExtractor(client).videoFromUrl(url)

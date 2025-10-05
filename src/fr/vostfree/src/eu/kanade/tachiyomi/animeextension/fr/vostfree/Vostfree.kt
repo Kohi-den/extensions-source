@@ -144,7 +144,7 @@ class Vostfree : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val okruExtractor by lazy { OkruExtractor(client) }
     private val sibnetExtractor by lazy { SibnetExtractor(client) }
     private val uqloadExtractor by lazy { UqloadExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val vudeoExtractor by lazy { VudeoExtractor(client) }
 
     override fun videoListParse(response: Response) = throw UnsupportedOperationException()

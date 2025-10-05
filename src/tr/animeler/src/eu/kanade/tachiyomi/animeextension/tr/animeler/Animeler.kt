@@ -228,7 +228,7 @@ class Animeler : AnimeHttpSource(), ConfigurableAnimeSource {
     private val streamlareExtractor by lazy { StreamlareExtractor(client) }
     private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
     private val uqloadExtractor by lazy { UqloadExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val vudeoExtractor by lazy { VudeoExtractor(client) }
 
     override fun videoListParse(response: Response): List<Video> {
