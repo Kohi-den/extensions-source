@@ -3,7 +3,7 @@ ext {
     extClass = '.DeTodoPeliculas'
     themePkg = 'dooplay'
     baseUrl = 'https://detodopeliculas.nu'
-    overrideVersionCode = 8
+    overrideVersionCode = 9
 }
 
 apply from: "$rootDir/common.gradle"
