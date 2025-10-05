@@ -206,7 +206,11 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
             author = infos.getOrNull(1)?.selectFirst("a")?.text()
             genre = infos.getOrNull(3)?.select("a")?.joinToString { it.text() }
             description = doc.selectFirst("#height_limit.text")?.text()
-            status = if (remark?.contains("|") == true) SAnime.ONGOING else SAnime.COMPLETED
+            status = when {
+                remark?.contains("|") == true -> SAnime.ONGOING
+                remark == "已完结" -> SAnime.COMPLETED
+                else -> SAnime.UNKNOWN
+            }
         }
     }
 
@@ -234,7 +238,7 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
     override fun videoListParse(response: Response) = response.asJsoup().let {
         val origin = VIDEO_URL_REGEX.find(it.select(".player-left").html())!!.groups[1]!!.value
         val base64 = Base64.decode(origin, Base64.DEFAULT).toString(Charsets.UTF_8)
-        listOf(Video(URLDecoder.decode(base64, "UTF-8"), "默认源", null))
+        listOf(Video(URLDecoder.decode(base64, "UTF-8"), "默认", null))
     }
 
     override fun videoUrlRequest(video: Video) = GET(PARSE_URL + video.url)
