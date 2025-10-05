@@ -214,13 +214,18 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override fun getEpisodeUrl(episode: SEpisode) = realUrl + episode.url
 
-    override fun episodeListParse(response: Response) =
-        response.asJsoup().select(".anthology-list-play.size a").map {
-            SEpisode.create().apply {
-                name = it.text()
-                setUrlWithoutDomain(it.absUrl("href"))
+    override fun episodeListParse(response: Response) = response.asJsoup().let { doc ->
+        val hosts = doc.select(".anthology-tab a").map { it.text().trim() }
+        doc.select(".anthology-list-play").mapIndexed { i, e ->
+            e.select("a").map {
+                SEpisode.create().apply {
+                    setUrlWithoutDomain(it.absUrl("href"))
+                    name = it.text()
+                    scanlator = hosts[i]
+                }
             }
-        }.reversed()
+        }.flatten().reversed()
+    }
 
     // Video List ==================================================================================
 
