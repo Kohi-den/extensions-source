@@ -18,7 +18,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
-import eu.kanade.tachiyomi.network.interceptor.rateLimitHost
+import eu.kanade.tachiyomi.network.interceptor.rateLimit
 import eu.kanade.tachiyomi.util.parallelMapBlocking
 import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.json.Json
@@ -31,21 +31,27 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.util.zip.GZIPInputStream
+import kotlin.random.Random
 import kotlin.time.Duration.Companion.seconds
 
 class Tomato : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override val name = "Tomato"
 
-    override val baseUrl = "https://beta-api.tomatoanimes.com"
+    override val baseUrl = "https://edge.betomato.com"
 
     override val lang = "pt-BR"
 
@@ -57,13 +63,84 @@ class Tomato : ConfigurableAnimeSource, AnimeHttpSource() {
 
     private val json: Json by injectLazy()
 
-    override fun headersBuilder() = super.headersBuilder().add(
-        "Authorization",
-        "Bearer $TOKEN",
-    )
+    override fun headersBuilder() = super.headersBuilder().apply {
+        set("Accept", "application/json, text/plain, */*")
+        set("Accept-Encoding", "gzip, deflate")
+        set("Authorization", "Bearer $TOKEN")
+        set("User-Agent", "okhttp/4.11.0")
+        set("x-app", "1.4.3")
+    }
 
-    private val episodesClient by lazy {
-        client.newBuilder().rateLimitHost(baseUrl.toHttpUrl(), 1, 0.5.seconds).build()
+    private var randomIp: String = ""
+
+    override val client by lazy {
+        network.client.newBuilder()
+            .rateLimit(5, 1.seconds)
+            .retryOnConnectionFailure(true)
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                request.apply {
+                    addHeader("request-time", System.currentTimeMillis().toString())
+                    removeHeader("Cache-Control")
+                    if (chain.request().url.toString().endsWith("/stream")) {
+                        header("User-Agent", "tomato-android")
+                    }
+                }
+                chain.proceed(request.build())
+            }
+            .addInterceptor { chain ->
+                var response = chain.proceed(chain.request())
+                val contentEncoding = response.header("Content-Encoding")
+
+                if (contentEncoding == "gzip") {
+                    val parsedBody = response.body.byteStream().let { gzipInputStream ->
+                        GZIPInputStream(gzipInputStream).use { inputStream ->
+                            val outputStream = ByteArrayOutputStream()
+                            inputStream.copyTo(outputStream)
+                            outputStream.toByteArray()
+                        }
+                    }
+
+                    response = response.createNewWithCompatBody(parsedBody)
+                }
+
+                response
+            }
+            .addInterceptor { chain ->
+                val maxRetries = 3
+                val retryDelayMillis = 1000L
+                var attempt = 0
+                var response: Response? = null
+                var lastException: IOException? = null
+
+                while (attempt < maxRetries) {
+                    try {
+                        response?.close()
+                        val request = chain.request().newBuilder()
+                        if (randomIp.isNotBlank()) {
+                            request.addHeader("X-Forwarded-For", randomIp)
+                        }
+                        val currentResponse = chain.proceed(request.build())
+                        response = currentResponse
+
+                        if (currentResponse.code != 500) {
+                            return@addInterceptor currentResponse
+                        }
+                    } catch (e: IOException) {
+                        lastException = e
+                    }
+
+                    randomIp = generateRandomIp()
+                    attempt++
+                    Thread.sleep(retryDelayMillis)
+                }
+
+                // if still error after retries
+                response?.close()
+                lastException?.let { throw it }
+                throw IOException("Max retries reached for request: ${chain.request().url}")
+            }
+            .build()
     }
 
     // ============================== Popular ===============================
@@ -80,7 +157,7 @@ class Tomato : ConfigurableAnimeSource, AnimeHttpSource() {
         val animes = emAlta?.jsonObject?.get("data")?.jsonArray?.parallelMapBlocking {
             animeFromId(it.jsonObject["anime_id"]!!.jsonPrimitive.int)
         }
-            ?: emptyList<SAnime>()
+            ?: emptyList()
 
         return AnimesPage(animes, false)
     }
@@ -99,7 +176,7 @@ class Tomato : ConfigurableAnimeSource, AnimeHttpSource() {
         val animes = emAlta?.jsonObject?.get("data")?.jsonArray?.parallelMapBlocking {
             animeFromId(it.jsonObject["ep_anime_id"]!!.jsonPrimitive.int)
         }
-            ?: emptyList<SAnime>()
+            ?: emptyList()
 
         return AnimesPage(animes, false)
     }
@@ -189,7 +266,7 @@ class Tomato : ConfigurableAnimeSource, AnimeHttpSource() {
                     body = body,
                 )
                 val episodes =
-                    episodesClient.newCall(request).execute().parseAs<EpisodesResultDto>().data
+                    client.newCall(request).execute().parseAs<EpisodesResultDto>().data
 
                 episodes.forEach { episode ->
                     val partName = "Temporada ${season.seasonNumber} x ${episode.epNumber}"
@@ -229,6 +306,8 @@ class Tomato : ConfigurableAnimeSource, AnimeHttpSource() {
 
         val videos = mutableListOf<Video>()
 
+        val videoHeaders = Headers.headersOf("Accept", "*/*", "Accept-Language", "pt_BR")
+
         dubs.forEach { dub ->
             if (dub.second.isNullOrBlank()) {
                 return@forEach
@@ -243,6 +322,7 @@ class Tomato : ConfigurableAnimeSource, AnimeHttpSource() {
                         response.streams.shd,
                         "${dub.first} - 480p",
                         videoUrl = response.streams.shd,
+                        headers = videoHeaders,
                     ),
                 )
             }
@@ -252,6 +332,7 @@ class Tomato : ConfigurableAnimeSource, AnimeHttpSource() {
                         response.streams.mhd,
                         "${dub.first} - 720p",
                         videoUrl = response.streams.mhd,
+                        headers = videoHeaders,
                     ),
                 )
             }
@@ -261,6 +342,7 @@ class Tomato : ConfigurableAnimeSource, AnimeHttpSource() {
                         response.streams.fhd,
                         "${dub.first} - 1080p",
                         videoUrl = response.streams.fhd,
+                        headers = videoHeaders,
                     ),
                 )
             }
@@ -316,6 +398,17 @@ class Tomato : ConfigurableAnimeSource, AnimeHttpSource() {
                     REGEX_QUALITY.find(it.quality)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                 },
         )
+    }
+
+    private fun Response.createNewWithCompatBody(outputStream: ByteArray): Response {
+        return this.newBuilder()
+            .body(outputStream.toResponseBody(this.body.contentType()))
+            .removeHeader("Content-Encoding")
+            .build()
+    }
+
+    private fun generateRandomIp(): String {
+        return (1..4).map { Random.nextInt(0, 254) }.joinToString(".")
     }
 
     companion object {
