@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.animeextension.pt.animesgratis
 
+import android.util.Base64
 import android.util.Log
 import eu.kanade.tachiyomi.animeextension.pt.animesgratis.extractors.NoaExtractor
 import eu.kanade.tachiyomi.animeextension.pt.animesgratis.extractors.RuplayExtractor
@@ -18,10 +19,14 @@ import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import uy.kohesive.injekt.injectLazy
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -38,6 +43,8 @@ class Q1N : DooPlay(
     override val dateFormatter by lazy {
         SimpleDateFormat("dd/MM/yy", Locale("pt", "BR"))
     }
+
+    private val json: Json by injectLazy()
 
     // ============================== Popular ===============================
     override fun popularAnimeSelector() = "div.items.featured article div.poster"
@@ -149,6 +156,7 @@ class Q1N : DooPlay(
                 // Process M3U8 videos through local server (automatic detection)
                 runBlocking { m3u8Integration.processVideoList(videos) }
             }
+
             else -> emptyList()
         }
 
@@ -169,13 +177,22 @@ class Q1N : DooPlay(
 
     private fun getPlayerUrl(player: Element): String? {
         val playerId = player.attr("data-nume")
-        val iframe = player.root().selectFirst("div#source-player-$playerId iframe")
+        val iframe = player.root()
+            .selectFirst("div#source-player-$playerId iframe, div#source-player-$playerId a")
 
-        return iframe?.tryGetAttr("data-litespeed-src", "src")?.takeIf(String::isNotBlank)
+        return iframe?.tryGetAttr("data-litespeed-src", "src", "href")?.takeIf(String::isNotBlank)
             ?.let {
                 when {
                     it.contains("/aviso/") ->
                         it.toHttpUrl().queryParameter("url")
+
+                    it.contains("go.php?auth=") -> {
+                        val auth = it.toHttpUrl().queryParameter("auth")
+                        val decoded = String(Base64.decode(auth, Base64.DEFAULT))
+                        val content = json.decodeFromString<JsonObject>(decoded)
+
+                        content["url"]?.jsonPrimitive?.content
+                    }
 
                     else -> it
                 }
