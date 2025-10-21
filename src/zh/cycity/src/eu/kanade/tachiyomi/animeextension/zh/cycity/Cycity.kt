@@ -159,16 +159,16 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
     )
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        if (query.isNotBlank()) {
-            val url = realUrl.toHttpUrl().newBuilder()
-                .addPathSegments("search/wd/$query/page/$page.html")
-            return GET(url.build())
-        }
         val url = realUrl.toHttpUrl().newBuilder()
-            .addPathSegments("show/${filters[1]}")
-            .addPathSegments("class/${filters[2]}")
-        filters[3].toString().takeUnless("全部"::equals)?.let { url.addPathSegments("year/$it") }
-        return POST(url.build().toString())
+        if (query.isNotBlank()) {
+            url.addPathSegments("search/wd/$query")
+        } else {
+            url.addPathSegments("show/${filters[1]}")
+            if (filters[2].toString() != "全部") url.addPathSegments("class/${filters[2]}")
+            if (filters[3].toString() != "全部") url.addPathSegments("year/${filters[3]}")
+        }
+        url.addPathSegments("page/$page.html")
+        return GET(url.build())
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage {
@@ -206,7 +206,11 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
             author = infos.getOrNull(1)?.selectFirst("a")?.text()
             genre = infos.getOrNull(3)?.select("a")?.joinToString { it.text() }
             description = doc.selectFirst("#height_limit.text")?.text()
-            status = if (remark?.contains("|") == true) SAnime.ONGOING else SAnime.COMPLETED
+            status = when {
+                remark?.contains("|") == true -> SAnime.ONGOING
+                remark == "已完结" -> SAnime.COMPLETED
+                else -> SAnime.UNKNOWN
+            }
         }
     }
 
@@ -214,13 +218,20 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override fun getEpisodeUrl(episode: SEpisode) = realUrl + episode.url
 
-    override fun episodeListParse(response: Response) =
-        response.asJsoup().select(".anthology-list-play.size a").map {
-            SEpisode.create().apply {
-                name = it.text()
-                setUrlWithoutDomain(it.absUrl("href"))
+    override fun episodeListParse(response: Response) = response.asJsoup().let { doc ->
+        val hosts = doc.select(".anthology-tab a").map {
+            it.text().substringBefore(it.selectFirst("span")?.text() ?: "").trim()
+        }
+        doc.select(".anthology-list-play").mapIndexed { i, e ->
+            e.select("a").map {
+                SEpisode.create().apply {
+                    setUrlWithoutDomain(it.absUrl("href"))
+                    name = it.text()
+                    scanlator = hosts[i]
+                }
             }
-        }.reversed()
+        }.flatten().reversed()
+    }
 
     // Video List ==================================================================================
 
@@ -229,7 +240,7 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
     override fun videoListParse(response: Response) = response.asJsoup().let {
         val origin = VIDEO_URL_REGEX.find(it.select(".player-left").html())!!.groups[1]!!.value
         val base64 = Base64.decode(origin, Base64.DEFAULT).toString(Charsets.UTF_8)
-        listOf(Video(URLDecoder.decode(base64, "UTF-8"), "默认源", null))
+        listOf(Video(URLDecoder.decode(base64, "UTF-8"), "默认", null))
     }
 
     override fun videoUrlRequest(video: Video) = GET(PARSE_URL + video.url)
