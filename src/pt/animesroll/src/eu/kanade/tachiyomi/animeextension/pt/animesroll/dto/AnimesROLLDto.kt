@@ -15,10 +15,53 @@ data class DataPropDto<T>(val data: T)
 @Serializable
 data class LatestAnimeDto(
     @SerialName("data_releases")
-    val episodes: List<EpisodeAnimeDto>,
+    val releases: List<ReleaseDto>,
 ) {
     @Serializable
-    data class EpisodeAnimeDto(val episode: EpisodeDto)
+    data class ReleaseDto(
+        @SerialName("id_lancamento")
+        val idLancamento: Int,
+        @SerialName("id_episodio")
+        val idEpisodio: Int? = null,
+        @SerialName("id_movie")
+        val idMovie: Int? = null,
+        val fixed: Int,
+        val movie: MovieReleaseDto? = null,
+        val episode: EpisodeReleaseDto? = null,
+    )
+
+    @Serializable
+    data class MovieReleaseDto(
+        @SerialName("id_filme")
+        val idFilme: Int,
+        @SerialName("nome_filme")
+        val nomeFilme: String,
+        @SerialName("slug_filme")
+        val slugFilme: String,
+        @SerialName("generate_id")
+        val generateId: String,
+    )
+
+    @Serializable
+    data class EpisodeReleaseDto(
+        @SerialName("premiere_last_ep")
+        val premiereLastEp: Int? = null,
+        @SerialName("n_episodio")
+        val nEpisodio: String? = null,
+        @SerialName("generate_id")
+        val generateId: String? = null,
+        val anime: AnimeReleaseDto? = null,
+    )
+
+    @Serializable
+    data class AnimeReleaseDto(
+        @SerialName("id_serie")
+        val idSerie: Int,
+        val dub: Int,
+        val titulo: String,
+        @SerialName("slug_serie")
+        val slugSerie: String,
+    )
 }
 
 @Serializable
