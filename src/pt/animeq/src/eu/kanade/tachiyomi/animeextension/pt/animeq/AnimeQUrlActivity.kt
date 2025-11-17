@@ -5,10 +5,11 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import eu.kanade.tachiyomi.multisrc.dooplay.DooPlay
 import kotlin.system.exitProcess
 
 /**
- * Springboard that accepts https://animeq.blog/<id> intents
+ * Springboard that accepts https://animeq.net/<id> intents
  * and redirects them to the main Aniyomi process.
  */
 class AnimeQUrlActivity : Activity() {
@@ -23,7 +24,7 @@ class AnimeQUrlActivity : Activity() {
 
             val mainIntent = Intent().apply {
                 action = "eu.kanade.tachiyomi.ANIMESEARCH"
-                putExtra("query", "${AnimeQ.PREFIX_SEARCH}$searchQuery")
+                putExtra("query", "${DooPlay.PREFIX_SEARCH}$searchQuery")
                 putExtra("filter", packageName)
             }
 
