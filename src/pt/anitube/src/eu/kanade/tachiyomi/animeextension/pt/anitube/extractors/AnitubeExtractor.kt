@@ -25,6 +25,11 @@ class AnitubeExtractor(
 
     private val tag by lazy { javaClass.simpleName }
 
+    private data class PlayerInfo(
+        val playerUrl: String,
+        val referer: String,
+    )
+
     private data class VideoInfo(
         val path: String,
         val url: String,
@@ -55,13 +60,10 @@ class AnitubeExtractor(
         return if (link.startsWith("//")) "https:$link" else link
     }
 
-    private fun getAdsUrl(
-        videoUrl: String,
-        thumbUrl: String,
+    private fun getPlayerUrl(
         link: String,
         linkHeaders: Headers,
-    ): String {
-        val videoName = videoUrl.split('/').last()
+    ): PlayerInfo {
         val finalLink = normalizeLink(link)
         val response = client.newCall(GET(finalLink, headers = linkHeaders)).execute()
         val docLink = response.asJsoup()
@@ -72,7 +74,8 @@ class AnitubeExtractor(
             ?.let { refresh ->
                 val newLink = refresh.substringAfter("=")
                 val newHeaders = linkHeaders.newBuilder().set("Referer", finalLink).build()
-                return getAdsUrl(videoUrl, thumbUrl, newLink, newHeaders)
+                Log.d(tag, "Redirecting using meta refresh to $newLink")
+                return getPlayerUrl(newLink, newHeaders)
             }
 
         // Handle JavaScript redirect
@@ -83,39 +86,26 @@ class AnitubeExtractor(
                     .substringBefore("`")
                     .replace("\${token}", finalLink.toHttpUrl().queryParameter("t") ?: "")
                 val newHeaders = linkHeaders.newBuilder().set("Referer", finalLink).build()
-                return getAdsUrl(videoUrl, thumbUrl, newLink, newHeaders)
+                Log.d(tag, "Redirecting using JavaScript to $newLink")
+                return getPlayerUrl(newLink, newHeaders)
             }
 
         val referer = docLink.location() ?: link
-        val newHeaders = linkHeaders.newBuilder()
-            .set("Referer", "https://${referer.toHttpUrl().host}/")
-            .build()
 
-        return try {
-            val now = System.currentTimeMillis()
-            val body = client.newCall(
-                GET(
-                    "$SITE_URL?name=apphd/$videoName&img=$thumbUrl&pais=pais=BR&time=$now&url=$videoUrl",
-                    headers = newHeaders,
-                ),
-            ).execute().body.string()
+        Log.d(tag, "Final url: $referer")
 
-            ADS_URL_REGEX.find(body)?.groups?.get(1)?.value
-                ?.takeIf { it.startsWith("http") }
-                ?: throw IllegalStateException("No valid ADS URL found")
-        } catch (e: Exception) {
-            Log.e(tag, "Failed to get ADS URL: ${e.message}")
-            "https://widgets.outbrain.com/outbrain.js"
-        }
+        val playerUrl = docLink.selectFirst("iframe")?.attr("src")!!
+
+        return PlayerInfo(playerUrl = playerUrl, referer = referer)
     }
 
-    private fun getAuthCode(serverUrl: String, thumbUrl: String, link: String): String? {
+    private fun getAuthCode(playerInfo: PlayerInfo): String? {
         return try {
             // Check cached auth code
             preferences.getString(PREF_AUTHCODE_KEY, "")
-                ?.takeIf { it.isNotBlank() && isValidAuthCode(it, serverUrl) }
+                ?.takeIf { it.isNotBlank() && isValidAuthCode(it) }
                 ?.also { Log.d(tag, "Using cached auth code") }
-                ?: fetchNewAuthCode(serverUrl, thumbUrl, link)
+                ?: fetchNewAuthCode(playerInfo)
         } catch (e: Exception) {
             Log.e(tag, "Error getting auth code: ${e.message}")
             preferences.edit().putString(PREF_AUTHCODE_KEY, "").commit()
@@ -123,10 +113,10 @@ class AnitubeExtractor(
         }
     }
 
-    private fun isValidAuthCode(authCode: String, serverUrl: String): Boolean {
+    private fun isValidAuthCode(authCode: String): Boolean {
         return try {
             val authArgs = String(Base64.decode(authCode.substringAfter("="), Base64.DEFAULT))
-            val url = "$serverUrl?$authArgs".toHttpUrl()
+            val url = "https://127.0.0.1?$authArgs".toHttpUrl()
 
             val serverTime = url.queryParameter("server_time")
                 ?.let { SimpleDateFormat("M/d/yyyy h:m:s a", Locale.ENGLISH).parse(it) }
@@ -145,11 +135,32 @@ class AnitubeExtractor(
         }
     }
 
-    private fun fetchNewAuthCode(videoUrl: String, thumbUrl: String, link: String): String? {
+    private fun fetchNewAuthCode(playerInfo: PlayerInfo): String? {
         Log.d(tag, "Fetching new auth code")
 
-        val adsUrl = getAdsUrl(videoUrl, thumbUrl, link, headers)
+        val adsUrl = try {
+            val newHeaders = headers.newBuilder()
+                .set("Referer", "https://${playerInfo.referer.toHttpUrl().host}/")
+                .build()
+
+            val body = client.newCall(
+                GET(
+                    playerInfo.playerUrl,
+                    headers = newHeaders,
+                ),
+            ).execute().body.string()
+
+            ADS_URL_REGEX.find(body)?.groups?.get(1)?.value
+                ?.takeIf { it.startsWith("http") }
+                ?: throw IllegalStateException("No valid ADS URL found")
+        } catch (e: Exception) {
+            Log.e(tag, "Failed to get ADS URL: ${e.message}")
+            "https://widgets.outbrain.com/outbrain.js"
+        }
+
         val adsContent = client.newCall(GET(adsUrl)).execute().body.string()
+
+        val videoUrl = playerInfo.playerUrl.toHttpUrl().queryParameter("url")!!
 
         val body = FormBody.Builder()
             .add("category", "client")
@@ -200,23 +211,22 @@ class AnitubeExtractor(
 
     fun getVideoList(doc: Document): List<Video> {
         val hasFHD = doc.selectFirst("div.abaItem:contains(FULLHD)") != null
-        val serverUrl = doc.selectFirst("meta[itemprop=contentURL]")!!.attr("content")
-        val thumbUrl = doc.selectFirst("meta[itemprop=thumbnailUrl]")!!.attr("content")
-        val filename = serverUrl.split("/").last()
-        val firstLink = doc.selectFirst("div.video_container > a, div.playerContainer > a")!!
-            .attr("href")
+        val links =
+            doc
+                .select("div.video_container > a, div.playerContainer > a")
+                .map { it.attr("href") }
 
-        val baseVideoUrl = "$CDN_URL/ccc/$filename"
         val qualities = listOfNotNull("SD", "HD", if (hasFHD) "FULLHD" else null)
-        val paths = listOf("333", "ccc", "fuh")
 
-        val authCode = getAuthCode(baseVideoUrl, thumbUrl, firstLink)
+        var authCode: String? = null
 
         return qualities
             .mapIndexed { index, quality ->
+                val playerInfo = getPlayerUrl(links[index], headers)
+                authCode = authCode ?: getAuthCode(playerInfo)
                 VideoInfo(
-                    path = paths[index],
-                    url = baseVideoUrl.replace("ccc", paths[index]),
+                    path = links[index],
+                    url = playerInfo.playerUrl.toHttpUrl().queryParameter("url")!!,
                     quality = "$quality - Anitube",
                 )
             }
@@ -234,8 +244,6 @@ class AnitubeExtractor(
 
     companion object {
         private const val PREF_AUTHCODE_KEY = "authcode"
-        private const val CDN_URL =
-            "https://c844d6af0819d9944e86e96864a9a175.r2.cloudflarestorage.com"
         private const val ADS_URL = "https://ads.anitube.vip/adblock2.php"
         private const val SITE_URL = "https://www.anitube.vip/playerricas.php"
         private val ADS_URL_REGEX = Regex("""(?:urlToFetch|ADS_URL)\s*=\s*['"]([^'"]+)['"]""")
