@@ -1,0 +1,14 @@
+ext {
+    extName = 'SmartAnimes'
+    extClass = '.SmartAnimes'
+    themePkg = 'animestream'
+    baseUrl = 'https://smartanimes.com'
+    overrideVersionCode = 1
+    isNsfw = true
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(":lib:googledriveplayer-extractor"))
+}
