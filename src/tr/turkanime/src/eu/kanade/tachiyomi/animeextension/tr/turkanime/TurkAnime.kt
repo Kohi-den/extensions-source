@@ -62,7 +62,7 @@ class TurkAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "Türk Anime TV"
 
-    override val baseUrl = "https://www.turkanime.co"
+    override val baseUrl = "https://www.turkanime.tv"
 
     override val lang = "tr"
 

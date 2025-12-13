@@ -29,7 +29,7 @@ import java.util.Locale
 class AsyaAnimeleri : AnimeStream(
     "tr",
     "AsyaAnimeleri",
-    "https://asyaanimeleri.com",
+    "https://asyaanimeleri.top",
 ) {
     override val animeListUrl = "$baseUrl/series"
 
