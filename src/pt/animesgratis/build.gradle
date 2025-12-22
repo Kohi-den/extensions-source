@@ -1,10 +1,10 @@
 ext {
     extKmkVersionCode = 3
-    extName = 'Q1N'
-    extClass = '.Q1N'
+    extName = 'Top Animes'
+    extClass = '.TopAnimes'
     themePkg = 'dooplay'
-    baseUrl = 'https://q1n.net'
-    overrideVersionCode = 26
+    baseUrl = 'https://topanimes.net'
+    overrideVersionCode = 27
 }
 
 apply from: "$rootDir/common.gradle"
