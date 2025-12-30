@@ -30,10 +30,10 @@ import uy.kohesive.injekt.injectLazy
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-class Q1N : DooPlay(
+class TopAnimes : DooPlay(
     "pt-BR",
-    "Q1N",
-    "https://q1n.net",
+    "Top Animes",
+    "https://topanimes.net",
 ) {
 
     private val tag by lazy { javaClass.simpleName }
@@ -186,7 +186,7 @@ class Q1N : DooPlay(
                     it.contains("/aviso/") ->
                         it.toHttpUrl().queryParameter("url")
 
-                    it.contains("go.php?auth=") -> {
+                    it.contains("?auth=") -> {
                         val auth = it.toHttpUrl().queryParameter("auth")
                         val decoded = String(Base64.decode(auth, Base64.DEFAULT))
                         val content = json.decodeFromString<JsonObject>(decoded)
