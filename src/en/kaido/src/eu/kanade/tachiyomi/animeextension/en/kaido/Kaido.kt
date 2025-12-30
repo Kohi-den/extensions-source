@@ -24,7 +24,7 @@ class Kaido : ZoroTheme(
             "Vidstreaming", "Vidcloud" -> runBlocking(Dispatchers.IO) {
                 megaCloudExtractor.videosFromUrl(
                     server.link,
-                    prefix = "${server.name.uppercase()}-${server.type.uppercase()}"
+                    prefix = "${server.name.uppercase()}-${server.type.uppercase()}",
                 )
             }
 

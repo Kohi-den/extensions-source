@@ -6,7 +6,6 @@ import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.megacloudextractor.MegaCloudExtractor
-
 import eu.kanade.tachiyomi.multisrc.zorotheme.ZoroTheme
 import eu.kanade.tachiyomi.network.GET
 import kotlinx.coroutines.Dispatchers
@@ -22,14 +21,12 @@ class HiAnime : ZoroTheme(
         "HD-1",
         "HD-2",
 //        "HD-3", this one is not worth the trouble trust me bro
-        "StreamTape",
+//        "StreamTape",
     ),
 ) {
     override val id = 6706411382606718900L
 
     override val ajaxRoute = "/v2"
-
-
 
     private val megaCloudExtractor by lazy { MegaCloudExtractor(client, headers) }
 
@@ -52,7 +49,7 @@ class HiAnime : ZoroTheme(
             "HD-1", "HD-2" -> runBlocking(Dispatchers.IO) {
                 megaCloudExtractor.videosFromUrl(
                     server.link,
-                    prefix = "${server.name.uppercase()}-${server.type.uppercase()}"
+                    prefix = "${server.name.uppercase()}-${server.type.uppercase()}",
                 )
             }
 
