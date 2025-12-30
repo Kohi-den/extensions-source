@@ -2,8 +2,9 @@ package eu.kanade.tachiyomi.animeextension.en.kaido
 
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.megacloudextractor.MegaCloudExtractor
-import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.multisrc.zorotheme.ZoroTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 
 class Kaido : ZoroTheme(
     "en",
@@ -12,20 +13,21 @@ class Kaido : ZoroTheme(
     hosterNames = listOf(
         "Vidstreaming",
         "Vidcloud",
-        "StreamTape",
+//        "StreamTape",
     ),
 ) {
-    private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
-    private val megaCloudExtractor by lazy { MegaCloudExtractor(client, headers, preferences) }
+
+    private val megaCloudExtractor by lazy { MegaCloudExtractor(client, headers) }
 
     override fun extractVideo(server: VideoData): List<Video> {
         return when (server.name) {
-            "StreamTape" -> {
-                streamtapeExtractor.videoFromUrl(server.link, "Streamtape - ${server.type}")
-                    ?.let(::listOf)
-                    ?: emptyList()
+            "Vidstreaming", "Vidcloud" -> runBlocking(Dispatchers.IO) {
+                megaCloudExtractor.videosFromUrl(
+                    server.link,
+                    prefix = "${server.name.uppercase()}-${server.type.uppercase()}"
+                )
             }
-            "Vidstreaming", "Vidcloud" -> megaCloudExtractor.getVideosFromUrl(server.link, server.type, server.name)
+
             else -> emptyList()
         }
     }

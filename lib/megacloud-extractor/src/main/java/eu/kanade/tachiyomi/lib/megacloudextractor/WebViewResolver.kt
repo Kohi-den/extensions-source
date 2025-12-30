@@ -10,7 +10,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import eu.kanade.tachiyomi.lib.megacloudextractor.MegaCloudExtractor.VideoDto
+import eu.kanade.tachiyomi.lib.megacloudextractor.MegaCloudExtractor
 import kotlinx.serialization.json.Json
 import okhttp3.Headers
 import uy.kohesive.injekt.injectLazy
@@ -39,71 +39,71 @@ class WebViewResolver(private val globalHeaders: Headers) {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    fun getSources(xrax: String): VideoDto? {
-        val latch = CountDownLatch(1)
-        var webView: WebView? = null
-        val jsi = JsInterface(latch)
-
-        handler.post {
-            val webview = WebView(context)
-            webView = webview
-            with(webview.settings) {
-                javaScriptEnabled = true
-                domStorageEnabled = true
-                databaseEnabled = true
-                useWideViewPort = false
-                loadWithOverviewMode = false
-                userAgentString = globalHeaders["User-Agent"]
-            }
-
-            webview.addJavascriptInterface(jsi, "jsinterface")
-
-            webview.webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    Log.d(tag, "onPageFinished $url")
-                    super.onPageFinished(view, url)
-
-                    Log.d(tag, "injecting scripts")
-                    view?.evaluateJavascript(getJsContent("/assets/crypto-js.js")) {}
-                    view?.evaluateJavascript(getJsContent("/assets/megacloud.decodedpng.js")) {}
-                    view?.evaluateJavascript(getJsContent("/assets/megacloud.getsrcs.js")) {}
-
-                    Log.d(tag, "running script")
-                    view?.evaluateJavascript(
-                        "getSources(\"${xrax}\")" +
-                            ".then( s => jsinterface.setResponse( JSON.stringify(s) ) )",
-                    ) {}
-                }
-            }
-
-            webview.webChromeClient = object : WebChromeClient() {
-                override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                    Log.d(
-                        tag,
-                        "Chrome: [${consoleMessage?.messageLevel()}]" +
-                            "${consoleMessage?.message()}" +
-                            " at ${consoleMessage?.lineNumber()}" +
-                            " in ${consoleMessage?.sourceId()}",
-                    )
-                    return super.onConsoleMessage(consoleMessage)
-                }
-            }
-
-            val headers = mapOf("X-Requested-With" to "org.lineageos.jelly")
-
-            webView?.loadUrl("https://megacloud.tv/about", headers)
-        }  
-
-        latch.await(TIMEOUT_SEC, TimeUnit.SECONDS)
-
-        handler.post {
-            webView?.stopLoading()
-            webView?.destroy()
-            webView = null
-        }
-
-        return jsi.result?.let { json.decodeFromString<VideoDto>(it) }
-    }
+//    fun getSources(xrax: String): VideoDto? {
+//        val latch = CountDownLatch(1)
+//        var webView: WebView? = null
+//        val jsi = JsInterface(latch)
+//
+//        handler.post {
+//            val webview = WebView(context)
+//            webView = webview
+//            with(webview.settings) {
+//                javaScriptEnabled = true
+//                domStorageEnabled = true
+//                databaseEnabled = true
+//                useWideViewPort = false
+//                loadWithOverviewMode = false
+//                userAgentString = globalHeaders["User-Agent"]
+//            }
+//
+//            webview.addJavascriptInterface(jsi, "jsinterface")
+//
+//            webview.webViewClient = object : WebViewClient() {
+//                override fun onPageFinished(view: WebView?, url: String?) {
+//                    Log.d(tag, "onPageFinished $url")
+//                    super.onPageFinished(view, url)
+//
+//                    Log.d(tag, "injecting scripts")
+//                    view?.evaluateJavascript(getJsContent("/assets/crypto-js.js")) {}
+//                    view?.evaluateJavascript(getJsContent("/assets/megacloud.decodedpng.js")) {}
+//                    view?.evaluateJavascript(getJsContent("/assets/megacloud.getsrcs.js")) {}
+//
+//                    Log.d(tag, "running script")
+//                    view?.evaluateJavascript(
+//                        "getSources(\"${xrax}\")" +
+//                            ".then( s => jsinterface.setResponse( JSON.stringify(s) ) )",
+//                    ) {}
+//                }
+//            }
+//
+//            webview.webChromeClient = object : WebChromeClient() {
+//                override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+//                    Log.d(
+//                        tag,
+//                        "Chrome: [${consoleMessage?.messageLevel()}]" +
+//                            "${consoleMessage?.message()}" +
+//                            " at ${consoleMessage?.lineNumber()}" +
+//                            " in ${consoleMessage?.sourceId()}",
+//                    )
+//                    return super.onConsoleMessage(consoleMessage)
+//                }
+//            }
+//
+//            val headers = mapOf("X-Requested-With" to "org.lineageos.jelly")
+//
+//            webView?.loadUrl("https://megacloud.tv/about", headers)
+//        }
+//
+//        latch.await(TIMEOUT_SEC, TimeUnit.SECONDS)
+//
+//        handler.post {
+//            webView?.stopLoading()
+//            webView?.destroy()
+//            webView = null
+//        }
+//
+//        return jsi.result?.let { json.decodeFromString<VideoDto>(it) }
+//    }
 
     companion object {
         const val TIMEOUT_SEC: Long = 30
