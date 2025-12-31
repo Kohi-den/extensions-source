@@ -3,7 +3,7 @@ ext {
     extClass = '.AniWatchtv'
     themePkg = 'zorotheme'
     baseUrl = 'https://aniwatchtv.to'
-    overrideVersionCode = 3
+    overrideVersionCode = 4
 }
 
 apply from: "$rootDir/common.gradle"
