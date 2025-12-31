@@ -6,30 +6,29 @@ import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.megacloudextractor.MegaCloudExtractor
-import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.multisrc.zorotheme.ZoroTheme
 import eu.kanade.tachiyomi.network.GET
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.jsoup.nodes.Element
 
 class HiAnime : ZoroTheme(
     "en",
     "HiAnime",
-    "https://hianimez.to",
+    "https://hianime.to",
     hosterNames = listOf(
         "HD-1",
         "HD-2",
-        "HD-3",
-        "StreamTape",
+//        "HD-3", this one is not worth the trouble trust me bro
+//        "StreamTape",
     ),
 ) {
     override val id = 6706411382606718900L
 
     override val ajaxRoute = "/v2"
 
-    private val streamtapeExtractor by lazy { StreamTapeExtractor(client) }
-
-    private val megaCloudExtractor by lazy { MegaCloudExtractor(client, headers, preferences) }
+    private val megaCloudExtractor by lazy { MegaCloudExtractor(client, headers) }
 
     override val baseUrl: String
         get() = preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT) ?: PREF_DOMAIN_DEFAULT
@@ -47,18 +46,12 @@ class HiAnime : ZoroTheme(
 
     override fun extractVideo(server: VideoData): List<Video> {
         return when (server.name) {
-            "StreamTape" -> {
-                streamtapeExtractor.videoFromUrl(
+            "HD-1", "HD-2" -> runBlocking(Dispatchers.IO) {
+                megaCloudExtractor.videosFromUrl(
                     server.link,
-                    "Streamtape - ${server.type}",
-                )?.let(::listOf) ?: emptyList()
+                    prefix = "${server.name.uppercase()}-${server.type.uppercase()}",
+                )
             }
-
-            "HD-1", "HD-2", "HD-3" -> megaCloudExtractor.getVideosFromUrl(
-                server.link,
-                server.type,
-                server.name,
-            )
 
             else -> emptyList()
         }
@@ -71,8 +64,15 @@ class HiAnime : ZoroTheme(
             ListPreference(screen.context).apply {
                 key = PREF_DOMAIN_KEY
                 title = "Preferred domain"
-                entries = arrayOf("hianimez.to", "hianime.to", "hianimez.is", "hianime.nz", "hianime.pe")
-                entryValues = arrayOf("https://hianimez.to", "https://hianime.to", "https://hianimez.is", "https://hianime.nz", "https://hianime.pe")
+                entries =
+                    arrayOf("hianimez.to", "hianime.to", "hianimez.is", "hianime.nz", "hianime.pe")
+                entryValues = arrayOf(
+                    "https://hianimez.to",
+                    "https://hianime.to",
+                    "https://hianimez.is",
+                    "https://hianime.nz",
+                    "https://hianime.pe",
+                )
                 setDefaultValue(PREF_DOMAIN_DEFAULT)
                 summary = "%s"
 

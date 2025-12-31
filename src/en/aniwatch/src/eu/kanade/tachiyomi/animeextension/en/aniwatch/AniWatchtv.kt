@@ -5,6 +5,8 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.megacloudextractor.MegaCloudExtractor
 import eu.kanade.tachiyomi.multisrc.zorotheme.ZoroTheme
 import eu.kanade.tachiyomi.network.GET
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import okhttp3.Request
 import org.jsoup.nodes.Element
 
@@ -21,7 +23,7 @@ class AniWatchtv : ZoroTheme(
 
     override val ajaxRoute = "/v2"
 
-    private val megaCloudExtractor by lazy { MegaCloudExtractor(client, headers, preferences) }
+    private val megaCloudExtractor by lazy { MegaCloudExtractor(client, headers) }
 
     override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/recently-updated?page=$page", docHeaders)
 
@@ -33,8 +35,12 @@ class AniWatchtv : ZoroTheme(
 
     override fun extractVideo(server: VideoData): List<Video> {
         return when (server.name) {
-            "VidSrc", "MegaCloud" -> megaCloudExtractor.getVideosFromUrl(server.link, server.type, server.name)
-            else -> emptyList()
+            "VidSrc", "MegaCloud" -> runBlocking(Dispatchers.IO) {
+                megaCloudExtractor.videosFromUrl(
+                    server.link,
+                    prefix = "${server.name.uppercase()}-${server.type.uppercase()}",
+                )
+            } else -> emptyList()
         }
     }
 }
