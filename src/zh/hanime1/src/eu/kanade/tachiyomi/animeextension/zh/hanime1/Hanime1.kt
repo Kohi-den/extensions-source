@@ -173,6 +173,7 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
         if (query.isNotEmpty()) {
             searchUrl.addQueryParameter("query", query)
         }
+        val timeFilters = mutableListOf<TimeFilter>()
         filters.list.flatMap {
             when (it) {
                 is TagsFilter -> {
@@ -208,7 +209,17 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
                     }
                 }
 
+                is TimeFilter -> {
+                    timeFilters.add(it)
+                }
+
                 else -> {}
+            }
+        }
+        if (timeFilters.isNotEmpty()) {
+            timeFilters.sort()
+            timeFilters.joinToString(separator = "") { it.selected }.let {
+                searchUrl.addEncodedQueryParameter("date", it)
             }
         }
         if (page > 1) {
@@ -262,7 +273,7 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
-    private fun <T : QueryFilter> createFilter(prefKey: String, block: (Array<String>) -> T): T {
+    private fun <T : AnimeFilter.Select<*>> createFilter(prefKey: String, block: (Array<String>) -> T): T {
         val savedOptions = preferences.getString(prefKey, "")
         if (savedOptions.isNullOrEmpty()) {
             return block(emptyArray())
