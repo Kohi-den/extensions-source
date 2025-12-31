@@ -3,7 +3,7 @@ ext {
     extClass = '.HiAnime'
     themePkg = 'zorotheme'
     baseUrl = 'https://hianime.to'
-    overrideVersionCode = 56
+    overrideVersionCode = 57
 }
 
 apply from: "$rootDir/common.gradle"
