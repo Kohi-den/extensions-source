@@ -1,0 +1,7 @@
+ext {
+    extName = 'Fun Anime TV'
+    extClass = '.FunAnimeTV'
+    extVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
