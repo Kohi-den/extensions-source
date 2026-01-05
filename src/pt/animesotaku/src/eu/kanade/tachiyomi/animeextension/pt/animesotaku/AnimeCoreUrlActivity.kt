@@ -11,7 +11,7 @@ import kotlin.system.exitProcess
  * Springboard that accepts https://animesotaku.me/anime/<item> intents
  * and redirects them to the main Aniyomi process.
  */
-class AnimesOtakuUrlActivity : Activity() {
+class AnimeCoreUrlActivity : Activity() {
 
     private val tag = javaClass.simpleName
 
@@ -22,7 +22,7 @@ class AnimesOtakuUrlActivity : Activity() {
             val item = pathSegments[1]
             val mainIntent = Intent().apply {
                 action = "eu.kanade.tachiyomi.ANIMESEARCH"
-                putExtra("query", "${AnimesOtaku.PREFIX_SEARCH}$item")
+                putExtra("query", "${AnimeCore.PREFIX_SEARCH}$item")
                 putExtra("filter", packageName)
             }
 
