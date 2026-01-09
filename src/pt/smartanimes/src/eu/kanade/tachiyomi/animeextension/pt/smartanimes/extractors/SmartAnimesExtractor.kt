@@ -16,6 +16,7 @@ class SmartAnimesExtractor(private val client: OkHttpClient, private val headers
         .build()
 
     private val gdriveExtractor by lazy { GoogleDrivePlayerExtractor(client, headers) }
+    private val sendNowExtractor by lazy { SendNowExtractor(client, headers) }
 
     fun videosFromUrl(url: String, name: String): List<Video> {
         val content = client.newCall(GET(url, headers)).execute().body.string()
@@ -51,6 +52,7 @@ class SmartAnimesExtractor(private val client: OkHttpClient, private val headers
 
         return when {
             "drive.google.com" in sourceUrl -> gdriveExtractor.videosFromUrl(sourceUrl)
+            "send.now" in sourceUrl -> sendNowExtractor.videosFromUrl(sourceUrl, name)
 
             else -> emptyList()
         }
