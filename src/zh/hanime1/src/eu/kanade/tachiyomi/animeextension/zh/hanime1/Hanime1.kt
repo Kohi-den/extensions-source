@@ -584,4 +584,3 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
         const val SEPARATOR = "|||"
     }
 }
-
