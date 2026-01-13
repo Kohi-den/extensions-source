@@ -17,33 +17,72 @@ open class TagFilter(val key: String, name: String, state: Boolean = false) :
 
 class GenreFilter(values: Array<String>) :
     QueryFilter(
-        "影片類型",
+        "Genre",
         "genre",
-        values.ifEmpty { arrayOf("全部", "裏番", "泡面番", "Motion Anime") },
+        if (values.isNotEmpty()) {
+            // Translate each genre
+            values.map { chineseGenre ->
+                Tags.GENRE_TRANSLATIONS[chineseGenre] ?: chineseGenre
+            }.toTypedArray()
+        } else {
+            // Default fallback in English
+            arrayOf("All", "H-Anime", "Short Anime", "Motion Anime")
+        },
     )
 
 class SortFilter(values: Array<String>) :
     QueryFilter(
-        "排序方式",
+        "Sort by",
         "sort",
-        values.ifEmpty { arrayOf("最新上市", "最新上傳", "本日排行", "本週排行", "本月排行") },
+        if (values.isNotEmpty()) {
+            // Translate each sort option
+            values.map { chineseSort ->
+                Tags.SORT_TRANSLATIONS[chineseSort] ?: chineseSort
+            }.toTypedArray()
+        } else {
+            // Default fallback in English
+            arrayOf("Newest", "Latest Upload", "Today's Ranking", "Weekly Ranking", "Monthly Ranking")
+        },
     )
 
-object HotFilter : TagFilter("sort", "本週排行", true)
+// Change from object to class
+class HotFilter : TagFilter("sort", "Weekly Ranking", true)
 
 class YearFilter(values: Array<String>) :
-    QueryFilter("發佈年份", "year", values.ifEmpty { arrayOf("全部年份") })
+    QueryFilter(
+        "Release Year",
+        "year",
+        if (values.isNotEmpty()) {
+            // Translate year options
+            values.map { chineseYear ->
+                Tags.YEAR_TRANSLATIONS[chineseYear] ?: chineseYear
+            }.toTypedArray()
+        } else {
+            arrayOf("All Years")
+        },
+    )
 
 class MonthFilter(values: Array<String>) :
-    QueryFilter("發佈月份", "month", values.ifEmpty { arrayOf("全部月份") })
+    QueryFilter(
+        "Release Month",
+        "month",
+        if (values.isNotEmpty()) {
+            // Translate month options
+            values.map { chineseMonth ->
+                Tags.MONTH_TRANSLATIONS[chineseMonth] ?: chineseMonth
+            }.toTypedArray()
+        } else {
+            arrayOf("All Months")
+        },
+    )
 
 class DateFilter(yearFilter: YearFilter, monthFilter: MonthFilter) :
-    AnimeFilter.Group<QueryFilter>("發佈日期", listOf(yearFilter, monthFilter))
+    AnimeFilter.Group<QueryFilter>("Release Date", listOf(yearFilter, monthFilter))
 
 class CategoryFilter(name: String, filters: List<TagFilter>) :
     AnimeFilter.Group<TagFilter>(name, filters)
 
-class BroadMatchFilter : TagFilter("broad", "廣泛配對")
+class BroadMatchFilter : TagFilter("broad", "Broad Match")
 
 class TagsFilter(filters: List<AnimeFilter<out Any>>) :
-    AnimeFilter.Group<AnimeFilter<out Any>>("標籤", filters)
+    AnimeFilter.Group<AnimeFilter<out Any>>("Tags", filters)
