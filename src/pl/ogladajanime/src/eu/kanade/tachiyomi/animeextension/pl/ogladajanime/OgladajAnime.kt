@@ -225,7 +225,6 @@ class OgladajAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val title: String,
         val data: String,
         val gen_time: Int,
-
         )
 
     private fun parseStatus(statusString: String): Int {
@@ -263,7 +262,6 @@ class OgladajAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 preferences.edit().putString(key, entry).commit()
             }
         }
-
         screen.addPreference(videoQualityPref)
     }
 }
