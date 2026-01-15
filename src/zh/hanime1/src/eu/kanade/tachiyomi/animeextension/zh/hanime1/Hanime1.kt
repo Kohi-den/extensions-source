@@ -104,8 +104,11 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
                 name = element.select("div.card-mobile-title").text()
                 if (href == response.request.url.toString()) {
                     // current video
-                    val timeStr = jsoup.select("div.video-description-panel > div:first-child").text().split(" ").last()
-                    date_upload = runCatching { uploadDateFormat.parse(timeStr)?.time }.getOrNull() ?: 0L
+                    val timeStr =
+                        jsoup.select("div.video-description-panel > div:first-child").text()
+                            .split(" ").last()
+                    date_upload =
+                        runCatching { uploadDateFormat.parse(timeStr)?.time }.getOrNull() ?: 0L
                 }
             }
         }
@@ -145,14 +148,14 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override fun searchAnimeParse(response: Response): AnimesPage {
         val jsoup = response.asJsoup()
-        val nodes = jsoup.select("div.search-doujin-videos.hidden-xs:not(:has(a[target=_blank]))")
+        val nodes = jsoup.select(".horizontal-row .video-item-container")
         val list = if (nodes.isNotEmpty()) {
             nodes.map {
                 SAnime.create().apply {
-                    setUrlWithoutDomain(it.select("a[class=overlay]").attr("href"))
-                    thumbnail_url = it.select("img + img").attr("src")
-                    title = it.select("div.card-mobile-title").text().appendInvisibleChar()
-                    author = it.select(".card-mobile-user").text()
+                    setUrlWithoutDomain(it.select("a.video-link").attr("href"))
+                    thumbnail_url = it.select(".main-thumb").attr("abs:src")
+                    title = it.select(".title").text().appendInvisibleChar()
+                    author = it.select(".subtitle").text().split("•").getOrNull(0)?.trim()
                 }
             }
         } else {
@@ -273,7 +276,10 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
-    private fun <T : AnimeFilter.Select<*>> createFilter(prefKey: String, block: (Array<String>) -> T): T {
+    private fun <T : AnimeFilter.Select<*>> createFilter(
+        prefKey: String,
+        block: (Array<String>) -> T,
+    ): T {
         val savedOptions = preferences.getString(prefKey, "")
         if (savedOptions.isNullOrEmpty()) {
             return block(emptyArray())
