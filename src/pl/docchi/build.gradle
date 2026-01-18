@@ -18,4 +18,5 @@ dependencies {
     implementation(project(':lib:lycoris-extractor'))
     implementation(project(':lib:lulu-extractor'))
     implementation(project(':lib:streamup-extractor'))
+    implementation(project(':lib:filemoon-extractor'))
 }

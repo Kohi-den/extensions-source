@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.lib.cdaextractor.CdaPlExtractor
 import eu.kanade.tachiyomi.lib.dailymotionextractor.DailymotionExtractor
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
+import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
 import eu.kanade.tachiyomi.lib.googledriveextractor.GoogleDriveExtractor
 import eu.kanade.tachiyomi.lib.luluextractor.LuluExtractor
 import eu.kanade.tachiyomi.lib.lycorisextractor.LycorisCafeExtractor
@@ -151,6 +152,8 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
     private val googledriveExtractor by lazy { GoogleDriveExtractor(client, headers) }
     private val streamupExtractor by lazy { StreamupExtractor(client) }
 
+    private val filemoonExtractor by lazy { FilemoonExtractor(client) }
+
     override fun videoListParse(response: Response): List<Video> {
         val videolist: List<VideoList> = response.body.string().parseAs()
         val serverList = videolist.mapNotNull { player ->
@@ -176,16 +179,21 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
                     "gdrive",
                     "google drive",
                     "streamup",
+                    "filemoon",
                 )
             ) {
                 return@mapNotNull null
             }
 
-            Pair(player.player, prefix)
+            Triple(player.player, prefix, playerName)
         }
         // Jeśli dodadzą opcje z mozliwością edytowania mpv to zrobić tak ze jak bedą odwrócone kolory to ustawia dane do mkv <3
-        return serverList.parallelCatchingFlatMapBlocking { (serverUrl, prefix) ->
+        return serverList.parallelCatchingFlatMapBlocking { (serverUrl, prefix, playerName) ->
             when {
+                playerName.contains("filemoon") -> {
+                    filemoonExtractor.videosFromUrl(serverUrl, "${prefix}Filemoon - ", headers)
+                }
+
                 serverUrl.contains("vk.com") -> {
                     vkExtractor.videosFromUrl(serverUrl, prefix)
                 }
@@ -199,7 +207,7 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
                 }
 
                 serverUrl.contains("dailymotion") -> {
-                    dailymotionExtractor.videosFromUrl(serverUrl, "$prefix Dailymotion -")
+                    dailymotionExtractor.videosFromUrl(serverUrl, "${prefix}Dailymotion -")
                 }
 
                 serverUrl.contains("sibnet.ru") -> {
@@ -207,7 +215,7 @@ class Docchi : ConfigurableAnimeSource, AnimeHttpSource() {
                 }
 
                 serverUrl.contains("dood") -> {
-                    doodExtractor.videosFromUrl(serverUrl, "$prefix Dood")
+                    doodExtractor.videosFromUrl(serverUrl, "${prefix}Dood")
                 }
 
                 serverUrl.contains("lycoris.cafe") -> {
