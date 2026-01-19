@@ -6,7 +6,6 @@ import eu.kanade.tachiyomi.multisrc.dooplay.DooPlay
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
@@ -24,6 +23,8 @@ class BetterAnimeIo : DooPlay(
     private val contentUrl = "$baseUrl/animes"
 
     private val json: Json by injectLazy()
+
+    private val extractor by lazy { BetterAnimeIoExtractor(client, json) }
 
     // ============================== Popular ===============================
     override fun popularAnimeSelector() = "div#featured-titles article.item div.poster"
@@ -90,28 +91,9 @@ class BetterAnimeIo : DooPlay(
         return when {
             "jwplayer?source=" in url || "jwplayer/?source=" in url -> {
                 val encodedSource = url.toHttpUrl().queryParameter("source") ?: return emptyList()
-                extractVideosFromApi(encodedSource)
+                extractor.extractVideosFromApi(encodedSource)
             }
             else -> emptyList()
-        }
-    }
-
-    private fun extractVideosFromApi(encodedSource: String): List<Video> {
-        val apiUrl = "https://api.myblogapi.site/api/v1/decode/blogg/$encodedSource"
-        return try {
-            val response = client.newCall(GET(apiUrl)).execute()
-            val responseBody = response.body.string()
-            val videoResponse = json.decodeFromString<VideoApiResponse>(responseBody)
-
-            if (videoResponse.status == "success") {
-                videoResponse.play.map { video ->
-                    Video(video.src, video.sizeText, video.src)
-                }
-            } else {
-                emptyList()
-            }
-        } catch (e: Exception) {
-            emptyList()
         }
     }
 
@@ -136,21 +118,4 @@ class BetterAnimeIo : DooPlay(
     // ============================= Utilities ==============================
     override val prefQualityValues = arrayOf("360p", "720p", "1080p")
     override val prefQualityEntries = prefQualityValues
-
-    @Serializable
-    data class VideoApiResponse(
-        val status: String,
-        val message: String? = null,
-        val size: String? = null,
-        val duration: String? = null,
-        val play: List<VideoSource> = emptyList(),
-    )
-
-    @Serializable
-    data class VideoSource(
-        val src: String,
-        val type: String? = null,
-        val size: Int = 0,
-        val sizeText: String = "Default",
-    )
 }
