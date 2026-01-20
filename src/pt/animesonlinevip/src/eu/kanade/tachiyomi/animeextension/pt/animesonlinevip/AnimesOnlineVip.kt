@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
+import eu.kanade.tachiyomi.lib.bloggerextractor.BloggerExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.util.asJsoup
@@ -139,16 +140,21 @@ class AnimesOnlineVip : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
 
-        return document.select("#video source")
+        return document.select("#video source,div.post-video iframe")
             .parallelCatchingFlatMapBlocking {
                 getVideosFromURL(it.attr("src"))
             }
     }
 
+    private val bloggerExtractor by lazy { BloggerExtractor(client) }
+
     private fun getVideosFromURL(url: String): List<Video> {
-        return listOf(
-            Video(url, "Default", videoUrl = url, headers),
-        )
+        return when {
+            "assistonapi.link" in url -> bloggerExtractor.videosFromUrl(url, headers)
+            else -> listOf(
+                Video(url, "Default", videoUrl = url, headers),
+            )
+        }
     }
 
     override fun videoListSelector(): String {
