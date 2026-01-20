@@ -1,0 +1,12 @@
+ext {
+    extName = 'BetterAnimeIo'
+    extClass = '.BetterAnimeIo'
+    themePkg = 'dooplay'
+    baseUrl = 'https://betteranime.io'
+    overrideVersionCode = 0
+    isNsfw = false
+}
+
+apply from: "$rootDir/common.gradle"
+
+
