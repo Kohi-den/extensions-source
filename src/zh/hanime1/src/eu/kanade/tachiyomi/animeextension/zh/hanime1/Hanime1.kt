@@ -1,9 +1,12 @@
 package eu.kanade.tachiyomi.animeextension.zh.hanime1
 
 import android.app.Application
+import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
+import androidx.preference.EditTextPreference
 import androidx.preference.ListPreference
+import androidx.preference.Preference
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -17,10 +20,9 @@ import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.util.asJsoup
-import kotlinx.coroutines.CoroutineExceptionHandler
-import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
@@ -29,11 +31,10 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
+import org.jsoup.nodes.Document
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
@@ -49,7 +50,7 @@ enum class FilterUpdateState {
 
 class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
     override val baseUrl: String
-        get() = "https://hanime1.me"
+        get() = CloudflareHelper.BASE_URL
     override val lang: String
         get() = "zh"
     override val name: String
@@ -57,8 +58,7 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
     override val supportsLatest: Boolean
         get() = true
 
-    override val client =
-        network.client.newBuilder().addInterceptor(::checkFiltersInterceptor).build()
+    override val client = CloudflareHelper.createClient()
 
     private val preferences: SharedPreferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
@@ -69,27 +69,47 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.getDefault())
     }
 
+    private val coroutineScope = CoroutineScope(Dispatchers.IO)
+    private var filterUpdateJob: Job? = null
+
+    private fun cleanListTitle(rawTitle: String): String {
+        return rawTitle
+            .replace("""\s*[0-9:]+\s*""".toRegex(), "")
+            .replace("""\s*\|\s*[0-9.]+萬次\s*""".toRegex(), "")
+            .replace("""\s*\|\s*thumb_up\s*\d+%\s*\d+\s*""".toRegex(), "")
+            .replace("""\u200B""".toRegex(), "")
+            .trim()
+    }
+
+    private fun cleanEpisodeName(episodeName: String): String {
+        return episodeName
+            .replace("""\s*[0-9:]+\s*""".toRegex(), "")
+            .replace("""\s*\|\s*.*""".toRegex(), "")
+            .trim()
+    }
+
     override fun animeDetailsParse(response: Response): SAnime {
         val doc = response.asJsoup()
         val useEnglish = preferences.getBoolean(PREF_KEY_USE_ENGLISH, true)
 
         return SAnime.create().apply {
-            genre = doc.select(".single-video-tag").not("[data-toggle]").eachText().let { tags ->
-                if (useEnglish) {
-                    tags.map { chineseTag ->
-                        Tags.getTranslatedTag(chineseTag) ?: chineseTag
-                    }.joinToString()
-                } else {
-                    tags.joinToString()
-                }
+            title = ""
+            val tags = doc.select(".single-video-tag").not("[data-toggle]").eachText()
+            genre = if (useEnglish) {
+                tags.map { chineseTag ->
+                    Tags.getTranslatedTag(chineseTag) ?: chineseTag
+                }.joinToString()
+            } else {
+                tags.joinToString()
             }
 
             author = doc.select("#video-artist-name").text()
 
+            var originalTitle = ""
             doc.select("script[type=application/ld+json]").first()?.data()?.let {
                 try {
                     val info = json.decodeFromString<JsonElement>(it).jsonObject
-                    val originalTitle = info["name"]!!.jsonPrimitive.content
+                    originalTitle = info["name"]!!.jsonPrimitive.content
                     description = info["description"]!!.jsonPrimitive.content
                     thumbnail_url = info["thumbnailUrl"]?.jsonArray?.get(0)?.jsonPrimitive?.content
 
@@ -103,6 +123,14 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
                 } catch (e: Exception) {
                     Log.e(name, "Failed to parse JSON-LD: ${e.message}")
                 }
+            }
+
+            if (description.isNullOrBlank()) {
+                description = doc.select("div.video-caption-text.caption-ellipsis")
+                    .firstOrNull()
+                    ?.text()
+                    ?.trim()
+                    ?: ""
             }
 
             if (title.isNullOrEmpty()) {
@@ -127,12 +155,22 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
             if (type == "裏番" || type == "泡麵番") {
                 runBlocking {
                     try {
-                        val animesPage = getSearchAnime(
-                            1,
-                            title.replace(" \\[.*\\]".toRegex(), ""),
-                            AnimeFilterList(GenreFilter(arrayOf("", type)).apply { state = 1 }),
-                        )
-                        thumbnail_url = animesPage.animes.firstOrNull()?.thumbnail_url ?: thumbnail_url
+                        val cleanOriginal = cleanListTitle(originalTitle)
+                        val cleanCurrent = cleanListTitle(title ?: "")
+                        val cleanSearchTitle = cleanOriginal.takeIf { it.isNotBlank() }
+                            ?: cleanCurrent.takeIf { it.isNotBlank() }
+                            ?: ""
+
+                        thumbnail_url = if (cleanSearchTitle.isNotBlank()) {
+                            val animesPage = getSearchAnime(
+                                1,
+                                cleanSearchTitle,
+                                AnimeFilterList(GenreFilter(arrayOf("", type)).apply { state = 1 }),
+                            )
+                            animesPage.animes.firstOrNull()?.thumbnail_url ?: thumbnail_url
+                        } else {
+                            thumbnail_url
+                        }
                     } catch (e: Exception) {
                         Log.e(name, "Failed to get bangumi cover image: ${e.message}")
                     }
@@ -143,7 +181,29 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val jsoup = response.asJsoup()
-        val nodes = jsoup.select("#playlist-scroll").first()!!.select(">div")
+        val nodes = jsoup.select("#playlist-scroll").first()?.select(">div") ?: return emptyList()
+        val currentVideoTitle = jsoup.select("script[type=application/ld+json]").firstOrNull()?.data()?.let {
+            try {
+                val info = json.decodeFromString<JsonElement>(it).jsonObject
+                info["name"]?.jsonPrimitive?.content
+            } catch (e: Exception) {
+                null
+            }
+        }?.let { cleanEpisodeName(it) }
+        var currentVideoDate: Long = 0L
+        jsoup.select("script[type=application/ld+json]").first()?.data()?.let {
+            try {
+                val info = json.decodeFromString<JsonElement>(it).jsonObject
+                info["uploadDate"]?.jsonPrimitive?.content?.let { date ->
+                    currentVideoDate = runCatching {
+                        uploadDateFormat.parse(date)?.time
+                    }.getOrNull() ?: 0L
+                }
+            } catch (e: Exception) {
+                Log.e(name, "Failed to parse upload date: ${e.message}")
+            }
+        }
+
         return nodes.mapIndexed { index, element ->
             SEpisode.create().apply {
                 val href = element.select("a.overlay").attr("href")
@@ -164,19 +224,9 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
                     if (!episodeViews.isNullOrBlank()) append(" | $episodeViews")
                 }
 
-                if (href == response.request.url.toString()) {
-                    jsoup.select("script[type=application/ld+json]").first()?.data()?.let {
-                        try {
-                            val info = json.decodeFromString<JsonElement>(it).jsonObject
-                            info["uploadDate"]?.jsonPrimitive?.content?.let { date ->
-                                date_upload = runCatching {
-                                    uploadDateFormat.parse(date)?.time
-                                }.getOrNull() ?: 0L
-                            }
-                        } catch (e: Exception) {
-                            Log.e(name, "Failed to parse upload date: ${e.message}")
-                        }
-                    }
+                val cleanEpisodeTitle = cleanEpisodeName(episodeTitle)
+                if (currentVideoTitle != null && cleanEpisodeTitle == currentVideoTitle) {
+                    date_upload = currentVideoDate
                 }
             }
         }
@@ -217,11 +267,27 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
-    override fun latestUpdatesParse(response: Response): AnimesPage = searchAnimeParse(response)
+    override fun latestUpdatesParse(response: Response): AnimesPage {
+        val doc = response.asJsoup()
+        val blocked = CloudflareHelper.checkAndHandleBlock(response, doc, "div.search-doujin-videos", preferences)
+        return if (blocked) {
+            AnimesPage(emptyList(), false)
+        } else {
+            searchAnimeParseFromDocument(doc)
+        }
+    }
 
     override fun latestUpdatesRequest(page: Int) = searchAnimeRequest(page, "", AnimeFilterList())
 
-    override fun popularAnimeParse(response: Response): AnimesPage = searchAnimeParse(response)
+    override fun popularAnimeParse(response: Response): AnimesPage {
+        val doc = response.asJsoup()
+        val blocked = CloudflareHelper.checkAndHandleBlock(response, doc, "div.search-doujin-videos", preferences)
+        return if (blocked) {
+            AnimesPage(emptyList(), false)
+        } else {
+            searchAnimeParseFromDocument(doc)
+        }
+    }
 
     override fun popularAnimeRequest(page: Int): Request {
         val popularUrl = baseUrl.toHttpUrl().newBuilder()
@@ -239,15 +305,34 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override fun searchAnimeParse(response: Response): AnimesPage {
         val jsoup = response.asJsoup()
-        val nodes = jsoup.select("div.search-doujin-videos.hidden-xs:not(:has(a[target=_blank]))")
+        if (CloudflareHelper.checkAndHandleBlock(response, jsoup, "div.search-doujin-videos", preferences)) {
+            val blockInfo = CloudflareHelper.getLastBlockInfo(preferences)
+            throw Exception(
+                "🔒 Access Blocked\n\nIssue: ${blockInfo?.message ?: "Cloudflare protection"}\n\n" +
+                    "Solution: ${blockInfo?.solution ?: "Please re-import fresh cookies"}\n\n" +
+                    "⚠️ How to fix:\n1. Open Hanime1 in WebView\n2. Log in/complete verification\n3. Import cookies\n4. Retry",
+            )
+        }
+        return searchAnimeParseFromDocument(jsoup)
+    }
+
+    private fun searchAnimeParseFromDocument(jsoup: Document): AnimesPage {
+        val nodes = jsoup.select("div.search-doujin-videos")
 
         val list = if (nodes.isNotEmpty()) {
             nodes.map { element ->
                 SAnime.create().apply {
                     setUrlWithoutDomain(element.select("a[class=overlay]").attr("href"))
-                    thumbnail_url = element.select("img + img").attr("src").takeIf { it.isNotBlank() }
-                        ?: element.select("img").firstOrNull()?.attr("src") ?: ""
-                    title = element.select("div.card-mobile-title").text().appendInvisibleChar()
+                    thumbnail_url = element.select("img + img")
+                        .firstOrNull()
+                        ?.attr("src")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: element.select("img")
+                            .firstOrNull()
+                            ?.attr("src")
+                            .orEmpty()
+                    val rawTitle = element.select("div.card-mobile-title").text()
+                    title = cleanListTitle(rawTitle).appendInvisibleChar()
                     author = element.select(".card-mobile-user").text()
                 }
             }
@@ -256,7 +341,8 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
                 SAnime.create().apply {
                     setUrlWithoutDomain(element.parent()!!.attr("href"))
                     thumbnail_url = element.select("img").attr("src")
-                    title = element.select(".home-rows-videos-title").text().appendInvisibleChar()
+                    val rawTitle = element.select(".home-rows-videos-title").text()
+                    title = cleanListTitle(rawTitle).appendInvisibleChar()
                 }
             }
         }
@@ -266,6 +352,14 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+        if (CloudflareHelper.isBlocked(preferences)) {
+            val blockInfo = CloudflareHelper.getLastBlockInfo(preferences)
+            throw Exception(
+                "⚠️ Access Blocked\n\nReason: ${blockInfo?.message ?: "Cloudflare protection"}\n\n" +
+                    "Steps to fix:\n1. Go to Extension Settings\n2. Clear Cookies\n3. Import fresh cookies\n4. Retry search",
+            )
+        }
+
         val searchUrl = baseUrl.toHttpUrl().newBuilder().addPathSegment("search")
         val useEnglish = preferences.getBoolean(PREF_KEY_USE_ENGLISH, true)
 
@@ -331,19 +425,13 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
         return GET(searchUrl.build())
     }
 
-    private fun checkFiltersInterceptor(chain: Interceptor.Chain): Response {
-        if (filterUpdateState == FilterUpdateState.NONE) {
-            updateFilters()
-        }
-        return chain.proceed(chain.request())
-    }
-
-    @OptIn(DelicateCoroutinesApi::class)
     private fun updateFilters() {
+        if (filterUpdateState == FilterUpdateState.UPDATING || filterUpdateJob?.isActive == true) {
+            return
+        }
+
         filterUpdateState = FilterUpdateState.UPDATING
-        val exceptionHandler =
-            CoroutineExceptionHandler { _, _ -> filterUpdateState = FilterUpdateState.FAILED }
-        GlobalScope.launch(Dispatchers.IO + exceptionHandler) {
+        filterUpdateJob = coroutineScope.launch {
             try {
                 val jsoup = client.newCall(GET("$baseUrl/search")).awaitSuccess().asJsoup()
                 val genreList = jsoup.select("div.genre-option div.hentai-sort-options").eachText()
@@ -430,15 +518,17 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     override fun getFilterList(): AnimeFilterList {
+        if (filterUpdateState == FilterUpdateState.NONE) {
+            updateFilters()
+        }
+
         val useEnglish = preferences.getBoolean(PREF_KEY_USE_ENGLISH, true)
 
-        // Create filters with Chinese values
         val genreFilter = createFilter(PREF_KEY_GENRE_LIST) { GenreFilter(it) }
         val sortFilter = createFilter(PREF_KEY_SORT_LIST) { SortFilter(it) }
         val yearFilter = createFilter(PREF_KEY_YEAR_LIST) { YearFilter(it) }
         val monthFilter = createFilter(PREF_KEY_MONTH_LIST) { MonthFilter(it) }
 
-        // If English is enabled, create new filters with translated values
         return if (useEnglish) {
             val translatedGenreValues = genreFilter.values.map {
                 Tags.getTranslatedGenre(it) ?: it
@@ -472,55 +562,215 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
-        screen.apply {
-            addPreference(
-                SwitchPreferenceCompat(context).apply {
-                    key = PREF_KEY_USE_ENGLISH
-                    title = "Use English filters"
-                    summary = "Show filter names in English (also affects tags in anime details)"
-                    setDefaultValue(true)
-                },
-            )
-            addPreference(
-                ListPreference(context).apply {
-                    key = PREF_KEY_VIDEO_QUALITY
-                    title = "設置首選畫質"
-                    entries = arrayOf("1080P", "720P", "480P")
-                    entryValues = entries
-                    setDefaultValue(DEFAULT_QUALITY)
-                    summary = "當前選擇：${preferences.getString(PREF_KEY_VIDEO_QUALITY, DEFAULT_QUALITY)}"
-                    setOnPreferenceChangeListener { _, newValue ->
-                        summary = "當前選擇：${newValue as String}"
-                        true
+        val context = screen.context
+
+        val statusHeader = Preference().apply {
+            key = "status_header"
+            title = "🔍 Connection Status"
+        }
+        screen.addPreference(statusHeader)
+
+        val cookieStatus = Preference().apply {
+            key = "cookie_status_detailed"
+            title = "Current Status"
+            summary = CloudflareHelper.getCookieStatus(preferences)
+        }
+        screen.addPreference(cookieStatus)
+
+        val blockHistory = Preference().apply {
+            key = "block_history"
+            title = "Recent Blocks"
+            val history = CloudflareHelper.getBlockHistory()
+            summary =
+                if (history.isEmpty()) {
+                    "No recent blocks"
+                } else {
+                    "${history.size} block(s) - Tap to view"
+                }
+
+            setOnPreferenceClickListener {
+                showBlockHistoryDialog(context)
+                true
+            }
+        }
+        screen.addPreference(blockHistory)
+
+        val englishFilter = SwitchPreferenceCompat(context).apply {
+            key = PREF_KEY_USE_ENGLISH
+            title = "🌐 Use English filters"
+            summary = "Show filter names in English (also affects tags in anime details)"
+            setDefaultValue(true)
+        }
+        screen.addPreference(englishFilter)
+
+        val cookieHeader = Preference().apply {
+            key = "cookie_header"
+            title = "🔑 Cookie Management"
+        }
+        screen.addPreference(cookieHeader)
+
+        val clearCookies = Preference().apply {
+            key = "clear_cookies"
+            title = "🗑️ Clear All Cookies"
+            summary = "Clear current cookies before importing fresh ones"
+
+            setOnPreferenceClickListener {
+                CloudflareHelper.clearAllCookies(preferences)
+                summary = "Cookies cleared - Ready for fresh import"
+                true
+            }
+        }
+        screen.addPreference(clearCookies)
+
+        val importCookies = EditTextPreference(context).apply {
+            key = PREF_KEY_IMPORTED_COOKIES
+            title = "📥 Import Cookies"
+            summary = "Paste cookies from browser/WebView"
+            dialogTitle = "Import Cookies"
+            dialogMessage =
+                "1. Open Hanime1 in WebView/browser\n" +
+                "2. Log in/complete any CAPTCHA\n" +
+                "3. Export cookies (use browser extension)\n" +
+                "4. Paste here\n\n" +
+                "Format: JSON array or raw cookies"
+
+            setOnPreferenceChangeListener { _, newValue ->
+                val value = (newValue as String).trim()
+                preferences.edit()
+                    .putBoolean(PREF_KEY_COOKIE_INVALID, false)
+                    .apply()
+
+                summary =
+                    if (value.isNotEmpty()) {
+                        val cookies = CloudflareHelper.parseCookies(value)
+                        "✅ ${cookies.size} cookie(s) imported"
+                    } else {
+                        "⚠ No cookies - Import required"
                     }
-                },
-            )
-            addPreference(
-                ListPreference(context).apply {
-                    key = PREF_KEY_LANG
-                    title = "設置首選語言"
-                    summary = "該設置僅影響影片字幕"
-                    entries = arrayOf("繁體中文", "簡體中文")
-                    entryValues = arrayOf("zh-CHT", "zh-CHS")
-                    setOnPreferenceChangeListener { _, newValue ->
-                        val baseHttpUrl = baseUrl.toHttpUrl()
-                        try {
-                            client.cookieJar.saveFromResponse(
-                                baseHttpUrl,
-                                listOf(
-                                    Cookie.parse(
-                                        baseHttpUrl,
-                                        "user_lang=${newValue as String}",
-                                    )!!,
-                                ),
-                            )
-                        } catch (e: Exception) {
-                            Log.e(name, "Failed to set language cookie: ${e.message}")
-                        }
-                        true
-                    }
-                },
-            )
+                true
+            }
+        }
+        screen.addPreference(importCookies)
+
+        val customUa = EditTextPreference(context).apply {
+            key = PREF_KEY_CUSTOM_UA
+            title = "🖥️ Custom User-Agent"
+            summary = "Optional: Use desktop browser UA"
+            dialogTitle = "Desktop User-Agent"
+            dialogMessage =
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/120.0.0.0 Safari/537.36"
+
+            setOnPreferenceChangeListener { _, newValue ->
+                summary = (newValue as String).ifBlank {
+                    "Using default desktop User-Agent"
+                }
+                true
+            }
+        }
+        screen.addPreference(customUa)
+
+        val videoHeader = Preference().apply {
+            key = "video_header"
+            title = "🎥 Video Settings"
+        }
+        screen.addPreference(videoHeader)
+
+        val videoQuality = ListPreference(context).apply {
+            key = PREF_KEY_VIDEO_QUALITY
+            title = "Preferred Quality"
+            entries = arrayOf("1080P", "720P", "480P")
+            entryValues = entries
+            setDefaultValue(DEFAULT_QUALITY)
+            summary =
+                "Current: ${preferences.getString(PREF_KEY_VIDEO_QUALITY, DEFAULT_QUALITY)}"
+
+            setOnPreferenceChangeListener { _, newValue ->
+                summary = "Current: ${newValue as String}"
+                true
+            }
+        }
+        screen.addPreference(videoQuality)
+
+        val languagePref = ListPreference(context).apply {
+            key = PREF_KEY_LANG
+            title = "Preferred Language"
+            summary = "Affects video subtitles"
+            entries = arrayOf("繁體中文", "簡體中文")
+            entryValues = arrayOf("zh-CHT", "zh-CHS")
+
+            setOnPreferenceChangeListener { _, newValue ->
+                CloudflareHelper.setLanguageCookie(newValue as String)
+                true
+            }
+        }
+        screen.addPreference(languagePref)
+
+        val helpHeader = Preference().apply {
+            key = "help_header"
+            title = "❓ Help & Troubleshooting"
+        }
+        screen.addPreference(helpHeader)
+
+        val showHelp = Preference().apply {
+            key = "show_help"
+            title = "📖 View Help Guide"
+            summary = "Common issues and solutions"
+
+            setOnPreferenceClickListener {
+                showHelpDialog(context)
+                true
+            }
+        }
+        screen.addPreference(showHelp)
+
+        val testConnection = Preference().apply {
+            key = "test_connection"
+            title = "🔧 Test Connection"
+            summary = "Check if extension can access Hanime1"
+
+            setOnPreferenceClickListener {
+                testConnection()
+                true
+            }
+        }
+        screen.addPreference(testConnection)
+    }
+
+    private fun showBlockHistoryDialog(context: Context) {
+        val history = CloudflareHelper.formatBlockHistory()
+        android.app.AlertDialog.Builder(context)
+            .setTitle("Recent Blocks")
+            .setMessage(history)
+            .setPositiveButton("Clear History") { _, _ ->
+                CloudflareHelper.clearBlockHistory()
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun showHelpDialog(context: Context) {
+        val helpText = CloudflareHelper.getDetailedHelp(context)
+        android.app.AlertDialog.Builder(context)
+            .setTitle("Hanime1 Extension Help")
+            .setMessage(helpText)
+            .setPositiveButton("Got it", null)
+            .show()
+    }
+
+    private fun testConnection() {
+        coroutineScope.launch {
+            try {
+                val testUrl = "$baseUrl/search"
+                val request = GET(testUrl)
+                val response = client.newCall(request).execute()
+                val doc = response.asJsoup()
+
+                CloudflareHelper.checkAndHandleBlock(response, doc, "div.search-doujin-videos", preferences)
+            } catch (e: Exception) {
+                Log.e("Hanime1", "Connection test failed: ${e.message}")
+            }
         }
     }
 
@@ -533,6 +783,9 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
         const val PREF_KEY_YEAR_LIST = "PREF_KEY_YEAR_LIST"
         const val PREF_KEY_MONTH_LIST = "PREF_KEY_MONTH_LIST"
         const val PREF_KEY_CATEGORY_LIST = "PREF_KEY_CATEGORY_LIST"
+        const val PREF_KEY_IMPORTED_COOKIES = "PREF_KEY_IMPORTED_COOKIES"
+        const val PREF_KEY_CUSTOM_UA = "PREF_KEY_CUSTOM_UA"
+        const val PREF_KEY_COOKIE_INVALID = "PREF_KEY_COOKIE_INVALID"
         const val DEFAULT_QUALITY = "1080P"
         const val SEPARATOR = "|||"
     }
