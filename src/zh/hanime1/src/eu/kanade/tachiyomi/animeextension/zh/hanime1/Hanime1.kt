@@ -148,7 +148,7 @@ class Hanime1 : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override fun searchAnimeParse(response: Response): AnimesPage {
         val jsoup = response.asJsoup()
-        val nodes = jsoup.select(".horizontal-row .video-item-container")
+        val nodes = jsoup.select(".horizontal-row .video-item-container:not(:has(a.video-link[target]))")
         val list = if (nodes.isNotEmpty()) {
             nodes.map {
                 SAnime.create().apply {
