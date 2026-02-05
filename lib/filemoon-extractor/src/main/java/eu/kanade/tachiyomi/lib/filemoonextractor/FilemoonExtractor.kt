@@ -1,87 +1,102 @@
 package eu.kanade.tachiyomi.lib.filemoonextractor
 
 import android.content.SharedPreferences
+import android.util.Base64
 import androidx.preference.EditTextPreference
 import androidx.preference.PreferenceScreen
-import dev.datlag.jsunpacker.JsUnpacker
-import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.util.asJsoup
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import uy.kohesive.injekt.injectLazy
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
-class FilemoonExtractor(
-    private val client: OkHttpClient,
-    private val preferences: SharedPreferences? = null,
-) {
-
+class FilemoonExtractor(private val client: OkHttpClient, private val preferences: SharedPreferences? = null) {
     private val playlistUtils by lazy { PlaylistUtils(client) }
     private val json: Json by injectLazy()
 
+    //Credit: https://github.com/skoruppa/docchi-stremio-addon/blob/main/app/players/filemoon.py
     fun videosFromUrl(url: String, prefix: String = "Filemoon - ", headers: Headers? = null): List<Video> {
-        var httpUrl = url.toHttpUrl()
-        val videoHeaders = (headers?.newBuilder() ?: Headers.Builder())
-            .set("Referer", url)
-            .set("Origin", "https://${httpUrl.host}")
-            .build()
+        return try {
+            val httpUrl = url.toHttpUrl()
+            val host = httpUrl.host
+            val mediaId = httpUrl.pathSegments.lastOrNull { it.isNotEmpty() } ?: return emptyList()
 
-        val doc = client.newCall(GET(url, videoHeaders)).execute().asJsoup()
-        val jsEval = doc.selectFirst("script:containsData(eval):containsData(m3u8)")?.data() ?: run {
-            val iframeUrl = doc.selectFirst("iframe[src]")!!.attr("src")
-            httpUrl = iframeUrl.toHttpUrl()
-            val iframeDoc = client.newCall(GET(iframeUrl, videoHeaders)).execute().asJsoup()
-            iframeDoc.selectFirst("script:containsData(eval):containsData(m3u8)")!!.data()
-        }
-        val unpacked = JsUnpacker.unpackAndCombine(jsEval).orEmpty()
-        val masterUrl = unpacked.takeIf(String::isNotBlank)
-            ?.substringAfter("{file:\"", "")
-            ?.substringBefore("\"}", "")
-            ?.takeIf(String::isNotBlank)
-            ?: return emptyList()
+            val videoHeaders = (headers?.newBuilder() ?: Headers.Builder())
+                .set("Referer", "https://$host/")
+                .set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .build()
 
-        val subtitleTracks = buildList {
-            // Subtitles from a external URL
-            val subUrl = httpUrl.queryParameter("sub.info")
-                ?: unpacked.substringAfter("fetch('", "")
-                    .substringBefore("').")
-                    .takeIf(String::isNotBlank)
-            if (subUrl != null) {
-                runCatching { // to prevent failures on serialization errors
-                    client.newCall(GET(subUrl, videoHeaders)).execute()
-                        .body.string()
-                        .let { json.decodeFromString<List<SubtitleDto>>(it) }
-                        .forEach { add(Track(it.file, it.label)) }
-                }
+            val apiUrl = "https://$host/api/videos/$mediaId/embed/playback"
+            val response = client.newCall(GET(apiUrl, videoHeaders)).execute()
+            val responseData = response.body.string()
+            val playbackJson = json.decodeFromString<PlaybackResponse>(responseData)
+
+            var finalSources: List<VideoSource>? = null
+
+            if (!playbackJson.sources.isNullOrEmpty()) {
+                finalSources = playbackJson.sources
+            } else if (playbackJson.playback != null) {
+                val pb = playbackJson.playback
+                val iv = decodeBase64(pb.iv)
+                val key = pb.key_parts.map { decodeBase64(it) }.reduce { acc, bytes -> acc + bytes }
+                val payload = decodeBase64(pb.payload)
+
+                val secretKey = SecretKeySpec(key, "AES")
+                val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+                val spec = GCMParameterSpec(128, iv)
+                cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
+
+                val decryptedData = cipher.doFinal(payload).toString(Charsets.UTF_8)
+                val decryptedJson = json.decodeFromString<PlaybackResponse>(decryptedData)
+                finalSources = decryptedJson.sources
             }
-        }
 
-        val videoList = playlistUtils.extractFromHls(
-            masterUrl,
-            subtitleList = subtitleTracks,
-            referer = "https://${httpUrl.host}/",
-            videoNameGen = { "$prefix$it" },
-        )
+            if (finalSources.isNullOrEmpty()) return emptyList()
 
-        val subPref = preferences?.getString(PREF_SUBTITLE_KEY, PREF_SUBTITLE_DEFAULT).orEmpty()
-        return videoList.map {
-            Video(
-                url = it.url,
-                quality = it.quality,
-                videoUrl = it.videoUrl,
-                audioTracks = it.audioTracks,
-                subtitleTracks = it.subtitleTracks.filter { tracks -> tracks.lang.contains(subPref, true) }
-            )
+            finalSources.flatMap { source ->
+                val streamUrl = source.url ?: source.file ?: return@flatMap emptyList<Video>()
+                val quality = source.label ?: "Unknown"
+
+                playlistUtils.extractFromHls(
+                    streamUrl,
+                    referer = "https://$host/",
+                    videoNameGen = { "$prefix$it" },
+                )
+            }
+
+        } catch (e: Exception) {
+            emptyList()
         }
     }
+    private fun decodeBase64(input: String): ByteArray {
+        return Base64.decode(input, Base64.URL_SAFE or Base64.NO_WRAP)
+    }
+    @Serializable
+    data class PlaybackResponse(
+        val sources: List<VideoSource>? = null,
+        val playback: PlaybackData? = null
+    )
 
     @Serializable
-    data class SubtitleDto(val file: String, val label: String)
+    data class PlaybackData(
+        val iv: String,
+        val key_parts: List<String>,
+        val payload: String
+    )
+
+    @Serializable
+    data class VideoSource(
+        val file: String? = null,
+        val url: String? = null,
+        val label: String? = "Default"
+    )
 
     companion object {
         fun addSubtitlePref(screen: PreferenceScreen) {
