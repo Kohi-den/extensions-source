@@ -13,7 +13,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data
-                    android:host="animecore.to"
+                    android:host="animecore.net"
                     android:pathPattern="/anime/..*"
                     android:scheme="https" />
             </intent-filter>

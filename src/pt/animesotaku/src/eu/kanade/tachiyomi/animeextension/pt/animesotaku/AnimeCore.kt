@@ -30,7 +30,7 @@ class AnimeCore : AnimeHttpSource() {
 
     override val name = "Anime Core"
 
-    override val baseUrl = "https://animecore.to"
+    override val baseUrl = "https://animecore.net"
 
     override val lang = "pt-BR"
 
