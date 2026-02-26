@@ -1,232 +1,180 @@
 package eu.kanade.tachiyomi.animeextension.pt.animesroll
 
-import eu.kanade.tachiyomi.animeextension.pt.animesroll.dto.AnimeDataDto
-import eu.kanade.tachiyomi.animeextension.pt.animesroll.dto.EpisodeDto
-import eu.kanade.tachiyomi.animeextension.pt.animesroll.dto.EpisodeListDto
-import eu.kanade.tachiyomi.animeextension.pt.animesroll.dto.LatestAnimeDto
-import eu.kanade.tachiyomi.animeextension.pt.animesroll.dto.MovieInfoDto
-import eu.kanade.tachiyomi.animeextension.pt.animesroll.dto.PagePropDto
-import eu.kanade.tachiyomi.animeextension.pt.animesroll.dto.SearchResultsDto
-import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
-import eu.kanade.tachiyomi.animesource.model.AnimesPage
+import android.util.Log
+import eu.kanade.tachiyomi.animeextension.pt.animesroll.extractors.UniversalExtractor
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
-import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import eu.kanade.tachiyomi.multisrc.dooplay.DooPlay
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.util.asJsoup
-import eu.kanade.tachiyomi.util.parseAs
-import kotlinx.serialization.json.Json
-import okhttp3.Request
+import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
 import okhttp3.Response
 import org.jsoup.nodes.Document
-import java.text.SimpleDateFormat
-import java.util.Locale
+import org.jsoup.nodes.Element
 
-class AnimesROLL : AnimeHttpSource() {
+class AnimesROLL : DooPlay(
+    "pt-BR",
+    "Animes ROLL",
+    "https://anroll.tv",
+) {
 
-    override val name = "AnimesROLL"
+    private val tag by lazy { javaClass.simpleName }
 
-    override val baseUrl = "https://www.anroll.net"
-
-    override val lang = "pt-BR"
-
-    override val supportsLatest = true
-
-    override fun headersBuilder() = super.headersBuilder().add("Referer", baseUrl)
-
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
+    override val versionId: Int = 2
 
     // ============================== Popular ===============================
-    // The site doesn't have a popular anime tab, so we use the home page instead (latest anime).
-    override fun popularAnimeRequest(page: Int) = GET(baseUrl)
-    override fun popularAnimeParse(response: Response) = latestUpdatesParse(response)
+    override fun popularAnimeSelector() = "div.items.featured article div.poster"
+    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/animes/", headers)
 
     // =============================== Latest ===============================
-    override fun latestUpdatesRequest(page: Int) = GET("$baseUrl/lancamentos")
-
-    override fun latestUpdatesParse(response: Response): AnimesPage {
-        val parsed = response.asJsoup().parseAs<LatestAnimeDto>()
-        val animes = parsed.releases.mapNotNull { release ->
-            when {
-                release.movie != null -> {
-                    // É um filme
-                    SAnime.create().apply {
-                        url = "/f/${release.movie.generateId}"
-                        thumbnail_url = "https://static.anroll.net/images/filmes/capas/${release.movie.slugFilme}.jpg"
-                        title = release.movie.nomeFilme
-                    }
-                }
-                release.episode?.anime != null -> {
-                    // É um episódio de anime
-                    val anime = release.episode.anime
-                    SAnime.create().apply {
-                        url = "/anime/${anime.slugSerie}"
-                        thumbnail_url = "https://static.anroll.net/images/animes/capas/${anime.slugSerie}.jpg"
-                        title = anime.titulo
-                    }
-                }
-                else -> null
-            }
-        }
-        return AnimesPage(animes, false)
-    }
+    override val latestUpdatesPath = "episodios"
 
     // =============================== Search ===============================
-    private fun searchAnimeByPathParse(response: Response): AnimesPage {
-        val details = animeDetailsParse(response).apply {
-            setUrlWithoutDomain(response.request.url.toString())
-            initialized = true
-        }
-
-        return AnimesPage(listOf(details), false)
-    }
-
-    override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
-        return if (query.startsWith(PREFIX_SEARCH)) {
-            val path = query.removePrefix(PREFIX_SEARCH)
-            client.newCall(GET("$baseUrl/$path"))
-                .awaitSuccess()
-                .use(::searchAnimeByPathParse)
-        } else {
-            super.getSearchAnime(page, query, filters)
-        }
-    }
-    override fun searchAnimeParse(response: Response): AnimesPage {
-        val results = response.parseAs<SearchResultsDto>()
-        val animes = (results.animes + results.movies).map { it.toSAnime() }
-        return AnimesPage(animes, false)
-    }
-
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        return GET("$OLD_API_URL/search?q=$query")
-    }
+    override fun searchAnimeSelector() = "div.result-item article div.thumbnail > a"
+    override fun searchAnimeFromElement(element: Element) = popularAnimeFromElement(element)
 
     // =========================== Anime Details ============================
-    override fun animeDetailsParse(response: Response): SAnime {
-        val doc = response.asJsoup()
-        val anime = when {
-            doc.location().contains("/f/") -> doc.parseAs<MovieInfoDto>().movieData
-            else -> doc.parseAs<AnimeDataDto>()
-        }
-        return anime.toSAnime().apply {
-            setUrlWithoutDomain(doc.location())
-            author = anime.director.takeIf { it != "0" }
+    override val additionalInfoSelector = "div.wp-content"
 
-            description = buildString {
-                append(anime.description.ifNotEmpty { it + "\n" })
-                append(anime.duration.ifNotEmpty { "\nDuração: $it" })
-                append(anime.animeCalendar?.ifNotEmpty { "\nLança toda(o) $it" }.orEmpty())
+    override fun Document.getDescription(): String {
+        return select("$additionalInfoSelector p")
+            .eachText()
+            .joinToString("\n")
+    }
+
+    override fun animeDetailsParse(document: Document): SAnime {
+        val doc = getRealAnimeDoc(document)
+        val sheader = doc.selectFirst("div.sheader")!!
+        return SAnime.create().apply {
+            setUrlWithoutDomain(doc.location())
+            sheader.selectFirst("div.poster > img")!!.let {
+                thumbnail_url = it.getImageUrl()
+                title = it.attr("alt").ifEmpty {
+                    sheader.selectFirst("div.data > h1")!!.text()
+                }
             }
-            genre = doc.select("div#generos > a").eachText().joinToString()
-            status = if (anime.animeCalendar == null) SAnime.COMPLETED else SAnime.ONGOING
+
+            genre = sheader.select("div.data div.sgeneros > a")
+                .eachText()
+                .joinToString()
+
+            doc.selectFirst("div#info")?.let { info ->
+                description = buildString {
+                    append(doc.getDescription())
+                    additionalInfoItems.forEach {
+                        info.getInfo(it)?.let(::append)
+                    }
+                }
+            }
         }
     }
 
     // ============================== Episodes ==============================
-    override fun episodeListParse(response: Response): List<SEpisode> {
-        val doc = response.asJsoup()
-        val originalUrl = doc.location()
-        return if ("/f/" in originalUrl) {
-            val movie = doc.parseAs<MovieInfoDto>().movieData
-            SEpisode.create().apply {
-                url = "https://cdn-zenitsu-2-gamabunta.b-cdn.net/cf/hls/movies/${movie.slug_movie}/movie.mp4/media-1/stream.m3u8"
-                name = "Filme"
-                episode_number = 0F
-            }.let(::listOf)
-        } else {
-            val anime = doc.parseAs<AnimeDataDto>()
-
-            return fetchEpisodesRecursively(anime.id).map { episode ->
-                val urlStart = if (episode.sePgad == 1) {
-                    "https://cdn-zenitsu-2-gamabunta.b-cdn.net/cf/hls/animes/${anime.slug}"
+    override fun getSeasonEpisodes(season: Element): List<SEpisode> {
+        val seasonName = season.selectFirst("span.se-t")?.text()
+        return season.select(episodeListSelector()).mapNotNull { element ->
+            runCatching {
+                if (seasonName.isNullOrBlank()) {
+                    episodeFromElement(element)
                 } else {
-                    "https://cdn-02.gamabunta.xyz/hls/animes/${anime.slug}"
+                    episodeFromElement(element, seasonName)
                 }
-                SEpisode.create().apply {
-                    val epNum = episode.episodeNumber
-                    name = "Episódio #$epNum"
-                    episode_number = epNum.toFloat()
-                    url = "$urlStart/$epNum.mp4/media-1/stream.m3u8"
-                    date_upload = episode.dataRegistro?.toDate() ?: 0L
-                }
-            }
+            }.onFailure { it.printStackTrace() }.getOrNull()
         }
     }
-
-    private fun fetchEpisodesRecursively(animeId: String, page: Int = 1): List<EpisodeDto> {
-        val response = client.newCall(episodeListRequest(animeId, page))
-            .execute()
-            .parseAs<EpisodeListDto>()
-
-        return response.episodes.let { episodes ->
-            when {
-                response.meta.totalOfPages > page ->
-                    episodes + fetchEpisodesRecursively(animeId, page + 1)
-                else -> episodes
-            }
-        }
-    }
-
-    private fun episodeListRequest(animeId: String, page: Int) =
-        GET("$NEW_API_URL/animes/$animeId/episodes?page=$page%order=desc")
 
     // ============================ Video Links =============================
-    override suspend fun getVideoList(episode: SEpisode): List<Video> {
-        val epUrl = episode.url
-        return listOf(Video(epUrl, "default", epUrl))
-    }
-
-    override fun videoListRequest(episode: SEpisode): Request {
-        TODO("Not yet implemented")
-    }
-
     override fun videoListParse(response: Response): List<Video> {
-        TODO("Not yet implemented")
+        val document = response.asJsoup()
+        val players = document.select("ul#playeroptionsul li")
+        return players.parallelCatchingFlatMapBlocking(::getPlayerVideos)
+    }
+
+    override val prefQualityValues = arrayOf("360p", "480p", "720p", "1080p")
+    override val prefQualityEntries = prefQualityValues
+
+    private val universalExtractor by lazy { UniversalExtractor(client) }
+
+    private fun getPlayerVideos(player: Element): List<Video> {
+        val fullName = player.selectFirst("span.title")!!.text()
+        val realName = fullName.substringAfter("(").substringBefore(")")
+        val name = realName.lowercase()
+        val url = getPlayerUrl(player) ?: return emptyList()
+        Log.d(tag, "Fetching videos from: $url")
+
+        var videos: List<Video> = when {
+            "alibabacdn" in url -> emptyList()
+
+            else -> emptyList()
+        }
+
+        if (videos.isEmpty()) {
+            Log.d(tag, "Videos are empty, fetching videos from using universal extractor: $url")
+            val newHeaders = headers.newBuilder().set("Referer", baseUrl).build()
+            videos = universalExtractor.videosFromUrl(url, newHeaders, realName)
+        }
+
+        if (videos.isEmpty()) {
+            Log.w(tag, "Videos not fount for $url")
+        }
+
+        return videos
+    }
+
+    private fun getPlayerUrl(player: Element): String {
+        val type = player.attr("data-type")
+        val id = player.attr("data-post")
+        val num = player.attr("data-nume")
+        return try {
+            client.newCall(GET("$baseUrl/wp-json/dooplayer/v2/$id/$type/$num", headers))
+                .execute()
+                .use { response ->
+                    response.body.string()
+                        .substringAfter("\"embed_url\":\"")
+                        .substringBefore("\",")
+                        .replace("\\", "")
+                }
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    // ============================== Filters ===============================
+    override fun genresListRequest() = popularAnimeRequest(0)
+    override fun genresListSelector() = "div.filter > div.select:first-child option:not([disabled])"
+
+    override fun genresListParse(document: Document): Array<Pair<String, String>> {
+        val items = document.select(genresListSelector()).map {
+            val name = it.text()
+            val value = it.attr("value").substringAfter("$baseUrl/")
+            Pair(name, value)
+        }.toTypedArray()
+
+        return if (items.isEmpty()) {
+            items
+        } else {
+            arrayOf(Pair(selectFilterText, "")) + items
+        }
     }
 
     // ============================= Utilities ==============================
-    private inline fun <reified T> Document.parseAs(): T {
-        val nextData = this.selectFirst("script#__NEXT_DATA__")!!
-            .data()
-            .substringAfter(":")
-            .substringBeforeLast(",\"page\"")
-        return json.decodeFromString<PagePropDto<T>>(nextData).data
+    private fun Element.tryGetAttr(vararg attributeKeys: String): String? {
+        val attributeKey = attributeKeys.first { hasAttr(it) }
+        return attr(attributeKey)
     }
 
-    private fun String.ifNotEmpty(block: (String) -> String): String {
-        return if (isNotEmpty() && this != "0") block(this) else ""
-    }
-
-    private fun String.toDate(): Long {
-        return runCatching { DATE_FORMATTER.parse(trim())?.time }
-            .getOrNull() ?: 0L
-    }
-
-    fun AnimeDataDto.toSAnime() = SAnime.create().apply {
-        val ismovie = slug == ""
-        url = if (ismovie) "/f/$id" else "/anime/$slug"
-        thumbnail_url = "https://static.anroll.net/images/".let {
-            if (ismovie) {
-                it + "filmes/capas/$slug_movie.jpg"
-            } else {
-                it + "animes/capas/$slug.jpg"
-            }
-        }
-        title = anititle
+    override fun List<Video>.sort(): List<Video> {
+        val quality = preferences.getString(videoSortPrefKey, videoSortPrefDefault)!!
+        return sortedWith(
+            compareBy(
+                { it.quality.contains(quality) },
+                { REGEX_QUALITY.find(it.quality)?.groupValues?.get(1)?.toIntOrNull() ?: 0 },
+            ),
+        ).reversed()
     }
 
     companion object {
-        private val DATE_FORMATTER by lazy {
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.ENGLISH)
-        }
-        private const val OLD_API_URL = "https://apiv2-prd.anroll.net"
-        private const val NEW_API_URL = "https://apiv3-prd.anroll.net"
-
-        const val PREFIX_SEARCH = "path:"
+        private val REGEX_QUALITY by lazy { Regex("""(\d+)p""") }
     }
 }
