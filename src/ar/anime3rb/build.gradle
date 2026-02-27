@@ -1,0 +1,31 @@
+apply plugin: 'com.android.library'
+<<<<<<< HEAD
+=======
+apply plugin: 'kotlin-android'
+>>>>>>> c9624b8d6067dd62381ef1ba0db054ef89659cc7
+
+android {
+    compileSdkVersion 33
+    defaultConfig {
+        minSdkVersion 21
+        targetSdkVersion 33
+    }
+<<<<<<< HEAD
+}
+
+dependencies {
+    implementation project(':lib-animesource')
+=======
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}
+
+dependencies {
+    implementation project(':lib-anime')
+>>>>>>> c9624b8d6067dd62381ef1ba0db054ef89659cc7
+}
