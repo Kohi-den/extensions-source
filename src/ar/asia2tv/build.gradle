@@ -1,6 +1,6 @@
-ext {
-    extName = 'asia2tv'
-    extClass = '.Asia2TV'
+tv {
+    extName = 'anime3rb'
+    extClass = '.anime3rb'
     extVersionCode = 25
 }
 
