@@ -1,6 +1,6 @@
 ext {
-    extName = 'Anime Blkom'
-    extClass = '.AnimeBlkom'
+    extName = 'Animenime3rb'
+    extClass 'Anime3rb.com'
     extVersionCode = 20
 }
 
