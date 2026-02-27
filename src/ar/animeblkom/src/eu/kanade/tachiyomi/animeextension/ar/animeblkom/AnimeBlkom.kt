@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.ar.animeblkom
+package eu.kanade.tachiyomi.animeextension.ar.anime3rb
 
 import android.app.Application
 import androidx.preference.ListPreference
@@ -22,9 +22,9 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.lang.Exception
 
-class AnimeBlkom : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
+class anime3rb: ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
-    override val name = "أنمي بالكوم"
+    override val name = "أنمي عرب"
 
     override val baseUrl by lazy { preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!! }
 
@@ -150,7 +150,7 @@ class AnimeBlkom : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private fun extractVideos(element: Element): List<Video> {
         val url = element.attr("data-src").replace("http://", "https://")
         return when {
-            ".vid4up" in url || "Blkom" in element.text() -> {
+            ".vid4up" in url || "anime3rb" in element.text() -> {
                 val videoDoc = client.newCall(GET(url, headers)).execute()
                     .asJsoup()
                 videoDoc.select(videoListSelector()).map(::videoFromElement)
@@ -165,7 +165,7 @@ class AnimeBlkom : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun videoFromElement(element: Element): Video {
         val videoUrl = element.attr("src")
-        return Video(videoUrl, "Blkom - " + element.attr("label"), videoUrl, headers)
+        return Video(videoUrl, "anime3rb- " + element.attr("label"), videoUrl, headers)
     }
 
     override fun videoUrlParse(document: Document) = throw UnsupportedOperationException()
@@ -244,7 +244,7 @@ class AnimeBlkom : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         private const val PREF_DOMAIN_KEY = "pref_domain_key"
         private const val PREF_DOMAIN_TITLE = "Preferred domain"
         private const val PREF_DOMAIN_DEFAULT = "https://animeblkom.net"
-        private val PREF_DOMAIN_ENTRIES = arrayOf("animeblkom.net", "animeblkom.tv", "blkom.com")
+        private val PREF_DOMAIN_ENTRIES = arrayOf("anime3rb.com", "anime3rb.com", "anime3rb.com")
         private val PREF_DOMAIN_VALUES by lazy {
             PREF_DOMAIN_ENTRIES.map { "https://$it" }.toTypedArray()
         }
