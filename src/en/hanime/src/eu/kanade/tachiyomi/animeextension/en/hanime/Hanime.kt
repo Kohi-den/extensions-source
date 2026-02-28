@@ -26,7 +26,6 @@ class Hanime : ConfigurableAnimeSource, AnimeHttpSource() {
     override val lang = "en"
     override val supportsLatest = true
 
-    private var authCookie: String? = null
     private var sessionToken: String? = null
     private var userLicense: String? = null
 
@@ -77,19 +76,19 @@ class Hanime : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun episodeListRequest(anime: SAnime): Request {
         val slug = anime.url.substringAfterLast("/")
-        return GET("$baseUrl/api/v8/video?id=$slug")
+        return GET("https://hanime.tv/api/v8/video?id=$slug")
     }
 
-    override fun episodeListParse(response: Response): List<SEpisode> = ResponseParser.parseEpisodeList(response, baseUrl)
+    override fun episodeListParse(response: Response): List<SEpisode> = ResponseParser.parseEpisodeList(response)
 
     override fun videoListRequest(episode: SEpisode) = GET(episode.url)
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
-        setAuthCookie()
-        val videos = if (authCookie != null && sessionToken != null && userLicense != null) {
-            VideoFetcher.fetchVideoListPremium(episode, client, headers, authCookie!!, sessionToken!!, userLicense!!)
-        } else {
-            VideoFetcher.fetchVideoListGuest(episode, client, headers)
+        loadSessionData()
+        val slug = episode.url.substringAfter("?id=").substringBefore("&")
+        val videos = VideoFetcher.fetchVideoList(slug, sessionToken, userLicense, client, headers)
+        if (videos.isEmpty()) {
+            throw Exception("No video streams found")
         }
         return videos
     }
@@ -100,17 +99,19 @@ class Hanime : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun getFilterList() = FilterProvider.getFilterList()
 
-    private fun setAuthCookie() {
-        if (authCookie == null) {
+    private fun loadSessionData() {
+        try {
             val cookieList = client.cookieJar.loadForRequest(baseUrl.toHttpUrl())
             cookieList.firstOrNull { it.name == "htv3session" }?.let {
-                authCookie = "${it.name}=${it.value}"
                 sessionToken = it.value
             }
             val licenseCookie = cookieList.firstOrNull { it.name == "x-user-license" }
             if (licenseCookie != null) {
                 userLicense = licenseCookie.value
             }
+        } catch (e: Exception) {
+            sessionToken = null
+            userLicense = null
         }
     }
 
@@ -128,7 +129,6 @@ class Hanime : ConfigurableAnimeSource, AnimeHttpSource() {
             entryValues = QUALITY_LIST
             setDefaultValue(PREF_QUALITY_DEFAULT)
             summary = "%s"
-
             setOnPreferenceChangeListener { _, newValue ->
                 val selected = newValue as String
                 val index = findIndexOfValue(selected)

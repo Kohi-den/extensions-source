@@ -44,16 +44,21 @@ object ResponseParser {
         }
     }
 
-    fun parseEpisodeList(response: Response, baseUrl: String): List<SEpisode> {
-        val responseString = response.body.string().ifEmpty { return emptyList() }
-        return responseString.parseAs<VideoModel>().hentaiFranchiseHentaiVideos
-            ?.mapIndexed { idx, it ->
-                SEpisode.create().apply {
-                    episode_number = idx + 1f
-                    name = "Episode ${idx + 1}"
-                    date_upload = (it.releasedAtUnix ?: 0) * 1000
-                    url = "$baseUrl/api/v8/video?id=${it.id}"
-                }
-            }?.reversed() ?: emptyList()
+    fun parseEpisodeList(response: Response): List<SEpisode> {
+        val responseString = response.body.string()
+        return try {
+            val videoModel = responseString.parseAs<VideoModel>()
+            videoModel.hentaiFranchiseHentaiVideos
+                ?.mapIndexed { idx, it ->
+                    SEpisode.create().apply {
+                        episode_number = idx + 1f
+                        name = "Episode ${idx + 1}"
+                        date_upload = (it.releasedAtUnix ?: 0) * 1000
+                        url = "https://hanime.tv/api/v8/video?id=${it.id}"
+                    }
+                }?.reversed() ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 }
