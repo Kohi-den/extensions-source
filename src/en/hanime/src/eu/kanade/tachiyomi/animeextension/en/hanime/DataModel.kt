@@ -65,8 +65,6 @@ data class VideoModel(
     @SerialName("hentai_franchise_hentai_videos")
     val hentaiFranchiseHentaiVideos: List<HentaiFranchiseHentaiVideo>? = emptyList(),
     @SerialName("videos_manifest")
-    val videos_manifest: VideosManifest? = VideosManifest(),
-    @SerialName("videosManifest")
     val videosManifest: VideosManifest? = VideosManifest(),
 )
 
@@ -196,7 +194,7 @@ data class Stream(
     @SerialName("mime_type")
     val mimeType: String? = null,
     val width: Long? = null,
-    val height: String? = null,
+    val height: String,
     @SerialName("duration_in_ms")
     val durationInMs: Long? = null,
     @SerialName("filesize_mbs")
