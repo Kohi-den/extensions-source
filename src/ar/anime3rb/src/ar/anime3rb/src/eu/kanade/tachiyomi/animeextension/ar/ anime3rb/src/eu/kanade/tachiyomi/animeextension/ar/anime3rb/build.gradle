@@ -1,0 +1,45 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace 'eu.kanade.tachiyomi.animeextension.ar.anime3rb'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "eu.kanade.tachiyomi.animeextension.ar.anime3rb"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['src']
+            res.srcDirs = ['res']
+        }
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:1.9.22"
+    compileOnly "com.github.aniyomiorg:aniyomi-source-api:1.5"
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "org.jsoup:jsoup:1.17.2"
+}
