@@ -5,8 +5,20 @@ import eu.kanade.tachiyomi.util.parseAs
 import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.security.MessageDigest
+import kotlin.math.floor
 
 object VideoFetcher {
+    private fun generateSignature(time: Long, sessionToken: String?): String {
+        val base = if (sessionToken != null) {
+            "c1{$time}{$sessionToken}"
+        } else {
+            "c1{$time}{}"
+        }
+        val bytes = MessageDigest.getInstance("SHA-256").digest(base.toByteArray())
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
     suspend fun fetchVideoList(slug: String, sessionToken: String?, userLicense: String?, client: OkHttpClient, headers: Headers): List<Video> {
         val metaRequest = Request.Builder()
             .url("https://hanime.tv/api/v8/video?id=$slug")
@@ -29,11 +41,27 @@ object VideoFetcher {
         val route = if (sessionToken != null) "member" else "guest"
         val manifestUrl = "$baseApi/api/v8/$route/videos/$videoId/manifest"
 
+        val time = floor(System.currentTimeMillis() / 1000.0).toLong()
+        val signature = generateSignature(time, sessionToken)
+
         val manifestHeadersBuilder = Headers.Builder()
+            .add("authority", "h.freeanimehentai.net")
             .add("accept", "application/json")
+            .add("accept-language", "en-GB,en-US;q=0.9,en;q=0.8")
+            .add("origin", "https://hanime.tv")
             .add("referer", "https://hanime.tv/")
-            .add("origin", baseApi)
-            .add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .add("sec-ch-ua", "\"Chromium\";v=\"137\", \"Not/A)Brand\";v=\"24\"")
+            .add("sec-ch-ua-mobile", "?1")
+            .add("sec-ch-ua-platform", "\"Android\"")
+            .add("sec-fetch-dest", "empty")
+            .add("sec-fetch-mode", "cors")
+            .add("sec-fetch-site", "cross-site")
+            .add("x-signature", signature)
+            .add("x-signature-version", "web2")
+            .add("x-time", time.toString())
+            .add("x-csrf-token", "")
+            .add("x-license", "")
+            .add("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36")
 
         if (sessionToken != null) {
             manifestHeadersBuilder.add("x-session-token", sessionToken)
