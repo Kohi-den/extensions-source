@@ -217,39 +217,3 @@ data class Stream(
     @SerialName("video_stream_group_id")
     val videoStreamGroupId: String? = null,
 )
-
-@Serializable
-data class WindowNuxt(
-    val state: State,
-) {
-    @Serializable
-    data class State(
-        val data: Data,
-    ) {
-        @Serializable
-        data class Data(
-            val video: DataVideo,
-        ) {
-            @Serializable
-            data class DataVideo(
-                val videos_manifest: VideosManifest,
-            ) {
-                @Serializable
-                data class VideosManifest(
-                    val servers: List<Server>,
-                ) {
-                    @Serializable
-                    data class Server(
-                        val streams: List<Stream>,
-                    ) {
-                        @Serializable
-                        data class Stream(
-                            val height: String,
-                            val url: String,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
