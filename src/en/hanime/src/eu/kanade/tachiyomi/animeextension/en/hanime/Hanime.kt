@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.animeextension.en.hanime
 
 import android.app.Application
 import android.content.SharedPreferences
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -13,12 +15,16 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
+import org.json.JSONObject
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.coroutines.resume
 
 class Hanime : ConfigurableAnimeSource, AnimeHttpSource() {
     override val name = "hanime.tv"
@@ -82,12 +88,122 @@ class Hanime : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
         val (authCookie, sessionToken, userLicense) = getFreshAuthCookies()
-        val videos = if (authCookie != null && sessionToken != null && userLicense != null) {
-            VideoFetcher.fetchVideoListPremium(episode, client, headers, authCookie, sessionToken, userLicense)
-        } else {
-            VideoFetcher.fetchVideoListGuest(episode, client, headers)
+        var videos = emptyList<Video>()
+
+        val slug = episode.url.substringAfter("?id=")
+        val videoPageUrl = "$baseUrl/videos/hentai/$slug"
+
+        val (signature, timestamp, videoId) = extractVideoDataWithWebView(videoPageUrl)
+
+        if (signature.isNotEmpty() && timestamp > 0L) {
+            if (authCookie != null && sessionToken != null && userLicense != null) {
+                videos = try {
+                    VideoFetcher.fetchVideoListPremium(
+                        episode = episode,
+                        client = client,
+                        headers = headers,
+                        authCookie = authCookie,
+                        sessionToken = sessionToken,
+                        userLicense = userLicense,
+                        signature = signature,
+                        timestamp = timestamp,
+                        videoId = videoId,
+                    )
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
+
+            if (videos.isEmpty()) {
+                videos = VideoFetcher.fetchVideoListGuest(
+                    episode = episode,
+                    client = client,
+                    headers = headers,
+                    signature = signature,
+                    timestamp = timestamp,
+                    videoId = videoId,
+                )
+            }
         }
+
         return videos
+    }
+
+    private suspend fun extractVideoDataWithWebView(pageUrl: String): Triple<String, Long, String> {
+        return withTimeout(15000L) {
+            suspendCancellableCoroutine { continuation ->
+                val webView = WebView(Injekt.get<Application>())
+
+                webView.settings.javaScriptEnabled = true
+                webView.settings.domStorageEnabled = true
+                webView.settings.loadWithOverviewMode = true
+                webView.settings.useWideViewPort = true
+                webView.settings.userAgentString = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+                webView.webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView?, url: String?) {
+                        webView.evaluateJavascript(
+                            """
+                            (function() {
+                                return new Promise((resolve) => {
+                                    const result = { signature: '', timestamp: 0, videoId: '' };
+                                    const checkExisting = () => {
+                                        if (window.ssignature && window.stime) {
+                                            result.signature = window.ssignature;
+                                            result.timestamp = window.stime;
+                                            const videoIdMatch = document.documentElement.innerHTML.match(/\/api\/v8\/video\?id=([^"&\s]+)/);
+                                            if (videoIdMatch) {
+                                                result.videoId = videoIdMatch[1];
+                                            }
+                                            resolve(JSON.stringify(result));
+                                            return true;
+                                        }
+                                        return false;
+                                    };
+                                    if (checkExisting()) return;
+                                    const script = document.createElement('script');
+                                    script.src = 'https://hanime-cdn.com/vhtv2/40c99ce.js';
+                                    script.onload = () => {
+                                        let attempts = 0;
+                                        const checkInterval = setInterval(() => {
+                                            attempts++;
+                                            if (checkExisting() || attempts > 50) {
+                                                clearInterval(checkInterval);
+                                                if (attempts > 50 && !result.signature) {
+                                                    resolve(JSON.stringify(result));
+                                                }
+                                            }
+                                        }, 100);
+                                    };
+                                    script.onerror = () => {
+                                        resolve(JSON.stringify(result));
+                                    };
+                                    document.head.appendChild(script);
+                                });
+                            })()
+                            """.trimIndent()
+                        ) { result ->
+                            try {
+                                val json = JSONObject(result)
+                                continuation.resume(
+                                    Triple(
+                                        json.optString("signature", ""),
+                                        json.optLong("timestamp", 0L),
+                                        json.optString("videoId", ""),
+                                    ),
+                                )
+                            } catch (e: Exception) {
+                                continuation.resume(Triple("", 0L, ""))
+                            } finally {
+                                webView.destroy()
+                            }
+                        }
+                    }
+                }
+
+                webView.loadUrl(pageUrl)
+            }
+        }
     }
 
     private fun getFreshAuthCookies(): Triple<String?, String?, String?> {
@@ -95,14 +211,17 @@ class Hanime : ConfigurableAnimeSource, AnimeHttpSource() {
         var authCookie: String? = null
         var sessionToken: String? = null
         var userLicense: String? = null
+
         cookieList.firstOrNull { it.name == "htv3session" }?.let {
             authCookie = "${it.name}=${it.value}"
             sessionToken = it.value
         }
+
         val licenseCookie = cookieList.firstOrNull { it.name == "x-user-license" }
         if (licenseCookie != null) {
             userLicense = licenseCookie.value
         }
+
         return Triple(authCookie, sessionToken, userLicense)
     }
 
