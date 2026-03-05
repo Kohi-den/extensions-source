@@ -1,7 +1,7 @@
 ext {
     extName = 'az-animex'
     extClass = '.Azanimex'
-    extVersionCode = 3
+    extVersionCode = 4
 }
 
 apply from: "$rootDir/common.gradle"

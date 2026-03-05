@@ -51,7 +51,28 @@ class AnimesROLL : AnimeHttpSource() {
 
     override fun latestUpdatesParse(response: Response): AnimesPage {
         val parsed = response.asJsoup().parseAs<LatestAnimeDto>()
-        val animes = parsed.episodes.map { it.episode.anime!!.toSAnime() }
+        val animes = parsed.releases.mapNotNull { release ->
+            when {
+                release.movie != null -> {
+                    // É um filme
+                    SAnime.create().apply {
+                        url = "/f/${release.movie.generateId}"
+                        thumbnail_url = "https://static.anroll.net/images/filmes/capas/${release.movie.slugFilme}.jpg"
+                        title = release.movie.nomeFilme
+                    }
+                }
+                release.episode?.anime != null -> {
+                    // É um episódio de anime
+                    val anime = release.episode.anime
+                    SAnime.create().apply {
+                        url = "/anime/${anime.slugSerie}"
+                        thumbnail_url = "https://static.anroll.net/images/animes/capas/${anime.slugSerie}.jpg"
+                        title = anime.titulo
+                    }
+                }
+                else -> null
+            }
+        }
         return AnimesPage(animes, false)
     }
 
@@ -111,9 +132,9 @@ class AnimesROLL : AnimeHttpSource() {
         val doc = response.asJsoup()
         val originalUrl = doc.location()
         return if ("/f/" in originalUrl) {
-            val od = doc.parseAs<MovieInfoDto>().movieData.od
+            val movie = doc.parseAs<MovieInfoDto>().movieData
             SEpisode.create().apply {
-                url = "$OLD_API_URL/od/$od/filme.mp4"
+                url = "https://cdn-zenitsu-2-gamabunta.b-cdn.net/cf/hls/movies/${movie.slug_movie}/movie.mp4/media-1/stream.m3u8"
                 name = "Filme"
                 episode_number = 0F
             }.let(::listOf)

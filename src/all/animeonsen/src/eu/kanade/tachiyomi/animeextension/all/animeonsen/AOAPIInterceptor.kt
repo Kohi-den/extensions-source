@@ -6,15 +6,17 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 
-class AOAPIInterceptor(client: OkHttpClient) : Interceptor {
+class AOAPIInterceptor(client: OkHttpClient, apiUrl: String) : Interceptor {
 
     private val token: String
+    private val host: String
 
     init {
         token = try {
@@ -42,15 +44,20 @@ class AOAPIInterceptor(client: OkHttpClient) : Interceptor {
         } catch (_: Throwable) {
             ""
         }
+        host = apiUrl.toHttpUrl().host
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
 
-        val newRequest = originalRequest.newBuilder()
-            .addHeader("Authorization", "Bearer $token")
-            .build()
+        if (originalRequest.url.host == host) {
+            val newRequest = originalRequest.newBuilder()
+                .addHeader("Authorization", "Bearer $token")
+                .build()
 
-        return chain.proceed(newRequest)
+            return chain.proceed(newRequest)
+        }
+
+        return chain.proceed(originalRequest)
     }
 }

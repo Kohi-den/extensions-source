@@ -3,7 +3,7 @@ ext {
     extClass = '.VerPelisTop'
     themePkg = 'dooplay'
     baseUrl = 'https://www1.verpelis.top'
-    overrideVersionCode = 1
+    overrideVersionCode = 2
 }
 
 apply from: "$rootDir/common.gradle"

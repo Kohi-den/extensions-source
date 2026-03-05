@@ -277,12 +277,15 @@ class Tomato : ConfigurableAnimeSource, AnimeHttpSource() {
                     val newUrl = "&episode[${season.seasonDubbed}]=${episode.epId}"
                     if (prev != null) {
                         prev.url += newUrl
+                        // Atualizar scanlator com informações de legendado/dublado
+                        prev.scanlator = updateScanlatorInfo(prev.scanlator, season.seasonDubbed)
                     } else {
                         episodeList.add(
                             SEpisode.create().apply {
                                 episode_number = episode.epNumber
                                 name = fullName
                                 url = "http://localhost?season=${season.seasonNumber}$newUrl"
+                                scanlator = getScanlatorInfo(season.seasonDubbed)
                             },
                         )
                     }
@@ -398,6 +401,30 @@ class Tomato : ConfigurableAnimeSource, AnimeHttpSource() {
                     REGEX_QUALITY.find(it.quality)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                 },
         )
+    }
+
+    private fun getScanlatorInfo(seasonDubbed: Int): String {
+        return when (seasonDubbed) {
+            0 -> "Legendado"
+            1 -> "Dublado"
+            else -> "Legendado"
+        }
+    }
+
+    private fun updateScanlatorInfo(currentScanlator: String?, seasonDubbed: Int): String {
+        val newType = when (seasonDubbed) {
+            0 -> "Legendado"
+            1 -> "Dublado"
+            else -> "Legendado"
+        }
+
+        return when {
+            currentScanlator.isNullOrBlank() -> newType
+            currentScanlator.contains("Legendado") && newType == "Dublado" -> "Legendado e Dublado"
+            currentScanlator.contains("Dublado") && newType == "Legendado" -> "Legendado e Dublado"
+            currentScanlator.contains("Legendado e Dublado") -> "Legendado e Dublado"
+            else -> currentScanlator
+        }
     }
 
     private fun Response.createNewWithCompatBody(outputStream: ByteArray): Response {

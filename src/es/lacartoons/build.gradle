@@ -1,7 +1,7 @@
 ext {
     extName = 'LACartoons'
     extClass = '.Lacartoons'
-    extVersionCode = 18
+    extVersionCode = 19
 }
 
 apply from: "$rootDir/common.gradle"
@@ -13,4 +13,5 @@ dependencies {
     implementation(project(':lib:voe-extractor'))
     implementation(project(':lib:yourupload-extractor'))
     implementation(project(':lib:universal-extractor'))
+    implementation(project(':lib:sendvid-extractor'))
 }

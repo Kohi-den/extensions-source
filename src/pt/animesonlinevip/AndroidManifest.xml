@@ -14,11 +14,11 @@
                 <category android:name="android.intent.category.BROWSABLE" />
 
                 <data
-                    android:host="animesonlinehd.vip"
+                    android:host="animesonlinefhd.vip"
                     android:pathPattern="/..*"
                     android:scheme="https" />
                 <data
-                    android:host="animesonlinehd.vip"
+                    android:host="animesonlinefhd.vip"
                     android:pathPattern="/anime/..*"
                     android:scheme="https" />
             </intent-filter>
