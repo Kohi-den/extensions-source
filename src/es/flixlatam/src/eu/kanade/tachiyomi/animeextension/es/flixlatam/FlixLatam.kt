@@ -159,7 +159,7 @@ class FlixLatam : DooPlay(
     private val conventions = listOf(
         "voe" to listOf("voe", "tubelessceliolymph", "simpulumlamerop", "urochsunloath", "nathanfromsubject", "yip.", "metagnathtuggers", "donaldlineelse"),
         "okru" to listOf("ok.ru", "okru"),
-        "filemoon" to listOf("filemoon", "moonplayer", "moviesm4u", "files.im"),
+        "filemoon" to listOf("filemoon", "moonplayer", "moviesm4u", "files.im", "bysedikamoum"),
         "amazon" to listOf("amazon", "amz"),
         "uqload" to listOf("uqload"),
         "mp4upload" to listOf("mp4upload"),
