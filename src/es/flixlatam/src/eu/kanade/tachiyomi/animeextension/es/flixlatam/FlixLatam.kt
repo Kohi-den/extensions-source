@@ -42,11 +42,12 @@ import org.jsoup.nodes.Element
 import java.net.URLDecoder
 import kotlin.text.RegexOption
 
-class FlixLatam : DooPlay(
-    "es",
-    "FlixLatam",
-    "https://flixlatam.com",
-) {
+class FlixLatam :
+    DooPlay(
+        "es",
+        "FlixLatam",
+        "https://flixlatam.com",
+    ) {
     private val json by lazy { Json { ignoreUnknownKeys = true } }
 
     override fun popularAnimeRequest(page: Int) = GET("$baseUrl/pelicula/page/$page")
@@ -73,8 +74,9 @@ class FlixLatam : DooPlay(
         val embedHeaders = headersBuilder().set("Referer", referer).build()
 
         players.parallelFlatMapBlocking { player ->
-            val url = getPlayerUrl(player)
-                ?: return@parallelFlatMapBlocking emptyList<Video>()
+            val url =
+                getPlayerUrl(player)
+                    ?: return@parallelFlatMapBlocking emptyList<Video>()
             Log.i("bruh url", url)
             if (url.contains("embed69")) {
                 client.newCall(GET(url, embedHeaders)).execute().use { res ->
@@ -82,8 +84,9 @@ class FlixLatam : DooPlay(
                     if (htmlContent.isBlank()) return@parallelFlatMapBlocking emptyList()
 
                     val embedDoc = Jsoup.parse(htmlContent)
-                    val links = extractNewExtractorLinks(embedDoc, htmlContent)
-                        ?: return@parallelFlatMapBlocking emptyList<Video>()
+                    val links =
+                        extractNewExtractorLinks(embedDoc, htmlContent)
+                            ?: return@parallelFlatMapBlocking emptyList<Video>()
 
                     links.forEach { (link, language) ->
                         videoSet.addAll(serverVideoResolver(link, " $language"))
@@ -97,22 +100,27 @@ class FlixLatam : DooPlay(
     }
 
     private fun getPlayerUrl(player: Element): String? {
-        val body = FormBody.Builder()
-            .add("action", "doo_player_ajax")
-            .add("post", player.attr("data-post"))
-            .add("nume", player.attr("data-nume"))
-            .add("type", player.attr("data-type"))
-            .build()
+        val body =
+            FormBody
+                .Builder()
+                .add("action", "doo_player_ajax")
+                .add("post", player.attr("data-post"))
+                .add("nume", player.attr("data-nume"))
+                .add("type", player.attr("data-type"))
+                .build()
 
-        return client.newCall(POST("$baseUrl/wp-admin/admin-ajax.php", headers, body))
-            .execute().body.string()
+        return client
+            .newCall(POST("$baseUrl/wp-admin/admin-ajax.php", headers, body))
+            .execute()
+            .body
+            .string()
             .substringAfter("\"embed_url\":\"")
             .substringBefore("\",")
             .replace("\\", "")
             .takeIf(String::isNotBlank)
     }
 
-    /*-------------------------------- Video extractors ------------------------------------*/
+    // -------------------------------- Video extractors ------------------------------------
     private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val okruExtractor by lazy { OkruExtractor(client) }
     private val filemoonExtractor by lazy { FilemoonExtractor(client) }
@@ -130,90 +138,212 @@ class FlixLatam : DooPlay(
     private val streamSilkExtractor by lazy { StreamSilkExtractor(client) }
     private val vidGuardExtractor by lazy { VidGuardExtractor(client) }
 
-    private fun serverVideoResolver(url: String, prefix: String = ""): List<Video> {
-        return runCatching {
+    private fun serverVideoResolver(
+        url: String,
+        prefix: String = "",
+    ): List<Video> =
+        runCatching {
             val matched = conventions.firstOrNull { (_, names) -> names.any { it.lowercase() in url.lowercase() } }?.first
             when (matched) {
-                "voe" -> voeExtractor.videosFromUrl(url, "$prefix ")
-                "okru" -> okruExtractor.videosFromUrl(url, prefix)
-                "filemoon" -> filemoonExtractor.videosFromUrl(url, "$prefix Filemoon:")
-                "amazon" -> extractAmazonVideo(url, prefix)
-                "uqload" -> uqloadExtractor.videosFromUrl(url, prefix)
-                "mp4upload" -> mp4uploadExtractor.videosFromUrl(url, headers, "$prefix ")
-                "streamwish" -> streamWishExtractor.videosFromUrl(url, "$prefix StreamWish:")
-                "doodstream" -> doodExtractor.videosFromUrl(url.replace("https://doodstream.com/e/", "https://d0000d.com/e/"), "$prefix DoodStream")
-                "streamlare" -> streamlareExtractor.videosFromUrl(url, prefix)
-                "yourupload" -> yourUploadExtractor.videoFromUrl(url, headers, "$prefix ")
-                "burstcloud" -> burstCloudExtractor.videoFromUrl(url, headers, "$prefix ")
-                "fastream" -> fastreamExtractor.videosFromUrl(url, "$prefix Fastream:")
-                "upstream" -> upstreamExtractor.videosFromUrl(url, "$prefix ")
-                "streamsilk" -> streamSilkExtractor.videosFromUrl(url, "$prefix StreamSilk:")
-                "streamtape" -> streamTapeExtractor.videosFromUrl(url, "$prefix StreamTape")
-                "vidhide" -> streamHideVidExtractor.videosFromUrl(url, videoNameGen = { "$prefix StreamHideVid:$it" })
-                "vidguard" -> vidGuardExtractor.videosFromUrl(url, prefix = "$prefix ")
-                else -> emptyList()
+                "voe" -> {
+                    voeExtractor.videosFromUrl(url, "$prefix ")
+                }
+
+                "okru" -> {
+                    okruExtractor.videosFromUrl(url, prefix)
+                }
+
+                "filemoon" -> {
+                    filemoonExtractor.videosFromUrl(url, "$prefix Filemoon:")
+                }
+
+                "amazon" -> {
+                    extractAmazonVideo(url, prefix)
+                }
+
+                "uqload" -> {
+                    uqloadExtractor.videosFromUrl(url, prefix)
+                }
+
+                "mp4upload" -> {
+                    mp4uploadExtractor.videosFromUrl(url, headers, "$prefix ")
+                }
+
+                "streamwish" -> {
+                    streamWishExtractor.videosFromUrl(url, "$prefix StreamWish:")
+                }
+
+                "doodstream" -> {
+                    doodExtractor.videosFromUrl(
+                        url.replace("https://doodstream.com/e/", "https://d0000d.com/e/"),
+                        "$prefix DoodStream",
+                    )
+                }
+
+                "streamlare" -> {
+                    streamlareExtractor.videosFromUrl(url, prefix)
+                }
+
+                "yourupload" -> {
+                    yourUploadExtractor.videoFromUrl(url, headers, "$prefix ")
+                }
+
+                "burstcloud" -> {
+                    burstCloudExtractor.videoFromUrl(url, headers, "$prefix ")
+                }
+
+                "fastream" -> {
+                    fastreamExtractor.videosFromUrl(url, "$prefix Fastream:")
+                }
+
+                "upstream" -> {
+                    upstreamExtractor.videosFromUrl(url, "$prefix ")
+                }
+
+                "streamsilk" -> {
+                    streamSilkExtractor.videosFromUrl(url, "$prefix StreamSilk:")
+                }
+
+                "streamtape" -> {
+                    streamTapeExtractor.videosFromUrl(url, "$prefix StreamTape")
+                }
+
+                "vidhide" -> {
+                    streamHideVidExtractor.videosFromUrl(url, videoNameGen = { "$prefix StreamHideVid:$it" })
+                }
+
+                "vidguard" -> {
+                    vidGuardExtractor.videosFromUrl(url, prefix = "$prefix ")
+                }
+
+                else -> {
+                    emptyList()
+                }
             }
         }.getOrElse { emptyList() }
-    }
 
-    private val conventions = listOf(
-        "voe" to listOf("voe", "tubelessceliolymph", "simpulumlamerop", "urochsunloath", "nathanfromsubject", "yip.", "metagnathtuggers", "donaldlineelse"),
-        "okru" to listOf("ok.ru", "okru"),
-        "filemoon" to listOf("filemoon", "moonplayer", "moviesm4u", "files.im", "bysedikamoum"),
-        "amazon" to listOf("amazon", "amz"),
-        "uqload" to listOf("uqload"),
-        "mp4upload" to listOf("mp4upload"),
-        "streamwish" to listOf("wishembed", "streamwish", "strwish", "wish", "Kswplayer", "Swhoi", "Multimovies", "Uqloads", "neko-stream", "swdyu", "iplayerhls", "streamgg"),
-        "doodstream" to listOf("doodstream", "dood.", "ds2play", "doods.", "ds2play", "ds2video", "dooood", "d000d", "d0000d"),
-        "streamlare" to listOf("streamlare", "slmaxed"),
-        "yourupload" to listOf("yourupload", "upload"),
-        "burstcloud" to listOf("burstcloud", "burst"),
-        "fastream" to listOf("fastream"),
-        "upstream" to listOf("upstream"),
-        "streamsilk" to listOf("streamsilk"),
-        "streamtape" to listOf("streamtape", "stp", "stape", "shavetape"),
-        "vidhide" to listOf("ahvsh", "streamhide", "guccihide", "streamvid", "vidhide", "kinoger", "smoothpre", "dhtpre", "peytonepre", "earnvids", "ryderjet"),
-        "vidguard" to listOf("vembed", "guard", "listeamed", "bembed", "vgfplay", "bembed"),
-    )
+    private val conventions =
+        listOf(
+            "voe" to
+                listOf(
+                    "voe",
+                    "tubelessceliolymph",
+                    "simpulumlamerop",
+                    "urochsunloath",
+                    "nathanfromsubject",
+                    "yip.",
+                    "metagnathtuggers",
+                    "donaldlineelse",
+                ),
+            "okru" to listOf("ok.ru", "okru"),
+            "filemoon" to listOf("filemoon", "moonplayer", "moviesm4u", "files.im", "bysedikamoum"),
+            "amazon" to listOf("amazon", "amz"),
+            "uqload" to listOf("uqload"),
+            "mp4upload" to listOf("mp4upload"),
+            "streamwish" to
+                listOf(
+                    "wishembed",
+                    "streamwish",
+                    "strwish",
+                    "wish",
+                    "Kswplayer",
+                    "Swhoi",
+                    "Multimovies",
+                    "Uqloads",
+                    "neko-stream",
+                    "swdyu",
+                    "iplayerhls",
+                    "streamgg",
+                ),
+            "doodstream" to listOf("doodstream", "dood.", "ds2play", "doods.", "ds2play", "ds2video", "dooood", "d000d", "d0000d"),
+            "streamlare" to listOf("streamlare", "slmaxed"),
+            "yourupload" to listOf("yourupload", "upload"),
+            "burstcloud" to listOf("burstcloud", "burst"),
+            "fastream" to listOf("fastream"),
+            "upstream" to listOf("upstream"),
+            "streamsilk" to listOf("streamsilk"),
+            "streamtape" to listOf("streamtape", "stp", "stape", "shavetape"),
+            "vidhide" to
+                listOf(
+                    "ahvsh",
+                    "streamhide",
+                    "guccihide",
+                    "streamvid",
+                    "vidhide",
+                    "kinoger",
+                    "smoothpre",
+                    "dhtpre",
+                    "peytonepre",
+                    "earnvids",
+                    "ryderjet",
+                ),
+            "vidguard" to listOf("vembed", "guard", "listeamed", "bembed", "vgfplay", "bembed"),
+        )
 
-    private fun extractAmazonVideo(url: String, prefix: String): List<Video> {
+    private fun extractAmazonVideo(
+        url: String,
+        prefix: String,
+    ): List<Video> {
         val body = client.newCall(GET(url)).execute().asJsoup()
-        val shareId = body.selectFirst("script:containsData(var shareId)")
-            ?.data()
-            ?.substringAfter("shareId = \"")
-            ?.substringBefore("\"") ?: return emptyList()
+        val shareId =
+            body
+                .selectFirst("script:containsData(var shareId)")
+                ?.data()
+                ?.substringAfter("shareId = \"")
+                ?.substringBefore("\"") ?: return emptyList()
 
-        val amazonApiJson = client.newCall(GET("https://www.amazon.com/drive/v1/shares/$shareId?resourceVersion=V2&ContentType=JSON&asset=ALL"))
-            .execute().asJsoup()
+        val amazonApiJson =
+            client
+                .newCall(GET("https://www.amazon.com/drive/v1/shares/$shareId?resourceVersion=V2&ContentType=JSON&asset=ALL"))
+                .execute()
+                .asJsoup()
 
         val epId = amazonApiJson.toString().substringAfter("\"id\":\"").substringBefore("\"")
-        val amazonApi = client.newCall(GET("https://www.amazon.com/drive/v1/nodes/$epId/children?resourceVersion=V2&ContentType=JSON&limit=200&sort=%5B%22kind+DESC%22%2C+%22modifiedDate+DESC%22%5D&asset=ALL&tempLink=true&shareId=$shareId"))
-            .execute().asJsoup()
+        val amazonApi =
+            client
+                .newCall(
+                    GET(
+                        "https://www.amazon.com/drive/v1/nodes/$epId/children?resourceVersion=V2&ContentType=JSON&limit=200&sort=%5B%22kind+DESC%22%2C+%22modifiedDate+DESC%22%5D&asset=ALL&tempLink=true&shareId=$shareId",
+                    ),
+                ).execute()
+                .asJsoup()
 
-        val videoUrl = amazonApi.toString().substringAfter("\"FOLDER\":").substringAfter("tempLink\":\"").substringBefore("\"")
+        val videoUrl =
+            amazonApi
+                .toString()
+                .substringAfter("\"FOLDER\":")
+                .substringAfter("tempLink\":\"")
+                .substringBefore("\"")
         return listOf(Video(videoUrl, "$prefix Amazon", videoUrl))
     }
 
-    private fun extractNewExtractorLinks(doc: Document, htmlContent: String): List<Pair<String, String>>? {
+    private fun extractNewExtractorLinks(
+        doc: Document,
+        htmlContent: String,
+    ): List<Pair<String, String>>? {
         val links = mutableListOf<Pair<String, String>>()
 
-        val scriptData = doc.select("script")
-            .asSequence()
-            .map(Element::data)
-            .firstOrNull { it.contains("dataLink") }
+        val scriptData =
+            doc
+                .select("script")
+                .asSequence()
+                .map(Element::data)
+                .firstOrNull { it.contains("dataLink") }
 
-        val rawExpression = scriptData?.let {
-            getFirstMatch(DATA_LINK_REGEX, it)
-        } ?: getFirstMatch(DATA_LINK_REGEX, htmlContent)
+        val rawExpression =
+            scriptData?.let {
+                getFirstMatch(DATA_LINK_REGEX, it)
+            } ?: getFirstMatch(DATA_LINK_REGEX, htmlContent)
 
         val jsonPayload = resolveDataLink(rawExpression) ?: return null
 
-        val items = runCatching {
-            json.decodeFromString<List<Item>>(jsonPayload)
-        }.getOrElse {
-            Log.e("FlixLatam", "No se pudo parsear dataLink", it)
-            return null
-        }
+        val items =
+            runCatching {
+                json.decodeFromString<List<Item>>(jsonPayload)
+            }.getOrElse {
+                Log.e("FlixLatam", "No se pudo parsear dataLink", it)
+                return null
+            }
 
         val idiomas = mapOf("LAT" to "[LAT]", "ESP" to "[CAST]", "SUB" to "[SUB]")
 
@@ -232,9 +362,10 @@ class FlixLatam : DooPlay(
         return links.ifEmpty { null }
     }
 
-    private fun getFirstMatch(regex: Regex, input: String): String? {
-        return regex.find(input)?.groupValues?.get(1)
-    }
+    private fun getFirstMatch(
+        regex: Regex,
+        input: String,
+    ): String? = regex.find(input)?.groupValues?.get(1)
 
     private fun resolveDataLink(rawExpression: String?): String? {
         if (rawExpression.isNullOrBlank()) return null
@@ -249,35 +380,46 @@ class FlixLatam : DooPlay(
             return substring(start + 1, end).trim()
         }
 
-        fun String.trimMatchingQuotes(): String {
-            return if ((startsWith('"') && endsWith('"')) || (startsWith('\'') && endsWith('\''))) {
+        fun String.trimMatchingQuotes(): String =
+            if ((startsWith('"') && endsWith('"')) || (startsWith('\'') && endsWith('\''))) {
                 substring(1, length - 1)
             } else {
                 this
             }
-        }
 
         while (true) {
             when {
-                expr.removeOuterCall("JSON.parse") != null -> expr = expr.removeOuterCall("JSON.parse")!!
-                expr.removeOuterCall("window.JSON.parse") != null -> expr = expr.removeOuterCall("window.JSON.parse")!!
+                expr.removeOuterCall("JSON.parse") != null -> {
+                    expr = expr.removeOuterCall("JSON.parse")!!
+                }
+
+                expr.removeOuterCall("window.JSON.parse") != null -> {
+                    expr = expr.removeOuterCall("window.JSON.parse")!!
+                }
+
                 expr.removeOuterCall("decodeURIComponent") != null -> {
                     val inner = expr.removeOuterCall("decodeURIComponent")!!.trimMatchingQuotes()
                     expr = runCatching { URLDecoder.decode(inner, "UTF-8") }.getOrElse { return null }
                 }
+
                 expr.removeOuterCall("window.decodeURIComponent") != null -> {
                     val inner = expr.removeOuterCall("window.decodeURIComponent")!!.trimMatchingQuotes()
                     expr = runCatching { URLDecoder.decode(inner, "UTF-8") }.getOrElse { return null }
                 }
+
                 expr.removeOuterCall("atob") != null -> {
                     val inner = expr.removeOuterCall("atob")!!.trimMatchingQuotes()
                     expr = runCatching { String(Base64.decode(inner, Base64.DEFAULT)) }.getOrElse { return null }
                 }
+
                 expr.removeOuterCall("window.atob") != null -> {
                     val inner = expr.removeOuterCall("window.atob")!!.trimMatchingQuotes()
                     expr = runCatching { String(Base64.decode(inner, Base64.DEFAULT)) }.getOrElse { return null }
                 }
-                else -> break
+
+                else -> {
+                    break
+                }
             }
         }
 
@@ -312,7 +454,12 @@ class FlixLatam : DooPlay(
             val obj = element.jsonObject
 
             val link = obj["link"]?.jsonPrimitive?.contentOrNull
-            val nestedLink = obj["data"]?.jsonObject?.get("link")?.jsonPrimitive?.contentOrNull
+            val nestedLink =
+                obj["data"]
+                    ?.jsonObject
+                    ?.get("link")
+                    ?.jsonPrimitive
+                    ?.contentOrNull
 
             link ?: nestedLink
         }.getOrNull()
@@ -328,27 +475,35 @@ class FlixLatam : DooPlay(
 
     override fun getFilterList() = FlixLatamFilters.FILTER_LIST
 
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+    override fun searchAnimeRequest(
+        page: Int,
+        query: String,
+        filters: AnimeFilterList,
+    ): Request {
         val params = FlixLatamFilters.getSearchParameters(filters)
-        val path = when {
-            params.genre.isNotBlank() -> {
-                if (params.genre in listOf("ratings", "tendencias", "pelicula")) {
-                    "/${params.genre}"
-                } else {
-                    "/genero/${params.genre}"
+        val path =
+            when {
+                params.genre.isNotBlank() -> {
+                    if (params.genre in listOf("ratings", "tendencias", "pelicula")) {
+                        "/${params.genre}"
+                    } else {
+                        "/genero/${params.genre}"
+                    }
+                }
+
+                else -> {
+                    buildString {
+                        append(
+                            when {
+                                query.isNotBlank() -> "/?s=$query"
+                                else -> "/"
+                            },
+                        )
+
+                        if (params.isInverted) append("&orden=asc")
+                    }
                 }
             }
-            else -> buildString {
-                append(
-                    when {
-                        query.isNotBlank() -> "/?s=$query"
-                        else -> "/"
-                    },
-                )
-
-                if (params.isInverted) append("&orden=asc")
-            }
-        }
 
         return if (path.startsWith("/?s=")) {
             GET("$baseUrl/page/$page$path")
@@ -360,36 +515,38 @@ class FlixLatam : DooPlay(
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         super.setupPreferenceScreen(screen) // Quality preference
 
-        val langPref = ListPreference(screen.context).apply {
-            key = PREF_LANG_KEY
-            title = PREF_LANG_TITLE
-            entries = PREF_LANG_ENTRIES
-            entryValues = PREF_LANG_VALUES
-            setDefaultValue(PREF_LANG_DEFAULT)
-            summary = "%s"
+        val langPref =
+            ListPreference(screen.context).apply {
+                key = PREF_LANG_KEY
+                title = PREF_LANG_TITLE
+                entries = PREF_LANG_ENTRIES
+                entryValues = PREF_LANG_VALUES
+                setDefaultValue(PREF_LANG_DEFAULT)
+                summary = "%s"
 
-            setOnPreferenceChangeListener { _, newValue ->
-                val selected = newValue as String
-                val index = findIndexOfValue(selected)
-                val entry = entryValues[index] as String
-                preferences.edit().putString(key, entry).commit()
+                setOnPreferenceChangeListener { _, newValue ->
+                    val selected = newValue as String
+                    val index = findIndexOfValue(selected)
+                    val entry = entryValues[index] as String
+                    preferences.edit().putString(key, entry).commit()
+                }
             }
-        }
-        ListPreference(screen.context).apply {
-            key = PREF_SERVER_KEY
-            title = "Preferred server"
-            entries = SERVER_LIST
-            entryValues = SERVER_LIST
-            setDefaultValue(PREF_SERVER_DEFAULT)
-            summary = "%s"
+        ListPreference(screen.context)
+            .apply {
+                key = PREF_SERVER_KEY
+                title = "Preferred server"
+                entries = SERVER_LIST
+                entryValues = SERVER_LIST
+                setDefaultValue(PREF_SERVER_DEFAULT)
+                summary = "%s"
 
-            setOnPreferenceChangeListener { _, newValue ->
-                val selected = newValue as String
-                val index = findIndexOfValue(selected)
-                val entry = entryValues[index] as String
-                preferences.edit().putString(key, entry).commit()
-            }
-        }.also(screen::addPreference)
+                setOnPreferenceChangeListener { _, newValue ->
+                    val selected = newValue as String
+                    val index = findIndexOfValue(selected)
+                    val entry = entryValues[index] as String
+                    preferences.edit().putString(key, entry).commit()
+                }
+            }.also(screen::addPreference)
         screen.addPreference(langPref)
     }
 

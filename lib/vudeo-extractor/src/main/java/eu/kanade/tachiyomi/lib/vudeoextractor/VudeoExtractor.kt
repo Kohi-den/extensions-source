@@ -24,7 +24,13 @@ class VudeoExtractor(private val client: OkHttpClient) {
             .split(',')
             .filter { it.startsWith("https") } // remove invalid links
             .map { videoUrl ->
-                Video(videoUrl, "${prefix}Vudeo", videoUrl, headers)
+                Video(
+                    videoTitle = "${prefix}Vudeo",
+                    videoUrl = videoUrl,
+                    headers = headers,
+                    subtitleTracks = emptyList(),
+                    audioTracks = emptyList(),
+                )
             }
     }
 }
