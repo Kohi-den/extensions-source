@@ -9,6 +9,10 @@ object EvangelionECConstants {
 
     const val PREF_SERVER_KEY = "preferred_server"
     const val PREF_SERVER_DEFAULT = "StreamTape"
+
+    const val PREF_SPLIT_SEASONS_KEY = "split_seasons"
+    const val PREF_SPLIT_SEASONS_DEFAULT = true
+
     val SERVER_LIST =
         arrayOf(
             "StreamTape",

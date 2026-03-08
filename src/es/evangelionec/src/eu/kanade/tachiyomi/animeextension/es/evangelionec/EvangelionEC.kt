@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.SharedPreferences
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
+import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECConstants.EXCLUDED_LABELS
 import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECConstants.ITEMS_PER_PAGE
 import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECConstants.LABEL_FILTER_REGEX
@@ -11,6 +12,8 @@ import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECConstants.
 import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECConstants.PREF_QUALITY_KEY
 import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECConstants.PREF_SERVER_DEFAULT
 import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECConstants.PREF_SERVER_KEY
+import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECConstants.PREF_SPLIT_SEASONS_DEFAULT
+import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECConstants.PREF_SPLIT_SEASONS_KEY
 import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECConstants.QUALITY_LIST
 import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECConstants.RESOLUTION_REGEX
 import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECConstants.SERVER_LIST
@@ -22,6 +25,7 @@ import eu.kanade.tachiyomi.animeextension.es.evangelionec.EvangelionECFilters.Ty
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
+import eu.kanade.tachiyomi.animesource.model.FetchType
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -93,7 +97,32 @@ class EvangelionEC :
         )
     }
 
-    override fun popularAnimeParse(response: Response): AnimesPage = parseBloggerFeed(response)
+    override fun popularAnimeParse(response: Response): AnimesPage {
+        val contentType = response.header("Content-Type") ?: ""
+        // When called from relatedAnimeListParse, the response is HTML (detail page)
+        if ("text/html" in contentType || !contentType.contains("json", ignoreCase = true)) {
+            val body = response.peekBody(Long.MAX_VALUE).string().trimStart()
+            if (body.startsWith("<")) {
+                return parseRelatedFromHtml(body)
+            }
+        }
+        return parseBloggerFeed(response)
+    }
+
+    private fun parseRelatedFromHtml(html: String): AnimesPage {
+        val document = org.jsoup.Jsoup.parse(html)
+        val labels =
+            document
+                .select("a[rel=tag]")
+                .map { it.text() }
+                .filter { !it.matches(LABEL_FILTER_REGEX) && it !in EXCLUDED_LABELS }
+        if (labels.isEmpty()) return AnimesPage(emptyList(), false)
+
+        val label = labels.first()
+        val feedUrl = "$baseUrl/feeds/posts/default/-/$label?alt=json&max-results=$ITEMS_PER_PAGE"
+        val feedResponse = client.newCall(GET(feedUrl, headers)).execute()
+        return parseBloggerFeed(feedResponse)
+    }
 
     // ============================== Latest ===============================
 
@@ -153,7 +182,16 @@ class EvangelionEC :
 
     // ============================== Anime Details ===============================
 
-    override fun animeDetailsRequest(anime: SAnime): Request = GET(anime.url.toAbsoluteUrl().forceDesktop(), headers)
+    override fun animeDetailsRequest(anime: SAnime): Request {
+        val url =
+            anime.url
+                .substringBefore("#")
+                .toAbsoluteUrl()
+                .forceDesktop()
+        val fragment = anime.url.substringAfter("#", "")
+        val finalUrl = if (fragment.isNotBlank()) "$url#$fragment" else url
+        return GET(finalUrl, headers)
+    }
 
     override fun animeDetailsParse(response: Response): SAnime {
         val document = response.asJsoup()
@@ -163,6 +201,13 @@ class EvangelionEC :
 
             thumbnail_url = document.selectFirst("section#info img[itemprop=image]")?.attr("src")
                 ?: document.selectFirst(".separator img")?.attr("src")
+
+            // Detect if it has seasons (skip if already a season entry)
+            val isSeason =
+                response.request.url.fragment
+                    ?.startsWith("season") == true
+            val hasSeasons = !isSeason && document.select(".v7_season-card a[href]").isNotEmpty()
+            fetch_type = preferredFetchType(hasSeasons)
 
             description = document.selectFirst("#synopsis")?.text()
 
@@ -203,7 +248,14 @@ class EvangelionEC :
 
     // ============================== Episodes ===============================
 
-    override fun episodeListRequest(anime: SAnime): Request = GET(anime.url.toAbsoluteUrl().forceDesktop(), headers)
+    override fun episodeListRequest(anime: SAnime): Request =
+        GET(
+            anime.url
+                .substringBefore("#")
+                .toAbsoluteUrl()
+                .forceDesktop(),
+            headers,
+        )
 
     override fun episodeListParse(response: Response): List<SEpisode> {
         val document = response.asJsoup()
@@ -294,7 +346,87 @@ class EvangelionEC :
 
     // ============================== Season List ===============================
 
-    override fun seasonListParse(response: Response): List<SAnime> = emptyList()
+    override suspend fun getSeasonList(anime: SAnime): List<SAnime> {
+        if (anime.fetch_type != FetchType.Seasons) return emptyList()
+        val request = GET(anime.url.toAbsoluteUrl().forceDesktop(), headers)
+        val response = client.newCall(request).execute()
+        val document = response.use { it.asJsoup() }
+        val seasonCards = document.select(".v7_season-card a[href]")
+
+        if (seasonCards.isEmpty()) {
+            // No season cards → single "season" fallback so episodes still load
+            return listOf(
+                SAnime.create().apply {
+                    title = anime.title
+                    thumbnail_url = anime.thumbnail_url
+                    fetch_type = FetchType.Episodes
+                    season_number = 1.0
+                    setUrlWithoutDomain(anime.url.substringBefore("#") + "#season=1")
+                },
+            )
+        }
+
+        // Build season list from cards (these are the OTHER seasons)
+        val seasons =
+            seasonCards
+                .mapIndexed { index, card ->
+                    val href = card.attr("href")
+                    val img = card.selectFirst("img")?.attr("src")
+                    val seasonTitle = card.selectFirst(".v7_season-info p strong")?.text() ?: "Temporada ${index + 1}"
+                    val seasonInfo = card.selectFirst(".v7_season-info p:last-child")?.text() ?: ""
+
+                    SAnime.create().apply {
+                        title = seasonTitle
+                        thumbnail_url = img
+                        description = seasonInfo
+                        fetch_type = FetchType.Episodes
+                        season_number = (index + 1).toDouble()
+                        setUrlWithoutDomain(href.removePrefix(baseUrl).substringBefore("#") + "#season=${index + 1}")
+                    }
+                }.toMutableList()
+
+        // Add the CURRENT anime as the latest season
+        val currentSeasonTitle =
+            document.selectFirst("h1.title[itemprop=name]")?.text()
+                ?: anime.title
+        val currentThumbnail =
+            document.selectFirst("section#info img[itemprop=image]")?.attr("src")
+                ?: anime.thumbnail_url
+
+        seasons.add(
+            SAnime.create().apply {
+                title = currentSeasonTitle
+                thumbnail_url = currentThumbnail
+                fetch_type = FetchType.Episodes
+                season_number = (seasons.size + 1).toDouble()
+                setUrlWithoutDomain(anime.url.substringBefore("#") + "#season=${seasons.size + 1}")
+            },
+        )
+
+        return seasons
+    }
+
+    override fun seasonListParse(response: Response): List<SAnime> {
+        val document = response.asJsoup()
+        val seasonCards = document.select(".v7_season-card a[href]")
+        if (seasonCards.isEmpty()) return emptyList()
+
+        return seasonCards.mapIndexed { index, card ->
+            val href = card.attr("href")
+            val img = card.selectFirst("img")?.attr("src")
+            val seasonTitle = card.selectFirst(".v7_season-info p strong")?.text() ?: "Temporada ${index + 1}"
+            val seasonInfo = card.selectFirst(".v7_season-info p:last-child")?.text() ?: ""
+
+            SAnime.create().apply {
+                title = seasonTitle
+                thumbnail_url = img
+                description = seasonInfo
+                fetch_type = FetchType.Episodes
+                season_number = (index + 1).toDouble()
+                setUrlWithoutDomain(href.removePrefix(baseUrl))
+            }
+        }
+    }
 
     // ============================== Video Extraction ===============================
 
@@ -410,11 +542,14 @@ class EvangelionEC :
                 else -> SAnime.UNKNOWN
             }
 
+        val isMovie = labels.contains("Movie") || labels.contains("Películas")
+
         return SAnime.create().apply {
             this.title = title
             setUrlWithoutDomain(alternateLink.removePrefix(baseUrl))
             thumbnail_url = thumbnailUrl
             this.status = status
+            fetch_type = preferredFetchType(!isMovie)
             genre =
                 labels
                     .filter { it !in EXCLUDED_LABELS && !it.matches(LABEL_FILTER_REGEX) }
@@ -450,9 +585,28 @@ class EvangelionEC :
                     preferences.edit().putString(key, newValue as String).commit()
                 }
             }.also(screen::addPreference)
+
+        SwitchPreferenceCompat(screen.context)
+            .apply {
+                key = PREF_SPLIT_SEASONS_KEY
+                title = "Dividir temporadas"
+                summary = "Mostrar temporadas como entradas separadas"
+                setDefaultValue(PREF_SPLIT_SEASONS_DEFAULT)
+                isChecked = preferences.getBoolean(PREF_SPLIT_SEASONS_KEY, PREF_SPLIT_SEASONS_DEFAULT)
+                setOnPreferenceChangeListener { _, newValue ->
+                    preferences.edit().putBoolean(key, newValue as Boolean).commit()
+                }
+            }.also(screen::addPreference)
     }
 
     // ============================== Helpers ===============================
+
+    private fun preferredFetchType(hasSeasons: Boolean): FetchType =
+        if (hasSeasons && preferences.getBoolean(PREF_SPLIT_SEASONS_KEY, PREF_SPLIT_SEASONS_DEFAULT)) {
+            FetchType.Seasons
+        } else {
+            FetchType.Episodes
+        }
 
     private fun String.toAbsoluteUrl(): String = if (startsWith("http")) this else "$baseUrl$this"
 
