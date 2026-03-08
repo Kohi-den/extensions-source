@@ -20,6 +20,7 @@ import eu.kanade.tachiyomi.lib.burstcloudextractor.BurstCloudExtractor
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
 import eu.kanade.tachiyomi.lib.fastreamextractor.FastreamExtractor
 import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
+import eu.kanade.tachiyomi.lib.goodstramextractor.GoodStreamExtractor
 import eu.kanade.tachiyomi.lib.mp4uploadextractor.Mp4uploadExtractor
 import eu.kanade.tachiyomi.lib.okruextractor.OkruExtractor
 import eu.kanade.tachiyomi.lib.streamlareextractor.StreamlareExtractor
@@ -86,7 +87,7 @@ class Hackstoremx :
 
     companion object {
         private const val TAG = "HackStoreMX"
-        private const val DEBUG_LOGS = false
+        private const val DEBUG_LOGS = true
         const val PREFIX_SEARCH = "id:"
 
         // Quality preferences
@@ -101,6 +102,7 @@ class Hackstoremx :
         private val SERVER_LIST =
             arrayOf(
                 "Voe",
+                "Vimeo",
                 "Filemoon",
                 "StreamWish",
                 "VidHide",
@@ -148,6 +150,7 @@ class Hackstoremx :
         private val SERVER_DISPLAY_NAMES =
             mapOf(
                 "voe" to "Voe",
+                "vimeo" to "Vimeo",
                 "okru" to "Okru",
                 "filemoon" to "Filemoon",
                 "amazon" to "Amazon",
@@ -181,6 +184,7 @@ class Hackstoremx :
     private val doodExtractor by lazy { DoodExtractor(client) }
     private val streamlareExtractor by lazy { StreamlareExtractor(client) }
     private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
+    private val goodStreamExtractor by lazy { GoodStreamExtractor(client, headers) }
     private val burstCloudExtractor by lazy { BurstCloudExtractor(client) }
     private val fastreamExtractor by lazy { FastreamExtractor(client, headers) }
     private val upstreamExtractor by lazy { UpstreamExtractor(client) }
@@ -1337,8 +1341,9 @@ class Hackstoremx :
                     "donaldlineelse",
                     "yip.",
                 ),
+            "filemoon" to listOf("filemoon", "moonplayer", "moviesm4u", "files.im", "vimeos"),
+            "goodstream" to listOf("goodstream", "gdrm"),
             "okru" to listOf("ok.ru", "okru"),
-            "filemoon" to listOf("filemoon", "moonplayer", "moviesm4u", "files.im"),
             "amazon" to listOf("amazon", "amz"),
             "uqload" to listOf("uqload"),
             "mp4upload" to listOf("mp4upload"),
@@ -1411,6 +1416,12 @@ class Hackstoremx :
                     "serverVideoResolver: voeExtractor empty, universalExtractor fallback returned ${fallback.size} videos for url=$url"
                 }
                 fallback
+            }
+
+            "goodstream" -> {
+                val vids = goodStreamExtractor.videosFromUrl(url, prefixWithSpace)
+                debugLog { "serverVideoResolver: goodStreamExtractor returned ${vids.size} videos for url=$url" }
+                vids
             }
 
             "okru" -> {
