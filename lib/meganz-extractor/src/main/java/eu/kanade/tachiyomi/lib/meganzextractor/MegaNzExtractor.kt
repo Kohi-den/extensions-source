@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.es.evangelionec
+package eu.kanade.tachiyomi.lib.meganzextractor
 
 import android.util.Base64
 import android.util.Log
@@ -166,10 +166,6 @@ class MegaNzExtractor(
             null
         }
 
-    /**
-     * NanoHTTPD proxy that downloads + decrypts MEGA files to a temp file,
-     * then serves from the file with proper Range support.
-     */
     class MegaProxyServer : NanoHTTPD(0) {
         init {
             java.util.logging.Logger
@@ -314,7 +310,6 @@ class MegaNzExtractor(
             val endByte = minOf(requestedEnd, totalSize - 1)
             val contentLength = endByte - requestedStart + 1
 
-            // Wait for enough data to be available (at least the start position + some buffer)
             val waitTarget = minOf(requestedStart + minOf(contentLength, 256 * 1024L), totalSize)
             val maxWait = 60_000L
             val startTime = System.currentTimeMillis()
@@ -359,9 +354,6 @@ class MegaNzExtractor(
         }
     }
 
-    /**
-     * InputStream that reads from the temp file, blocking when data hasn't been downloaded yet.
-     */
     private class TempFileInputStream(
         file: File,
         private val cached: MegaProxyServer.CachedDownload,

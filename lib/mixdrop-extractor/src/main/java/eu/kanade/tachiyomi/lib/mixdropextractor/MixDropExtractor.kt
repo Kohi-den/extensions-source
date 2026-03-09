@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.lib.unpacker.Unpacker
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import java.net.URLDecoder
 
@@ -17,11 +18,19 @@ class MixDropExtractor(private val client: OkHttpClient) {
         externalSubs: List<Track> = emptyList(),
         referer: String = DEFAULT_REFERER,
     ): List<Video> {
+        val effectiveReferer = if (referer == DEFAULT_REFERER) {
+            runCatching {
+                val host = url.toHttpUrl().host
+                "https://$host/"
+            }.getOrDefault(referer)
+        } else {
+            referer
+        }
         val headers = Headers.headersOf(
             "Referer",
-            referer,
+            effectiveReferer,
             "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         )
         val doc = client.newCall(GET(url, headers)).execute().asJsoup()
         val unpacked = doc.selectFirst("script:containsData(eval):containsData(MDCore)")
@@ -55,4 +64,4 @@ class MixDropExtractor(private val client: OkHttpClient) {
     ) = videoFromUrl(url, lang, prefix, externalSubs, referer)
 }
 
-private const val DEFAULT_REFERER = "https://mixdrop.co/"
+private const val DEFAULT_REFERER = "https://mixdrop.ps/"

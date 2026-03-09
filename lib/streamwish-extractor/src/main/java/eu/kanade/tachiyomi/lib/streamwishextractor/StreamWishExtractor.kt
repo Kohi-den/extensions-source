@@ -47,12 +47,15 @@ class StreamWishExtractor(private val client: OkHttpClient, private val headers:
     }
 
     private fun getEmbedUrl(url: String): String {
-        return if (url.contains("/f/")) {
+        if (url.contains("/f/")) {
             val videoId = url.substringAfter("/f/")
-            "https://streamwish.com/$videoId"
-        } else {
-            url
+            return "https://embedwish.com/e/$videoId"
         }
+        val host = url.toHttpUrl().host
+        if (host in BROKEN_HOSTS) {
+            return url.replace(host, "embedwish.com")
+        }
+        return url
     }
 
     private fun extractSubtitles(script: String): List<Track> {
@@ -78,4 +81,5 @@ class StreamWishExtractor(private val client: OkHttpClient, private val headers:
 
     private val M3U8_REGEX = Regex("""https[^"]*m3u8[^"]*""")
     private val FIX_TRACKS_REGEX = Regex("""(?<!["])(file|kind|label)(?!["])""")
+    private val BROKEN_HOSTS = setOf("streamwish.to", "streamwish.com", "awish.pro")
 }

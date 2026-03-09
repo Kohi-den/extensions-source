@@ -18,5 +18,6 @@ dependencies {
     implementation(project(':lib:uqload-extractor'))
     implementation(project(':lib:yourupload-extractor'))
     implementation(project(':lib:universal-extractor'))
-    implementation('org.nanohttpd:nanohttpd:2.3.1')
+    implementation(project(':lib:megaup-extractor'))
+    implementation(project(':lib:meganz-extractor'))
 }

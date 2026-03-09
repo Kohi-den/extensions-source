@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.es.evangelionec
+package eu.kanade.tachiyomi.lib.megaupextractor
 
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
@@ -70,7 +70,7 @@ class MegaUpExtractor(
                     if (!referer.isNullOrBlank()) add("Referer", referer)
                 }.build()
 
-        return parsePlaylist(masterUrl, prefix, videoHeaders, subtitles, url)
+        return parsePlaylist(masterUrl, prefix, videoHeaders, subtitles)
     }
 
     private fun parsePlaylist(
@@ -78,7 +78,6 @@ class MegaUpExtractor(
         prefix: String,
         headers: Headers,
         subtitles: List<Track>,
-        originalUrl: String,
     ): List<Video> {
         val playlistContent =
             client

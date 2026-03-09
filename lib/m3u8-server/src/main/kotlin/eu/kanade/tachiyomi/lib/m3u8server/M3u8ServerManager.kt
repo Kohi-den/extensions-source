@@ -1,11 +1,14 @@
 package eu.kanade.tachiyomi.lib.m3u8server
 
 import android.util.Log
+import okhttp3.OkHttpClient
 
 /**
  * M3U8 Server manager to facilitate usage
  */
-class M3u8ServerManager {
+class M3u8ServerManager(
+    private val client: OkHttpClient = OkHttpClient(),
+) {
     private val tag by lazy { javaClass.simpleName }
     private var server: M3u8HttpServer? = null
 
@@ -20,7 +23,7 @@ class M3u8ServerManager {
         }
 
         try {
-            server = M3u8HttpServer(port)
+            server = M3u8HttpServer(port, client)
             server?.start()
             Log.d(tag, "Server started on port: ${server?.port}")
         } catch (e: Exception) {
@@ -69,6 +72,14 @@ class M3u8ServerManager {
      */
     suspend fun processSegmentUrl(segmentUrl: String, headers: Map<String, String> = emptyMap()): ByteArray? {
         return server?.processSegmentUrl(segmentUrl, headers)
+    }
+
+    /**
+     * Registers a video URL with headers for proxying.
+     * Returns a localhost URL that streams the video with the required headers.
+     */
+    fun registerProxy(url: String, headers: Map<String, String>): String? {
+        return server?.registerProxy(url, headers)
     }
 
     /**

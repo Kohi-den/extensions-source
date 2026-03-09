@@ -9,7 +9,7 @@ import okhttp3.OkHttpClient
  */
 class M3u8Integration(
     private val client: OkHttpClient,
-    private val serverManager: M3u8ServerManager = M3u8ServerManager(),
+    private val serverManager: M3u8ServerManager = M3u8ServerManager(client),
 ) {
 
     private val tag by lazy { javaClass.simpleName }
@@ -35,11 +35,10 @@ class M3u8Integration(
      */
     suspend fun processM3u8Video(originalVideo: Video): Video {
         val videoHeaders = originalVideo.headers?.toMap()?: emptyMap()
-        val processedUrl = serverManager.processM3u8Url(originalVideo.url, videoHeaders)
+        val processedUrl = serverManager.processM3u8Url(originalVideo.videoUrl, videoHeaders)
         return Video(
-            url = processedUrl ?: originalVideo.url,
-            quality = originalVideo.quality,
-            videoUrl = originalVideo.videoUrl,
+            videoTitle = originalVideo.videoTitle,
+            videoUrl = processedUrl ?: originalVideo.videoUrl,
             subtitleTracks = originalVideo.subtitleTracks,
             audioTracks = originalVideo.audioTracks,
             headers = originalVideo.headers,
@@ -54,7 +53,7 @@ class M3u8Integration(
     suspend fun processVideoList(videos: List<Video>): List<Video> {
         initializeServer()
         return videos.map { video ->
-            if (isM3u8Url(video.url)) {
+            if (isM3u8Url(video.videoUrl)) {
                 processM3u8Video(video)
             } else {
                 video
@@ -77,6 +76,18 @@ class M3u8Integration(
      */
     fun getServerInfo(): String {
         return serverManager.getServerInfo()
+    }
+
+    /**
+     * Creates a proxy URL for a video that requires specific headers for playback.
+     * The local server will stream the video with the required headers.
+     * @param videoUrl The original video URL
+     * @param headers Headers required for the video request (e.g., Referer)
+     * @return Local proxy URL, or null if server is not available
+     */
+    fun createProxyUrl(videoUrl: String, headers: Map<String, String>): String? {
+        initializeServer()
+        return serverManager.registerProxy(videoUrl, headers)
     }
 
     /**

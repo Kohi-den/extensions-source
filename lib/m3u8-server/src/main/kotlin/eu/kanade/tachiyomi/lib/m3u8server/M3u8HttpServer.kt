@@ -6,9 +6,17 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.FilterInputStream
 import java.io.IOException
+import java.io.InputStream
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import java.util.concurrent.ConcurrentHashMap
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -27,6 +35,32 @@ class M3u8HttpServer(
 
     private val tag by lazy { javaClass.simpleName }
     private var isRunning = false
+
+    // Client that trusts all certs for proxy requests (local proxy on 127.0.0.1)
+    private val proxyClient: OkHttpClient by lazy {
+        val trustAllManager = object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
+            override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
+            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+        }
+        val sslContext = SSLContext.getInstance("TLS").apply {
+            init(null, arrayOf<TrustManager>(trustAllManager), SecureRandom())
+        }
+        client.newBuilder()
+            .sslSocketFactory(sslContext.socketFactory, trustAllManager)
+            .hostnameVerifier { _, _ -> true }
+            .build()
+    }
+
+    data class ProxyEntry(val url: String, val headers: Map<String, String>)
+    private val proxyEntries = ConcurrentHashMap<String, ProxyEntry>()
+    private var proxyKeyCounter = 0L
+
+    fun registerProxy(url: String, headers: Map<String, String>): String {
+        val key = "p${++proxyKeyCounter}"
+        proxyEntries[key] = ProxyEntry(url, headers)
+        return "http://127.0.0.1:$port/proxy/$key"
+    }
 
     override fun start() {
         try {
@@ -54,6 +88,7 @@ class M3u8HttpServer(
         Log.d(tag, "Received request: $method $uri from ${session.remoteIpAddress}")
 
         val response = when {
+            uri.startsWith("/proxy/") -> handleProxyRequest(session)
             uri.startsWith("/m3u8") -> handleM3u8Request(session)
             uri.startsWith("/segment") -> handleSegmentRequest(session)
             uri.startsWith("/health") -> handleHealthRequest()
@@ -111,6 +146,57 @@ class M3u8HttpServer(
         } catch (e: Exception) {
             Log.e(tag, "Error processing segment: ${e.message}", e)
             newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Error: ${e.message}")
+        }
+    }
+
+    private fun handleProxyRequest(session: IHTTPSession): Response {
+        val key = session.uri.removePrefix("/proxy/")
+        val entry = proxyEntries[key]
+        if (entry == null) {
+            Log.w(tag, "Proxy entry not found: $key")
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
+        }
+
+        return try {
+            val requestBuilder = Request.Builder().url(entry.url)
+            entry.headers.forEach { (name, value) -> requestBuilder.header(name, value) }
+
+            // Forward Range header from player for seeking support
+            session.headers["range"]?.let { requestBuilder.header("Range", it) }
+
+            val upstreamResponse = proxyClient.newCall(requestBuilder.build()).execute()
+            val body = upstreamResponse.body
+            if (body == null) {
+                upstreamResponse.close()
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Empty upstream response")
+            }
+
+            val contentType = upstreamResponse.header("Content-Type") ?: "video/mp4"
+            val contentLength = upstreamResponse.header("Content-Length")?.toLongOrNull() ?: -1L
+            val isPartial = upstreamResponse.code == 206
+            val status = if (isPartial) Response.Status.PARTIAL_CONTENT else Response.Status.OK
+
+            // Wrap stream to close OkHttp response when done
+            val wrappedStream: InputStream = object : FilterInputStream(body.byteStream()) {
+                override fun close() {
+                    super.close()
+                    upstreamResponse.close()
+                }
+            }
+
+            val nanoResponse = if (contentLength > 0) {
+                newFixedLengthResponse(status, contentType, wrappedStream, contentLength)
+            } else {
+                newChunkedResponse(status, contentType, wrappedStream)
+            }
+
+            upstreamResponse.header("Content-Range")?.let { nanoResponse.addHeader("Content-Range", it) }
+            upstreamResponse.header("Accept-Ranges")?.let { nanoResponse.addHeader("Accept-Ranges", it) }
+
+            nanoResponse
+        } catch (e: Exception) {
+            Log.e(tag, "Error proxying video: ${e.message}", e)
+            newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Proxy error: ${e.message}")
         }
     }
 
