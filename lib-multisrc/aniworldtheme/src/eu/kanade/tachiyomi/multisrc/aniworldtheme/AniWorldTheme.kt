@@ -50,7 +50,7 @@ abstract class AniWorldTheme(
         .addInterceptor(DdosGuardInterceptor(network.client))
         .build()
 
-    private val json: Json by injectLazy()
+    protected val json: Json by injectLazy()
 
     // ===== POPULAR ANIME =====
     override fun popularAnimeSelector(): String = "div.seriesListContainer div"

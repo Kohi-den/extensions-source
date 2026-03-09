@@ -1,0 +1,16 @@
+ext {
+    extName = 'AniWorld (Split Seasons)'
+    extClass = '.AniWorldSplit'
+    themePkg = "aniworldtheme"
+    overrideVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
+
+android {
+    sourceSets {
+        main {
+            res.srcDirs += ['../aniworld/res']
+        }
+    }
+}
