@@ -11,6 +11,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Response
+import org.jsoup.nodes.Document
 import uy.kohesive.injekt.api.get
 
 class AniWorldSplit : AniWorldTheme("AniWorld (Split Seasons)") {
@@ -73,6 +74,20 @@ class AniWorldSplit : AniWorldTheme("AniWorld (Split Seasons)") {
             }
         }
         return animes
+    }
+
+    // ===== ANIME DETAILS =====
+    override fun animeDetailsParse(document: Document): SAnime {
+        val anime = super.animeDetailsParse(document)
+        val url = document.location()
+        if (url.contains("/filme")) {
+            val movieTitle = document.select(".hosterSiteTitle h2 small").text()
+            anime.title += " - $movieTitle"
+        } else {
+            val seasonNum = url.substringAfter("staffel-").substringBeforeLast("/")
+            anime.title += " - Staffel $seasonNum"
+        }
+        return anime
     }
 
     // ===== EPISODE =====
