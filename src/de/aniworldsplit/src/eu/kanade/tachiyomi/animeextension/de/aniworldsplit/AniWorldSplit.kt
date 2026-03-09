@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.animeextension.de.aniworldsplit
 
+import androidx.preference.ListPreference
+import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -12,11 +14,44 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Response
 import org.jsoup.nodes.Document
+import org.jsoup.nodes.Element
 import uy.kohesive.injekt.api.get
 
 class AniWorldSplit : AniWorldTheme("AniWorld (Split Seasons)") {
 
     override val id: Long = 8286900189409315837
+
+    private fun popularOrLatestAnime(element: Element): SAnime {
+        val link = element.selectFirst("a")!!.attr("href")
+        val page = client.newCall(GET("$baseUrl$link")).execute().asJsoup()
+        val seasonElements = page
+            .select("#stream > ul:nth-child(1) > li > a")
+            .filter { season ->
+                !season.attr("href").contains("/filme")
+            }
+        val anime = SAnime.create()
+
+        val season = when (preferences.getString("season_sort", "last")) {
+            "first" -> seasonElements.firstOrNull()
+            "last" -> seasonElements.lastOrNull()
+            else -> seasonElements.lastOrNull()
+        }
+
+        anime.title = element.selectFirst("h3")!!.text() + " - " + season!!.attr("title")
+        anime.url = season.attr("href")
+        anime.thumbnail_url = baseUrl + element
+            .selectFirst("a")!!
+            .selectFirst("img")!!
+            .attr("data-src")
+            .replace("200x300", "220x330")
+        return anime
+    }
+
+    // ===== POPULAR ANIME =====
+    override fun popularAnimeFromElement(element: Element): SAnime = popularOrLatestAnime(element)
+
+    // ===== LATEST ANIME =====
+    override fun latestUpdatesFromElement(element: Element): SAnime = popularOrLatestAnime(element)
 
     // ===== SEARCH =====
     override fun searchAnimeParse(response: Response): AnimesPage {
@@ -116,5 +151,24 @@ class AniWorldSplit : AniWorldTheme("AniWorld (Split Seasons)") {
             }
         }
         return episodeList.reversed()
+    }
+
+    // ===== PREFERENCES ======
+    override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        super.setupPreferenceScreen(screen)
+
+        val seasonSortPref = androidx.preference.ListPreference(screen.context).apply {
+            key = "season_sort"
+            title = "Staffel-Anzeige (Beliebt/Neu)"
+            entries = arrayOf("Erste Staffel", "Letzte Staffel")
+            entryValues = arrayOf("first", "last")
+            setDefaultValue("last")
+            summary = "%s"
+
+            setOnPreferenceChangeListener { _, newValue ->
+                preferences.edit().putString(key, newValue as String).commit()
+            }
+        }
+        screen.addPreference(seasonSortPref)
     }
 }
