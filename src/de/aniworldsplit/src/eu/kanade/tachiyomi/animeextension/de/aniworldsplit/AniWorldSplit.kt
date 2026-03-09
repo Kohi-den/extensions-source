@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.de.aniworldsplit
 
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
+import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.multisrc.aniworldtheme.AniWorldTheme
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
@@ -72,5 +73,33 @@ class AniWorldSplit : AniWorldTheme("AniWorld (Split Seasons)") {
             }
         }
         return animes
+    }
+
+    // ===== EPISODE =====
+    override fun episodeListParse(response: Response): List<SEpisode> {
+        val document = response.asJsoup()
+        val episodeList = mutableListOf<SEpisode>()
+        val url = response.request.url.toString()
+
+        if (url.contains("/filme")) {
+            val episode = SEpisode.create().apply {
+                name = document.select(".hosterSiteTitle h2 small").text()
+                episode_number = 1f
+                this.url = url
+            }
+            episodeList.add(episode)
+        } else {
+            val episodeElements = document.select("table.seasonEpisodesList tbody tr")
+            episodeElements.forEach { element ->
+                val episode = SEpisode.create().apply {
+                    val num = element.attr("data-episode-season-id")
+                    name = "$num. " + element.select("td.seasonEpisodeTitle a span").text()
+                    episode_number = element.select("td meta").attr("content").toFloat()
+                    this.url = element.selectFirst("td.seasonEpisodeTitle a")!!.attr("href")
+                }
+                episodeList.add(episode)
+            }
+        }
+        return episodeList.reversed()
     }
 }
