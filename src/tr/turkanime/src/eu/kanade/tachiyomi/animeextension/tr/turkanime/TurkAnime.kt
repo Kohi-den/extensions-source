@@ -62,7 +62,7 @@ class TurkAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override val name = "Türk Anime TV"
 
-    override val baseUrl = "https://www.turkanime.co"
+    override val baseUrl = "https://www.turkanime.tv"
 
     override val lang = "tr"
 
@@ -366,7 +366,7 @@ class TurkAnime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                     VkExtractor(client, headers).videosFromUrl(vkUrl, prefix = "$subber: ")
                 }
                 "VOE" -> {
-                    VoeExtractor(client).videosFromUrl(hosterLink, "($subber) ")
+                    VoeExtractor(client, headers).videosFromUrl(hosterLink, "($subber) ")
                 }
                 "VTUBE" -> {
                     VTubeExtractor(client, headers).videosFromUrl(hosterLink, baseUrl, prefix = "$subber: ")

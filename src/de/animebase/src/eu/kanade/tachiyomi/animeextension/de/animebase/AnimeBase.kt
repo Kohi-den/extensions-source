@@ -213,7 +213,7 @@ class AnimeBase : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val unpackerExtractor by lazy { UnpackerExtractor(client, headers) }
     private val vidguardExtractor by lazy { VidGuardExtractor(client) }
 

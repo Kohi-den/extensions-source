@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.animeextension.es.mhdflix
 
 import android.app.Application
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -13,37 +12,64 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
+import eu.kanade.tachiyomi.lib.filemoonextractor.FilemoonExtractor
+import eu.kanade.tachiyomi.lib.luluextractor.LuluExtractor
 import eu.kanade.tachiyomi.lib.mixdropextractor.MixDropExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
+import eu.kanade.tachiyomi.lib.streamvidextractor.StreamVidExtractor
 import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
 import eu.kanade.tachiyomi.lib.universalextractor.UniversalExtractor
 import eu.kanade.tachiyomi.lib.uqloadextractor.UqloadExtractor
 import eu.kanade.tachiyomi.lib.vidhideextractor.VidHideExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
-import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.util.asJsoup
-import okhttp3.FormBody
+import eu.kanade.tachiyomi.util.parallelFlatMapBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.put
+import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import org.json.JSONArray
-import org.jsoup.Jsoup
-import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 open class MhdFlix : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override val name = "MhdFlix"
 
-    override val baseUrl = "https://ww2.mhdflix.com"
+    override val baseUrl = "https://ww1.mhdflix.com"
+
+    private val apiUrl = "https://core.mhdflix.com"
 
     override val lang = "es"
 
-    override val supportsLatest = false
+    override val supportsLatest = true
+
+    private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
+
+    private val jsonMediaType = "application/json".toMediaType()
+
+    private val dateFormatter by lazy { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
 
     private val preferences: SharedPreferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
+
+    private val popularPageSize = 40
+    private val popularCacheTtlMs = 5 * 60 * 1000L
+    private val latestPageSize = 20
+    private val latestCacheTtlMs = 60 * 1000L
+
+    private var seoCatalogCache: PopularCatalogCache? = null
+    private var latestEpisodesCache: LatestEpisodesCache? = null
+    private val mediaDetailCache = mutableMapOf<Int, MediaDto>()
 
     companion object {
         private const val PREF_LANGUAGE_KEY = "preferred_language"
@@ -58,250 +84,269 @@ open class MhdFlix : AnimeHttpSource(), ConfigurableAnimeSource {
         private const val PREF_SERVER_DEFAULT = "StreamWish"
         private val SERVER_LIST = arrayOf(
             "StreamWish",
+            "Filemoon",
+            "StreamVid",
             "VidHide",
             "Voe",
             "Uqload",
+            "Lulu",
             "StreamTape",
             "Doodstream",
             "MixDrop",
-            "filelions",
+            "Filelions",
+            "Hexupload",
+            "Netu",
         )
     }
 
-    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/movies/page/$page", headers)
+    override fun headersBuilder(): Headers.Builder = super.headersBuilder()
+        .add("Origin", baseUrl)
+        .add("Referer", "$baseUrl/")
+        .add("Accept", "application/json, text/plain, */*")
+
+    override fun popularAnimeRequest(page: Int): Request =
+        apiGet("$apiUrl/api/seo/medias", page)
 
     override fun popularAnimeParse(response: Response): AnimesPage {
-        val document = response.asJsoup()
-        val elements = document.select("#movies-a li[id*=post-]")
-        val nextPage = document.select(".pagination .nav-links .current ~ a:not(.page-link)").any()
-        val animeList = elements.map { element ->
-            SAnime.create().apply {
-                setUrlWithoutDomain(element.selectFirst("article > a")?.attr("abs:href") ?: "")
-                title = element.selectFirst("article .entry-header .entry-title")?.text() ?: ""
-                thumbnail_url = element.selectFirst("article .post-thumbnail figure img")?.getImageUrl()
+        val requestedPage = response.request.page
+        val now = System.currentTimeMillis()
+        val freshEntries = response.parseAs<SeoMediaListResponse>().data
+            .filter { it.idMedia != null }
+            .sortedByDescending { it.createadAt.orEmpty() }
+
+        val catalogEntries = when {
+            freshEntries.isNotEmpty() -> {
+                seoCatalogCache = PopularCatalogCache(now, freshEntries)
+                freshEntries
             }
+            else ->
+                seoCatalogCache
+                    ?.takeIf { now - it.timestamp <= popularCacheTtlMs }
+                    ?.entries
+                    ?: emptyList()
         }
-        return AnimesPage(animeList, nextPage)
+
+        if (catalogEntries.isEmpty()) return AnimesPage(emptyList(), false)
+
+        val startIndex = (requestedPage - 1) * popularPageSize
+        if (startIndex >= catalogEntries.size) return AnimesPage(emptyList(), false)
+
+        val endIndex = minOf(startIndex + popularPageSize, catalogEntries.size)
+        val pageSlice = catalogEntries.subList(startIndex, endIndex)
+
+        val animeList = pageSlice.mapNotNull { entry ->
+            val mediaId = entry.idMedia ?: return@mapNotNull null
+            fetchMediaSummary(mediaId)?.toSAnime()
+        }
+
+        val hasNext = endIndex < catalogEntries.size
+        return AnimesPage(animeList, hasNext)
     }
 
-    protected open fun Element.getImageUrl(): String? {
-        return if (hasAttr("srcset")) {
-            try {
-                fetchUrls(attr("abs:srcset")).maxOrNull()
-            } catch (_: Exception) {
-                attr("abs:src")
+    override fun latestUpdatesRequest(page: Int): Request =
+        apiGet("$apiUrl/api/serie/episode/last?page=$page", page)
+
+    override fun latestUpdatesParse(response: Response): AnimesPage {
+        val requestedPage = response.request.page
+        val now = System.currentTimeMillis()
+        val payload = response.parseAs<EpisodeListResponse>()
+        val freshEntries = payload.data
+
+        val cachedEntries = when {
+            freshEntries.isNotEmpty() -> {
+                latestEpisodesCache = LatestEpisodesCache(now, freshEntries)
+                freshEntries
             }
-        } else {
-            attr("abs:src")
+            else ->
+                latestEpisodesCache
+                    ?.takeIf { now - it.timestamp <= latestCacheTtlMs }
+                    ?.entries
+                    ?: emptyList()
         }
+
+        if (cachedEntries.isEmpty()) return AnimesPage(emptyList(), false)
+
+        val startIndex = (requestedPage - 1) * latestPageSize
+        if (startIndex >= cachedEntries.size) return AnimesPage(emptyList(), false)
+
+        val endIndex = minOf(startIndex + latestPageSize, cachedEntries.size)
+        val pageSlice = cachedEntries.subList(startIndex, endIndex)
+        val animeList = pageSlice.map { it.toLatestSAnime() }
+        val hasNext = endIndex < cachedEntries.size
+        return AnimesPage(animeList, hasNext)
     }
-
-    override fun latestUpdatesRequest(page: Int) = popularAnimeRequest(page)
-
-    override fun latestUpdatesParse(response: Response) = popularAnimeParse(response)
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val params = MhdFlixFilters.getSearchParameters(filters)
-        return when {
-            query.isNotBlank() -> GET("$baseUrl/?s=$query&page=$page")
-            params.path.isNotEmpty() -> GET("$baseUrl${params.getFullUrl()}/page/$page/${params.query()}")
-            else -> popularAnimeRequest(page)
+        val typeOnly = params.type?.isNotBlank() == true && query.isBlank() && params.genre == null && params.year == null
+
+        if (typeOnly) {
+            val type = params.type!!
+            val url = "$apiUrl/api/seo/medias".toHttpUrlOrNull()!!.newBuilder()
+                .addQueryParameter("typeFilter", type)
+                .build()
+
+            return Request.Builder()
+                .url(url)
+                .headers(headers)
+                .get()
+                .tag(Int::class.javaObjectType, page)
+                .build()
         }
+
+        val body = when {
+            query.isNotBlank() -> buildJsonObject {
+                put("query", query)
+                put("page", page)
+                params.type?.takeIf { it.isNotBlank() }?.let { put("type", it) }
+            }
+            params.genre != null -> buildJsonObject {
+                put("genre", params.genre)
+                put("page", page)
+                params.type?.takeIf { it.isNotBlank() }?.let { put("type", it) }
+            }
+            params.year != null -> buildJsonObject {
+                put("year", params.year)
+                put("page", page)
+                params.type?.takeIf { it.isNotBlank() }?.let { put("type", it) }
+            }
+            else -> buildJsonObject {
+                put("query", "")
+                put("page", page)
+            }
+        }
+        val endpoint = when {
+            query.isNotBlank() -> "$apiUrl/api/search/query"
+            params.genre != null -> "$apiUrl/api/search/genres"
+            params.year != null -> "$apiUrl/api/search/year"
+            else -> "$apiUrl/api/search/query"
+        }
+
+        return apiPost(endpoint, page, body)
     }
 
-    override fun searchAnimeParse(response: Response) = popularAnimeParse(response)
+    override fun searchAnimeParse(response: Response): AnimesPage {
+        val requestUrl = response.request.url
+        val requestedPage = response.request.page
+        val typeFilter = requestUrl.queryParameter("typeFilter")?.takeIf { it.isNotBlank() }
+
+        if (typeFilter != null) {
+            return parseTypeFilterResults(response, typeFilter)
+        }
+
+        val payload = response.parseAs<MediaListResponse>()
+        val animeList = payload.mediaEntries().mapNotNull { it.toSAnime() }
+        val currentPage = payload.currentPage ?: requestedPage
+        val hasNext = payload.totalPage?.let { currentPage < it } ?: false
+        return AnimesPage(animeList, hasNext)
+    }
+
+    private fun parseTypeFilterResults(response: Response, typeFilter: String): AnimesPage {
+        val requestedPage = response.request.page
+        val now = System.currentTimeMillis()
+        val payload = response.parseAs<SeoMediaListResponse>()
+        val freshEntries = payload.data
+            .filter { it.idMedia != null }
+            .sortedByDescending { it.createadAt.orEmpty() }
+
+        val catalogEntries = when {
+            freshEntries.isNotEmpty() -> {
+                seoCatalogCache = PopularCatalogCache(now, freshEntries)
+                freshEntries
+            }
+            else ->
+                seoCatalogCache
+                    ?.takeIf { now - it.timestamp <= popularCacheTtlMs }
+                    ?.entries
+                    ?: emptyList()
+        }
+
+        if (catalogEntries.isEmpty()) return AnimesPage(emptyList(), false)
+
+        val filteredEntries = catalogEntries.filter { it.type.equals(typeFilter, true) }
+        if (filteredEntries.isEmpty()) return AnimesPage(emptyList(), false)
+
+        val startIndex = (requestedPage - 1) * popularPageSize
+        if (startIndex >= filteredEntries.size) return AnimesPage(emptyList(), false)
+
+        val endIndex = minOf(startIndex + popularPageSize, filteredEntries.size)
+        val pageSlice = filteredEntries.subList(startIndex, endIndex)
+        val animeList = pageSlice.mapNotNull { entry ->
+            val mediaId = entry.idMedia ?: return@mapNotNull null
+            fetchMediaSummary(mediaId)?.toSAnime()
+        }
+        val hasNext = endIndex < filteredEntries.size
+        return AnimesPage(animeList, hasNext)
+    }
+
+    override fun animeDetailsRequest(anime: SAnime): Request {
+        val (_, id) = decodeAnimeUrl(anime.url)
+        return apiGet("$apiUrl/api/media/$id")
+    }
 
     override fun animeDetailsParse(response: Response): SAnime {
-        val document = response.asJsoup()
-        val animeDetails = SAnime.create().apply {
-            title = document.selectFirst(".alg-cr .entry-header .entry-title")?.text() ?: ""
-            description = document.select(".alg-cr .description").text()
-            thumbnail_url = document.selectFirst(".alg-cr .post-thumbnail img")?.getImageUrl()
-            genre = document.select(".genres a").joinToString { it.text() }
-            status = SAnime.UNKNOWN
-        }
+        val payload = response.parseAs<MediaDetailResponse>()
+        val data = payload.data ?: throw Exception("No se pudo obtener la información del anime")
+        return data.toDetailedSAnime()
+    }
 
-        document.select(".cast-lst li").map {
-            if (it.select("span").text().contains("Director", true)) {
-                animeDetails.author = it.selectFirst("p > a")?.text()
-            }
-            if (it.select("span").text().contains("Actores", true)) {
-                animeDetails.artist = it.selectFirst("p > a")?.text()
-            }
-        }
-        return animeDetails
+    override fun episodeListRequest(anime: SAnime): Request {
+        val (_, id) = decodeAnimeUrl(anime.url)
+        return apiGet("$apiUrl/api/media/$id")
     }
 
     override fun episodeListParse(response: Response): List<SEpisode> {
-        val document = Jsoup.parse(response.body.string())
-        val referer = response.request.url.toString()
-        val allEpisodes = mutableListOf<SEpisode>()
-
-        val episodeElements = document.select("section.episodes ul#episode_by_temp li")
-        if (episodeElements.isEmpty()) {
-            return listOf(
-                SEpisode.create().apply {
-                    setUrlWithoutDomain(response.request.url.toString())
-                    name = "Película"
-                    episode_number = 1F
-                },
-            )
+        val payload = response.parseAs<MediaDetailResponse>()
+        val details = payload.data ?: return emptyList()
+        return if (details.type.equals("movie", true)) {
+            listOf(details.toMovieEpisode())
+        } else {
+            fetchEpisodes(details)
         }
-
-        val seasonElements = document.select("ul.aa-cnt.sub-menu li.sel-temp a")
-            .sortedBy { it.attr("data-season") }
-
-        for (season in seasonElements) {
-            val post = season.attr("data-post")
-            val seasonNumber = season.attr("data-season")
-
-            val formBody = FormBody.Builder()
-                .add("action", "action_select_season")
-                .add("season", seasonNumber)
-                .add("post", post)
-                .build()
-
-            val request = Request.Builder()
-                .url("https://ww2.mhdflix.com/wp-admin/admin-ajax.php")
-                .post(formBody)
-                .header("Origin", baseUrl)
-                .header("Referer", referer)
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .build()
-
-            val detailResponse = client.newCall(request).execute()
-
-            if (detailResponse.isSuccessful) {
-                val detailDocument = Jsoup.parse(detailResponse.body.string())
-                val episodeElements = detailDocument.select("article.post.episodes")
-
-                episodeElements.forEach { element ->
-                    println(element) // Imprime el HTML del elemento
-
-                    val episode = SEpisode.create().apply {
-                        val url = element.selectFirst("a.lnk-blk")?.attr("href") ?: ""
-                        val headerElement = element.selectFirst("header.entry-header")
-                        val title = headerElement?.selectFirst("h2.entry-title")?.text() ?: "Episodio Desconocido"
-                        val episodeNumber = headerElement?.selectFirst("span.num-epi")?.text()?.substringAfter("x")?.toFloatOrNull() ?: 0F
-                        Log.d("MhdFlix", "Número de episodio: $episodeNumber")
-                        setUrlWithoutDomain(url)
-                        name = "- $title"
-                        episode_number = episodeNumber
-                    }
-                    allEpisodes.add(episode)
-                }
-            } else {
-                Log.e("MhdFlix", "Error en la solicitud de detalles de la temporada: ${detailResponse.code}")
-            }
-        }
-
-        return allEpisodes.sortedByDescending { it.name }
     }
 
-    private fun fetchUrls(text: String?): List<String> {
-        if (text.isNullOrEmpty()) return listOf()
-        val linkRegex = "(http|ftp|https):\\/\\/([\\w_-]+(?:(?:\\.[\\w_-]+)+))([\\w.,@?^=%&:\\/~+#-]*[\\w@?^=%&\\/~+#-])".toRegex()
-        return linkRegex.findAll(text).map { it.value.trim().removeSurrounding("\"") }.toList()
+    override fun videoListRequest(episode: SEpisode): Request {
+        val (kind, id) = decodeEpisodeUrl(episode.url)
+        val endpoint = when (kind) {
+            "movie" -> "$apiUrl/api/links/movie/$id"
+            else -> "$apiUrl/api/links/episode/$id"
+        }
+        return apiGet(endpoint)
     }
 
     override fun videoListParse(response: Response): List<Video> {
-        val document = response.asJsoup()
-        val videoList = mutableListOf<Video>()
+        val payload = response.parseAs<LinksResponse>()
+        val uniqueLinks = payload.data.distinctBy { it.link }
+        if (uniqueLinks.isEmpty()) return emptyList()
 
-        val title = document.title()
-        val seasonEpisodeRegex = Regex("""(\d+)x(\d+)""")
-        val seasonEpisodeMatch = seasonEpisodeRegex.find(title)
+        val videos = uniqueLinks.parallelFlatMapBlocking { link ->
+            link.toVideos()
+        }.distinctBy { it.url }
 
-        val season = seasonEpisodeMatch?.groups?.get(1)?.value?.toIntOrNull()
-        val episode = seasonEpisodeMatch?.groups?.get(2)?.value?.toIntOrNull()
-
-        document.select(".video-player iframe").forEach { iframe ->
-            try {
-                val src = iframe.attr("src").ifEmpty { iframe.attr("data-src") }
-                val idRegex = Regex("""\/e\/(\d+)""")
-                val matchResult = idRegex.find(src)
-                val videoId = matchResult?.groupValues?.get(1) ?: return@forEach
-
-                val videoUrl = if (season != null && episode != null) {
-                    "$baseUrl/wp-json/enlace/v1/e?id=$videoId&season=$season&episode=$episode"
-                } else {
-                    "$baseUrl/wp-json/enlace/v1/e?id=$videoId"
-                }
-
-                val videoResponse = client.newCall(GET(videoUrl)).execute()
-                val jsonResponse = videoResponse.body.string()
-                val jsonArray = JSONArray(jsonResponse)
-                for (i in 0 until jsonArray.length()) {
-                    val videoObj = jsonArray.getJSONObject(i)
-                    val videoLink = videoObj.getString("url")
-                    val type = when (videoObj.getString("tipo")) {
-                        "Sub lat" -> "SUB"
-                        "Castellano" -> "CAST"
-                        "Latino" -> "LAT"
-                        else -> videoObj.getString("tipo")
-                    }
-
-                    serverVideoResolver(videoLink, type).forEach { videoList.add(it) }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-
-        return videoList.sort()
+        return videos.sort()
     }
 
-    private val vidHideExtractor by lazy { VidHideExtractor(client, headers) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
-    private val uqloadExtractor by lazy { UqloadExtractor(client) }
-    private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
-    private val doodExtractor by lazy { DoodExtractor(client) }
-    private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
-    private val mixDropExtractor by lazy { MixDropExtractor(client) }
-    private val universalExtractor by lazy { UniversalExtractor(client) }
+    private fun fetchMediaSummary(mediaId: Int): MediaDto? {
+        mediaDetailCache[mediaId]?.let { return it }
 
-    private fun serverVideoResolver(url: String, prefix: String = ""): List<Video> {
-        val embedUrl = url.lowercase()
-        Log.d("MhdFlix", "URL: $url")
-        return when {
-            embedUrl.contains("vidhide") -> {
-                vidHideExtractor.videosFromUrl(url, videoNameGen = { "[$prefix] - VidHide: $it " })
+        return runCatching {
+            client.newCall(apiGet("$apiUrl/api/media/$mediaId")).execute().use { detailResponse ->
+                val payload = json.decodeFromString<MediaDetailResponse>(detailResponse.body.string())
+                payload.data?.also { mediaDetailCache[mediaId] = it }
             }
-            embedUrl.contains("voe") -> {
-                voeExtractor.videosFromUrl(url, prefix = "[$prefix] - ")
-            }
-            embedUrl.contains("uqload") -> {
-                uqloadExtractor.videosFromUrl(url, prefix = "[$prefix] - ")
-            }
-            embedUrl.contains("streamtape") -> {
-                streamTapeExtractor.videosFromUrl(url, quality = "[$prefix] - StreamTape")
-            }
-            embedUrl.contains("dood") -> {
-                doodExtractor.videosFromUrl(url, quality = "[$prefix] - Doodstream")
-            }
-            embedUrl.contains("streamwish") -> {
-                streamWishExtractor.videosFromUrl(url, prefix = "[$prefix] - StreamWish")
-            }
-            embedUrl.contains("mixdrop") -> {
-                mixDropExtractor.videosFromUrl(url, lang = "[$prefix] - ")
-            }
-            embedUrl.contains("filelions") -> {
-                universalExtractor.videosFromUrl(url, headers, prefix = "[$prefix] - ")
-            }
-            else -> emptyList()
-        }
+        }.getOrNull()
     }
 
     override fun List<Video>.sort(): List<Video> {
         val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
         val server = preferences.getString(PREF_SERVER_KEY, PREF_SERVER_DEFAULT)!!
         val lang = preferences.getString(PREF_LANGUAGE_KEY, PREF_LANGUAGE_DEFAULT)!!
-        return this.sortedWith(
+        return sortedWith(
             compareBy(
-                { it.quality.contains(lang) },
+                { it.quality.contains(lang, true) },
                 { it.quality.contains(server, true) },
                 { it.quality.contains(quality) },
-                { Regex("""(\d+)p""").find(it.quality)?.groupValues?.get(1)?.toIntOrNull() ?: 0 },
+                { qualityRegex.find(it.quality)?.groupValues?.get(1)?.toIntOrNull() ?: 0 },
             ),
         ).reversed()
     }
@@ -356,5 +401,275 @@ open class MhdFlix : AnimeHttpSource(), ConfigurableAnimeSource {
                 preferences.edit().putString(key, entry).commit()
             }
         }.also(screen::addPreference)
+
+        FilemoonExtractor.addSubtitlePref(screen)
+    }
+
+    private val vidHideExtractor by lazy { VidHideExtractor(client, headers) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
+    private val uqloadExtractor by lazy { UqloadExtractor(client) }
+    private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
+    private val doodExtractor by lazy { DoodExtractor(client) }
+    private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
+    private val mixDropExtractor by lazy { MixDropExtractor(client) }
+    private val universalExtractor by lazy { UniversalExtractor(client) }
+    private val filemoonExtractor by lazy { FilemoonExtractor(client) }
+    private val streamVidExtractor by lazy { StreamVidExtractor(client) }
+    private val luluExtractor by lazy { LuluExtractor(client, headers) }
+
+    private fun LinkDto.toVideos(): List<Video> {
+        val url = link ?: return emptyList()
+        val languageTag = language?.name.toLanguageTag()
+        val qualityLabel = quality?.name?.takeIf { it.isNotBlank() }
+        val baseLabel = listOfNotNull(languageTag, qualityLabel)
+        val serverLabel = server?.name.orEmpty()
+        val lowerServer = serverLabel.lowercase()
+
+        val nameBuilder: (String, String?) -> String = { host, dynamicQuality ->
+            val parts = mutableListOf<String>()
+            parts.addAll(baseLabel)
+            parts += host
+            dynamicQuality?.takeIf { it.isNotBlank() }?.let { parts += it }
+            parts.joinToString(" - ").ifBlank { host }
+        }
+
+        val prefixLabel = baseLabel.joinToString(" - ").let { if (it.isNotBlank()) "$it - " else "" }
+
+        return when {
+            lowerServer.contains("streamwish") -> runExtractor { streamWishExtractor.videosFromUrl(url) { q -> nameBuilder("StreamWish", q) } }
+            lowerServer.contains("vidhide") -> runExtractor { vidHideExtractor.videosFromUrl(url) { q -> nameBuilder("VidHide", q) } }
+            lowerServer.contains("voe") -> runExtractor { voeExtractor.videosFromUrl(url, prefix = prefixLabel) }
+            lowerServer.contains("uqload") -> runExtractor { uqloadExtractor.videosFromUrl(url, prefix = nameBuilder("Uqload", null)) }
+            lowerServer.contains("streamtape") -> runExtractor { streamTapeExtractor.videosFromUrl(url, quality = nameBuilder("StreamTape", null)) }
+            lowerServer.contains("dood") -> runExtractor { doodExtractor.videosFromUrl(url, quality = nameBuilder("Doodstream", null)) }
+            lowerServer.contains("mixdrop") -> runExtractor { mixDropExtractor.videosFromUrl(url, prefix = prefixLabel) }
+            lowerServer.contains("filemoon") -> runExtractor { filemoonExtractor.videosFromUrl(url, nameBuilder("Filemoon", null), headers) }
+            lowerServer.contains("streamvid") -> runExtractor { streamVidExtractor.videosFromUrl(url, prefix = prefixLabel) }
+            lowerServer.contains("lulu") || lowerServer.contains("luluvdo") -> runExtractor { luluExtractor.videosFromUrl(url, prefixLabel) }
+            lowerServer.contains("filelions") -> runExtractor { universalExtractor.videosFromUrl(url, headers, prefix = nameBuilder("Filelions", null)) }
+            lowerServer.contains("hexupload") -> runExtractor { universalExtractor.videosFromUrl(url, headers, prefix = nameBuilder("Hexupload", null)) }
+            lowerServer.contains("netu") -> runExtractor { universalExtractor.videosFromUrl(url, headers, prefix = nameBuilder("Netu", null)) }
+            else -> runExtractor { universalExtractor.videosFromUrl(url, headers, prefix = nameBuilder(serverLabel.ifBlank { "Mirror" }, null)) }
+        }
+    }
+
+    private fun MediaDto.toSAnime(): SAnime? {
+        val mediaId = idMedia ?: return null
+        val mediaType = type?.ifBlank { null } ?: "tv"
+        return SAnime.create().apply {
+            title = this@toSAnime.resolveTitle()
+            thumbnail_url = posterPath.toImageUrl()
+            setUrlWithoutDomain("$mediaType/$mediaId")
+        }
+    }
+
+    private fun MediaDto.toDetailedSAnime(): SAnime {
+        val mediaType = type?.ifBlank { null } ?: "tv"
+        val genreTags = mutableSetOf<String>().apply {
+            genders?.forEach { label ->
+                if (label.isNotBlank()) add(label)
+            }
+            genre?.forEach { label ->
+                if (label.isNotBlank()) add(label)
+            }
+        }
+        val normalizedStatus = status?.lowercase(Locale.ROOT)
+        return SAnime.create().apply {
+            title = this@toDetailedSAnime.resolveTitle()
+            thumbnail_url = posterPath.toImageUrl()
+            genre = genreTags.joinToString()
+            description = content.orEmpty()
+            status = when (normalizedStatus) {
+                "ended", "finalizado" -> SAnime.COMPLETED
+                "ongoing", "en emisión" -> SAnime.ONGOING
+                else -> SAnime.UNKNOWN
+            }
+            setUrlWithoutDomain("$mediaType/${idMedia ?: 0}")
+        }
+    }
+
+    private fun MediaDto.toMovieEpisode(): SEpisode {
+        val id = idMedia ?: throw IllegalStateException("ID de película inválido")
+        return SEpisode.create().apply {
+            val movieTitle = this@toMovieEpisode.resolveTitle()
+            val normalizedTitle = movieTitle.lowercase(Locale.ROOT)
+            val defaultMoviePlaceholders = setOf("película sin título", "sin título")
+            name = if (normalizedTitle in defaultMoviePlaceholders) {
+                "Película"
+            } else {
+                "Película – $movieTitle"
+            }
+            episode_number = 1f
+            setUrlWithoutDomain("movie/$id")
+            date_upload = releaseDate.toEpoch()
+            scanlator = id.toString()
+        }
+    }
+
+    private fun fetchEpisodes(details: MediaDto): List<SEpisode> {
+        val serieId = details.idMedia ?: return emptyList()
+        val seasonsResponse = client.newCall(apiGet("$apiUrl/api/serie/$serieId/seasons")).execute()
+        val seasons = seasonsResponse.parseAs<SeasonListResponse>().data
+        val episodes = seasons.flatMap { season ->
+            val seasonId = season.idSeasson ?: return@flatMap emptyList<SEpisode>()
+            val seasonNumber = season.num ?: 0
+            fetchSeasonEpisodes(seasonId, seasonNumber, serieId)
+        }
+
+        val sortedEpisodes = episodes.sortedByDescending { it.episode_number }
+        sortedEpisodes.forEachIndexed { index, episode ->
+            episode.episode_number = (sortedEpisodes.size - index).toFloat()
+        }
+        return sortedEpisodes
+    }
+
+    private fun fetchSeasonEpisodes(seasonId: Int, seasonNumber: Int, serieId: Int): List<SEpisode> {
+        val collected = mutableListOf<SEpisode>()
+        val seenIds = mutableSetOf<Int>()
+        var page = 1
+        do {
+            val response = client.newCall(apiGet("$apiUrl/api/serie/episodes/$seasonId/$page", page)).execute()
+            val payload = response.parseAs<EpisodeListResponse>()
+            payload.data.forEach { episodeDto ->
+                val episodeId = episodeDto.idEpisodios ?: return@forEach
+                if (seenIds.add(episodeId)) {
+                    collected += episodeDto.toEpisode(seasonNumber, serieId)
+                }
+            }
+            val totalPages = payload.totalPage ?: page
+            if (page >= totalPages) break
+            page++
+        } while (true)
+        return collected
+    }
+
+    private fun EpisodeDto.toEpisode(seasonNumber: Int, serieId: Int): SEpisode {
+        val number = numEpisode ?: 0.0
+        val displayNumber = when {
+            number == 0.0 -> "0"
+            number % 1.0 == 0.0 -> number.toInt().toString()
+            else -> number.toString()
+        }
+        return SEpisode.create().apply {
+            val formattedNumber = if (seasonNumber > 0) "T${seasonNumber}x$displayNumber" else displayNumber
+            name = listOfNotNull(formattedNumber.takeIf { it.isNotBlank() }, this@toEpisode.title).joinToString(" - ")
+            val seasonOffset = ((seasonNumber.takeIf { it > 0 } ?: 1) - 1) * 100f
+            episode_number = seasonOffset + number.toFloat()
+            date_upload = airDate.toEpoch()
+            setUrlWithoutDomain("episode/${idEpisodios ?: 0}")
+            scanlator = serieId.toString()
+        }
+    }
+
+    private fun EpisodeDto.toLatestSAnime(): SAnime = SAnime.create().apply {
+        val serieIdentifier = serieId ?: idSerie ?: idMedia ?: 0
+        title = this@toLatestSAnime.title.orEmpty()
+        setUrlWithoutDomain("tv/$serieIdentifier")
+        thumbnail_url = posterPath.toImageUrl()
+    }
+
+    private fun String?.toImageUrl(): String? = this?.takeIf { it.isNotBlank() }?.let { "https://image.tmdb.org/t/p/w500$it" }
+
+    private fun String?.toLanguageTag(): String? {
+        val value = this?.lowercase(Locale.ROOT) ?: return null
+        return when {
+            "lat" in value -> "[LAT]"
+            "cast" in value || "esp" in value -> "[CAST]"
+            "sub" in value -> "[SUB]"
+            "vose" in value -> "[VOSE]"
+            else -> "[${this.trim()}]"
+        }
+    }
+
+    private fun String?.toEpoch(): Long {
+        return try {
+            if (this.isNullOrBlank()) 0L else dateFormatter.parse(this)?.time ?: 0L
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    private fun MediaDto.resolveTitle(forEpisode: Boolean = false): String {
+        val sanitizedTitle = title
+            ?.replace(whitespaceRegex, " ")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+        if (sanitizedTitle != null) return sanitizedTitle
+
+        val slugTitle = slug
+            ?.split('-')
+            ?.mapNotNull { part ->
+                part.takeIf { it.isNotBlank() }?.replaceFirstChar { ch ->
+                    if (ch.isLowerCase()) ch.titlecase(Locale.ROOT) else ch.toString()
+                }
+            }
+            ?.joinToString(" ")
+            ?.replace(whitespaceRegex, " ")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+
+        if (slugTitle != null) return slugTitle
+
+        return when {
+            type.equals("movie", ignoreCase = true) -> if (forEpisode) "Película" else "Película sin título"
+            else -> if (forEpisode) "Episodio" else "Sin título"
+        }
+    }
+
+    private fun decodeAnimeUrl(url: String): Pair<String, Int> {
+        val parts = url.trim('/').split('/')
+        val type = parts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: "tv"
+        val id = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        return type to id
+    }
+
+    private fun decodeEpisodeUrl(url: String): Pair<String, Int> {
+        val parts = url.trim('/').split('/')
+        val type = parts.getOrNull(0)?.takeIf { it.isNotBlank() } ?: "episode"
+        val id = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        return type to id
+    }
+
+    private fun apiGet(url: String, page: Int? = null): Request = Request.Builder()
+        .url(url)
+        .headers(headers)
+        .get()
+        .apply { page?.let { tag(Int::class.javaObjectType, it) } }
+        .build()
+
+    private fun apiPost(url: String, page: Int, obj: JsonObject): Request {
+        val body = obj.toString().toRequestBody(jsonMediaType)
+        return Request.Builder()
+            .url(url)
+            .headers(headers)
+            .post(body)
+            .tag(Int::class.javaObjectType, page)
+            .build()
+    }
+
+    private val Request.page: Int
+        get() = tag(Int::class.javaObjectType) ?: url.queryParameter("page")?.toIntOrNull() ?: 1
+
+    private data class PopularCatalogCache(
+        val timestamp: Long,
+        val entries: List<SeoMediaDto>,
+    )
+
+    private data class LatestEpisodesCache(
+        val timestamp: Long,
+        val entries: List<EpisodeDto>,
+    )
+
+    private inline fun <reified T> Response.parseAs(): T = use { json.decodeFromString(it.body.string()) }
+
+    private val qualityRegex = Regex("""(\d+)p""")
+    private val whitespaceRegex = Regex("\\s+")
+
+    private inline fun runExtractor(block: () -> List<Video>): List<Video> = runCatching(block).getOrElse { emptyList() }
+
+    private fun MediaListResponse.mediaEntries(): List<MediaDto> = when (val element = data) {
+        is JsonArray -> element.mapNotNull { runCatching { json.decodeFromJsonElement<MediaDto>(it) }.getOrNull() }
+        is JsonObject -> listOfNotNull(runCatching { json.decodeFromJsonElement<MediaDto>(element) }.getOrNull())
+        else -> emptyList()
     }
 }

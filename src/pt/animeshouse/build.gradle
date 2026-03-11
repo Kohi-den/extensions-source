@@ -1,9 +1,0 @@
-ext {
-    extName = 'AnimesHouse'
-    extClass = '.AnimesHouse'
-    themePkg = 'dooplay'
-    baseUrl = 'https://animeshouse.app/'
-    overrideVersionCode = 1
-}
-
-apply from: "$rootDir/common.gradle"

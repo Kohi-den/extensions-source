@@ -4,7 +4,9 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.util.asJsoup
+import okhttp3.Headers
 import okhttp3.OkHttpClient
+import okhttp3.internal.commonEmptyHeaders
 
 class OkruExtractor(private val client: OkHttpClient) {
     private val playlistUtils by lazy { PlaylistUtils(client) }
@@ -23,8 +25,8 @@ class OkruExtractor(private val client: OkHttpClient) {
         return qualities.find { it.first == quality }?.second ?: quality
     }
 
-    fun videosFromUrl(url: String, prefix: String = "", fixQualities: Boolean = true): List<Video> {
-        val document = client.newCall(GET(url)).execute().asJsoup()
+    fun videosFromUrl(url: String, prefix: String = "", fixQualities: Boolean = true, headers: Headers = commonEmptyHeaders): List<Video> {
+        val document = client.newCall(GET(url, headers)).execute().asJsoup()
         val videoString = document.selectFirst("div[data-options]")
             ?.attr("data-options")
             ?: return emptyList<Video>()

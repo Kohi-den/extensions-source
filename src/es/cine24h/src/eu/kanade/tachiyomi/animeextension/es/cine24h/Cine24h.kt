@@ -154,7 +154,7 @@ open class Cine24h : ConfigurableAnimeSource, AnimeHttpSource() {
     /*--------------------------------Video extractors------------------------------------*/
     private val filemoonExtractor by lazy { FilemoonExtractor(client) }
     private val doodExtractor by lazy { DoodExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val vidGuardExtractor by lazy { VidGuardExtractor(client) }
     private val universalExtractor by lazy { UniversalExtractor(client) }
 

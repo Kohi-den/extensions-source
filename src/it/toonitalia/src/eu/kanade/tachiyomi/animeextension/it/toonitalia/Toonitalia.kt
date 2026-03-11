@@ -188,7 +188,7 @@ class Toonitalia : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         }
     }
 
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val streamZExtractor by lazy { StreamZExtractor(client) }
     private val streamTapeExtractor by lazy { StreamTapeExtractor(client) }
     private val maxStreamExtractor by lazy { MaxStreamExtractor(client, headers) }

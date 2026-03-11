@@ -2,123 +2,112 @@ package eu.kanade.tachiyomi.animeextension.es.mhdflix
 
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import java.util.Calendar
 
 object MhdFlixFilters {
-    open class QueryPartFilter(displayName: String, private val vals: Array<Pair<String, String>>) : AnimeFilter.Select<String>(
-        displayName,
-        vals.map { it.first }.toTypedArray(),
-    ) {
-        fun toQueryPart() = vals[state].second.takeIf { it.isNotEmpty() } ?: run { "" }
-    }
 
-    private inline fun <reified R> AnimeFilterList.getFirst(): R {
-        return this.filterIsInstance<R>().first()
-    }
-
-    private fun String.changePrefix() = this.takeIf { it.startsWith("&") }?.let { this.replaceFirst("&", "?") } ?: run { this }
-
-    data class FilterSearchParams(val path: String = "", val queryParams: String = "") {
-        fun getFullUrl() = path.changePrefix()
-        fun query() = queryParams
-    }
-
-    internal fun getSearchParameters(filters: AnimeFilterList): FilterSearchParams {
-        if (filters.isEmpty()) return FilterSearchParams()
-
-        // Obtiene el path de la URL para el género y el año
-        val genrePath = filters.getFirst<GenresFilter>().toQueryPart()
-        val generalPath = filters.getFirst<GeneralFilter>().toQueryPart()
-
-        // Si hay año, añadimos "release" a la ruta
-        val path = when {
-            genrePath.isNotEmpty() -> "/category/$genrePath"
-            generalPath.isNotEmpty() -> "/category/$generalPath"
-            else -> "/"
-        }
-
-        // Parámetros de consulta (type=movies/series, order)
-        val queryParams = filters.getFirst<TypesFilter>().toQueryPart()
-
-        return FilterSearchParams(path, queryParams)
-    }
-
-    val FILTER_LIST get() = AnimeFilterList(
-        AnimeFilter.Header("La búsqueda por texto ignora el filtro"),
-        GenresFilter(),
-        GeneralFilter(),
-        TypesFilter(),
+    data class SearchParams(
+        val type: String? = null,
+        val genre: String? = null,
+        val year: String? = null,
     )
 
-    class GenresFilter : QueryPartFilter("Género", AnimeFlvFiltersData.GENRES)
-    class GeneralFilter : QueryPartFilter("Plataformas", AnimeFlvFiltersData.GENERAL)
-    class TypesFilter : QueryPartFilter("Tipo", AnimeFlvFiltersData.TYPES)
+    private open class OptionFilter(
+        name: String,
+        private val options: Array<Pair<String, String>>,
+    ) : AnimeFilter.Select<String>(name, options.map { it.first }.toTypedArray()) {
+        fun value(): String? = options.getOrNull(state)?.second?.takeIf { it.isNotEmpty() }
+    }
 
-    private object AnimeFlvFiltersData {
-        val TYPES = arrayOf(
-            Pair("Seleccione un tipo", ""),
-            Pair("Películas", "/?type=movies"),
-            Pair("Series", "/?type=series"),
-        )
-        val GENERAL = arrayOf(
-            Pair("Seleccione un tipo", ""),
-            Pair("Netflix", "netflix"),
-            Pair("Disney Plus", "disney-plus"),
-            Pair("Amazon Prime Video", "amazon-prime-video"),
-            Pair("HBO Max", "hbo-max"),
-            Pair("Apple TV Plus", "apple-tv-plus"),
-            Pair("Movistar Plus", "movistar-plus"),
-            Pair("AMC Amazon Channel", "amc-amazon-channel"),
-            Pair("MGM Amazon Channel", "mgm-amazon-channel"),
-            Pair("Netflix Basic with Ads", "netflix-basic-with-ads"),
-            Pair("Crunchyroll", "crunchyroll"),
-            Pair("Max", "max"),
-            Pair("MGM Plus Amazon Channel", "mgm-plus-amazon-channel"),
+    private class TypeFilter : OptionFilter("Tipo", TYPE_OPTIONS)
 
+    private class GenreFilter : OptionFilter("Género", GENRE_OPTIONS)
+
+    private class YearFilter : OptionFilter("Año", YEAR_OPTIONS)
+
+    val FILTER_LIST: AnimeFilterList
+        get() = AnimeFilterList(
+            AnimeFilter.Header("La búsqueda por texto ignora los filtros"),
+            TypeFilter(),
+            GenreFilter(),
+            YearFilter(),
         )
-        val GENRES = arrayOf(
-            Pair("Seleccione un género", ""),
-            Pair("Acción", "accion"),
-            Pair("Comedia", "comedia"),
-            Pair("Crimen", "crimen"),
-            Pair("Suspense", "suspense"),
-            Pair("Animación", "animacion"),
-            Pair("Familia", "familia"),
-            Pair("Aventura", "aventura"),
-            Pair("Fantasía", "fantasia"),
-            Pair("Ciencia Ficción", "ciencia-ficcion"),
-            Pair("Drama", "drama"),
-            Pair("Disney", "disney"),
-            Pair("Romance", "romance"),
-            Pair("Película de TV", "pelicula-de-tv"),
-            Pair("Misterio", "misterio"),
-            Pair("Action Adventure", "action-adventure"),
-            Pair("Terror", "terror"),
-            Pair("Kids", "kids"),
-            Pair("Sci-Fi Fantasy", "sci-fi-fantasy"),
-            Pair("Documental", "documental"),
-            Pair("Marvel", "marvel"),
-            Pair("DC", "dc"),
-            Pair("Música", "musica"),
-            Pair("Flixole", "flixole"),
-            Pair("Western", "western"),
-            Pair("Bélica", "belica"),
-            Pair("Historia", "historia"),
-            Pair("Filmin", "filmin"),
-            Pair("Anime", "anime"),
-            Pair("Planet Horror Amazon Channel", "planet-horror-amazon-channel"),
-            Pair("Dorama", "dorama"),
-            Pair("Tivify", "tivify"),
-            Pair("Acontra Plus", "acontra-plus"),
-            Pair("FuboTV", "fubotv"),
-            Pair("Reality", "reality"),
-            Pair("War Politics", "war-politics"),
-            Pair("Mubi", "mubi"),
-            Pair("SkyShowtime", "skyshowtime"),
-            Pair("Soap", "soap"),
-            Pair("Filmbox", "filmbox"),
-            Pair("Kocowa", "kocowa"),
-            Pair("YouTube Premium", "youtube-premium"),
-            Pair("Hentai", "hentai"),
-        )
+
+    fun getSearchParameters(filters: AnimeFilterList): SearchParams {
+        if (filters.isEmpty()) return SearchParams()
+
+        var type: String? = null
+        var genre: String? = null
+        var year: String? = null
+
+        filters.forEach { filter ->
+            when (filter) {
+                is TypeFilter -> type = filter.value()
+                is GenreFilter -> genre = filter.value()
+                is YearFilter -> year = filter.value()
+                else -> {}
+            }
+        }
+
+        return SearchParams(type, genre, year)
+    }
+
+    private val TYPE_OPTIONS = arrayOf(
+        "Todos" to "",
+        "Series" to "tv",
+        "Películas" to "movie",
+    )
+
+    private val GENRE_OPTIONS = arrayOf(
+        "Todos" to "",
+        "Acción" to "Acción",
+        "Action" to "Action",
+        "Adventure" to "Adventure",
+        "Animación" to "Animación",
+        "Animation" to "Animation",
+        "Anime" to "Anime",
+        "Anime-LAT" to "Anime-LAT",
+        "Aventura" to "Aventura",
+        "Bélica" to "Bélica",
+        "Ciencia ficción" to "Ciencia ficción",
+        "Comedia" to "Comedia",
+        "Comedy" to "Comedy",
+        "Crime" to "Crime",
+        "Crimen" to "Crimen",
+        "Documental" to "Documental",
+        "dorama" to "dorama",
+        "Drama" to "Drama",
+        "Echii" to "Echii",
+        "Familia" to "Familia",
+        "Fantasía" to "Fantasía",
+        "Fantasy" to "Fantasy",
+        "Hentai" to "Hentai",
+        "Historia" to "Historia",
+        "Horror" to "Horror",
+        "Kids" to "Kids",
+        "Misterio" to "Misterio",
+        "Música" to "Música",
+        "Mystery" to "Mystery",
+        "Película de TV" to "Película de TV",
+        "Politics" to "Politics",
+        "Reality" to "Reality",
+        "Romance" to "Romance",
+        "Sci-Fi" to "Sci-Fi",
+        "Soap" to "Soap",
+        "Suspense" to "Suspense",
+        "Terror" to "Terror",
+        "Thriller" to "Thriller",
+        "War" to "War",
+        "Western" to "Western",
+    )
+
+    private val YEAR_OPTIONS: Array<Pair<String, String>> = buildYearOptions()
+
+    private fun buildYearOptions(): Array<Pair<String, String>> {
+        val currentYear = Calendar.getInstance().get(Calendar.YEAR) + 1
+        val years = (currentYear downTo 1950).map { year ->
+            year.toString() to year.toString()
+        }
+        return arrayOf("Todos" to "") + years.toTypedArray()
     }
 }

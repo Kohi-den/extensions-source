@@ -43,7 +43,7 @@ class TRAnimeIzle : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     override val name = "TR Anime Izle"
 
-    override val baseUrl = "https://www.tranimeizle.top"
+    override val baseUrl = "https://www.tranimeizle.io"
 
     override val lang = "tr"
 
@@ -225,7 +225,7 @@ class TRAnimeIzle : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     private val sendvidExtractor by lazy { SendvidExtractor(client, headers) }
     private val sibnetExtractor by lazy { SibnetExtractor(client) }
     private val streamlareExtractor by lazy { StreamlareExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val vudeoExtractor by lazy { VudeoExtractor(client) }
     private val yourUploadExtractor by lazy { YourUploadExtractor(client) }
 

@@ -82,7 +82,7 @@ class Kinoking : DooPlay(
     }
 
     private val doodExtractor by lazy { DoodExtractor(client) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
 
     private fun getPlayerVideos(link: String, element: Element, hosterSelection: Set<String>): List<Video> {
         return when {

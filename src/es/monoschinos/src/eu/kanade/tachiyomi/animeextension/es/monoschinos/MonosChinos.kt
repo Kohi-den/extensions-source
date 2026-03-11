@@ -37,7 +37,7 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override val name = "MonosChinos"
 
-    override val baseUrl = "https://monoschinos2.net"
+    override val baseUrl = "https://wwv.monoschinos2.net"
 
     override val id = 6957694006954649296
 
@@ -183,7 +183,7 @@ class MonosChinos : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun getFilterList(): AnimeFilterList = MonosChinosFilters.FILTER_LIST
 
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
     private val streamwishExtractor by lazy { StreamWishExtractor(client, headers) }
     private val filemoonExtractor by lazy { FilemoonExtractor(client) }
     private val mixdropExtractor by lazy { MixDropExtractor(client) }

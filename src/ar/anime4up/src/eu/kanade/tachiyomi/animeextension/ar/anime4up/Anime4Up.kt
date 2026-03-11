@@ -197,7 +197,7 @@ class Anime4Up : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     private val streamwishExtractor by lazy { StreamWishExtractor(client, headers) }
     private val vidbomExtractor by lazy { VidBomExtractor(client) }
     private val vidyardExtractor by lazy { VidYardExtractor(client, headers) }
-    private val voeExtractor by lazy { VoeExtractor(client) }
+    private val voeExtractor by lazy { VoeExtractor(client, headers) }
 
     private fun extractVideos(url: String): List<Video> {
         return when {

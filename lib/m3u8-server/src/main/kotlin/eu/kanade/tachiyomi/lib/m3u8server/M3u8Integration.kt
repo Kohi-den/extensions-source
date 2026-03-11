@@ -34,7 +34,8 @@ class M3u8Integration(
      * @return Processed video with local URL
      */
     suspend fun processM3u8Video(originalVideo: Video): Video {
-        val processedUrl = serverManager.processM3u8Url(originalVideo.url)
+        val videoHeaders = originalVideo.headers?.toMap()?: emptyMap()
+        val processedUrl = serverManager.processM3u8Url(originalVideo.url, videoHeaders)
         return Video(
             url = processedUrl ?: originalVideo.url,
             quality = originalVideo.quality,
