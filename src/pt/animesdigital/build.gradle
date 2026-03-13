@@ -1,11 +1,12 @@
 ext {
     extName = 'Animes Digital'
     extClass = '.AnimesDigital'
-    extVersionCode = 4
+    extVersionCode = 5
 }
 
 apply from: "$rootDir/common.gradle"
 
 dependencies {
+    implementation(project(":lib:blogger-extractor"))
     implementation(project(":lib:unpacker"))
 }
