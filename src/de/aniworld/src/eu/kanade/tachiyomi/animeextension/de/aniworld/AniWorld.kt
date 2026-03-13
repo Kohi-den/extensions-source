@@ -17,14 +17,11 @@ import eu.kanade.tachiyomi.lib.doodextractor.DoodExtractor
 import eu.kanade.tachiyomi.lib.streamtapeextractor.StreamTapeExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.asJsoup
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.Request
 import okhttp3.Response
@@ -33,6 +30,7 @@ import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
+import java.net.URLEncoder
 
 class AniWorld : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
@@ -94,18 +92,16 @@ class AniWorld : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val headers = Headers.Builder()
-            .add("Referer", "https://aniworld.to/search")
+            .add("Referer", "$baseUrl/search")
             .add("origin", baseUrl)
             .add("connection", "keep-alive")
             .add("user-agent", "Mozilla/5.0 (Linux; Android 12; Pixel 5 Build/SP2A.220405.004; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/100.0.4896.127 Safari/537.36")
             .add("Upgrade-Insecure-Requests", "1")
-            .add("content-length", query.length.plus(8).toString())
             .add("cache-control", "")
             .add("accept", "*/*")
-            .add("content-type", "application/x-www-form-urlencoded; charset=UTF-8")
             .add("x-requested-with", "XMLHttpRequest")
             .build()
-        return POST("$baseUrl/ajax/search", body = FormBody.Builder().add("keyword", query).build(), headers = headers)
+        return GET("$baseUrl/ajax/seriesSearch?keyword=${URLEncoder.encode(query, "UTF-8")}", headers = headers)
     }
     override fun searchAnimeSelector() = throw UnsupportedOperationException()
 
@@ -114,26 +110,22 @@ class AniWorld : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun searchAnimeParse(response: Response): AnimesPage {
         val body = response.body.string()
         val results = json.decodeFromString<JsonArray>(body)
-        val animes = results.filter {
-            val link = it.jsonObject["link"]!!.jsonPrimitive.content
-            link.startsWith("/anime/stream/") &&
-                link.count { c -> c == '/' } == 3
-        }.map {
-            animeFromSearch(it.jsonObject)
+        val animes = results.mapNotNull {
+            val obj = it.jsonObject
+            val name = obj["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
+            val link = obj["link"]?.jsonPrimitive?.content ?: return@mapNotNull null
+
+            SAnime.create().apply {
+                title = name
+                url = "/anime/stream/$link"
+                thumbnail_url = obj["cover"]?.jsonPrimitive?.content?.replace("150x225", "220x330")?.let {
+                        cover ->
+                    "$baseUrl$cover"
+                }
+                description = obj["description"]?.jsonPrimitive?.content
+            }
         }
         return AnimesPage(animes, false)
-    }
-
-    private fun animeFromSearch(result: JsonObject): SAnime {
-        val anime = SAnime.create()
-        val title = result["title"]!!.jsonPrimitive.content
-        val link = result["link"]!!.jsonPrimitive.content
-        anime.title = title.replace("<em>", "").replace("</em>", "")
-        val thumpage = client.newCall(GET("$baseUrl$link")).execute().asJsoup()
-        anime.thumbnail_url = baseUrl +
-            thumpage.selectFirst("div.seriesCoverBox img")!!.attr("data-src")
-        anime.url = link
-        return anime
     }
 
     override fun searchAnimeFromElement(element: Element) = throw UnsupportedOperationException()
