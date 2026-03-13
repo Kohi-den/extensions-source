@@ -1,7 +1,7 @@
 ext {
     extName = 'Animefenix'
     extClass = '.Animefenix'
-    extVersionCode = 66
+    extVersionCode = 67
 }
 
 apply from: "$rootDir/common.gradle"
