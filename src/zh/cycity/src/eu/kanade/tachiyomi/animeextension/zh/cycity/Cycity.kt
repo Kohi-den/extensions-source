@@ -32,6 +32,10 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
     override val lang = "zh"
     override val supportsLatest = true
 
+    override fun headersBuilder() = super.headersBuilder()
+        .set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0")
+        .add("Referer", "$realUrl/")
+
     private val realUrl = "https://www.cycani.org"
     private val apiUrl = "$realUrl/index.php/ds_api"
     private val preferences by lazy {
@@ -91,7 +95,7 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
         val url = realUrl.toHttpUrl().newBuilder()
             .addPathSegments("show/20/by/$by")
             .addPathSegments("page/$page.html")
-        return POST(url.build().toString())
+        return POST(url.build().toString(), headers)
     }
 
     private fun vodListParse(response: Response) = response.asJsoup().let { doc ->
@@ -121,7 +125,7 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
             else -> ""
         }
         val url = "$apiUrl/weekday".toHttpUrl().newBuilder()
-        return POST(url.addQueryParameter("weekday", weekday).build().toString())
+        return POST(url.addQueryParameter("weekday", weekday).build().toString(), headers)
     }
 
     private fun weeklyScheduleParse(response: Response): AnimesPage {
@@ -168,7 +172,7 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
             if (filters[3].toString() != "全部") url.addPathSegments("year/${filters[3]}")
         }
         url.addPathSegments("page/$page.html")
-        return GET(url.build())
+        return GET(url.build(), headers)
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage {
@@ -196,7 +200,7 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override fun getAnimeUrl(anime: SAnime) = realUrl + anime.url
 
-    override fun animeDetailsRequest(anime: SAnime) = GET(getAnimeUrl(anime))
+    override fun animeDetailsRequest(anime: SAnime) = GET(getAnimeUrl(anime), headers)
 
     override fun animeDetailsParse(response: Response) = response.asJsoup().let { doc ->
         val infos = doc.select(".slide-info")
@@ -214,7 +218,7 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
-    override fun episodeListRequest(anime: SAnime) = GET(getAnimeUrl(anime))
+    override fun episodeListRequest(anime: SAnime) = GET(getAnimeUrl(anime), headers)
 
     override fun getEpisodeUrl(episode: SEpisode) = realUrl + episode.url
 
@@ -222,7 +226,7 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
         val hosts = doc.select(".anthology-tab a").map {
             it.text().substringBefore(it.selectFirst("span")?.text() ?: "").trim()
         }
-        doc.select(".anthology-list-play").mapIndexed { i, e ->
+        doc.select(".anthology-list-play").flatMapIndexed { i, e ->
             e.select("a").map {
                 SEpisode.create().apply {
                     setUrlWithoutDomain(it.absUrl("href"))
@@ -230,12 +234,12 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
                     scanlator = hosts[i]
                 }
             }
-        }.flatten().reversed()
+        }.reversed()
     }
 
     // Video List ==================================================================================
 
-    override fun videoListRequest(episode: SEpisode) = GET(getEpisodeUrl(episode))
+    override fun videoListRequest(episode: SEpisode) = GET(getEpisodeUrl(episode), headers)
 
     override fun videoListParse(response: Response) = response.asJsoup().let {
         val origin = VIDEO_URL_REGEX.find(it.select(".player-left").html())!!.groups[1]!!.value
@@ -243,7 +247,7 @@ class Cycity : AnimeHttpSource(), ConfigurableAnimeSource {
         listOf(Video(URLDecoder.decode(base64, "UTF-8"), "默认", null))
     }
 
-    override fun videoUrlRequest(video: Video) = GET(PARSE_URL + video.url)
+    override fun videoUrlRequest(video: Video) = GET(PARSE_URL + video.url, headers)
 
     override fun videoUrlParse(response: Response): String {
         val body = response.body.string()
