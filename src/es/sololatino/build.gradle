@@ -3,7 +3,7 @@ ext {
     extClass = '.SoloLatino'
     themePkg = 'dooplay'
     baseUrl = 'https://sololatino.net'
-    overrideVersionCode = 14
+    overrideVersionCode = 15
 }
 
 apply from: "$rootDir/common.gradle"
