@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.de.aniworldsplit
 
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
+import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -12,6 +13,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.Request
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -54,6 +56,19 @@ class AniWorldSplit : AniWorldTheme("AniWorld (Split Seasons)") {
     override fun latestUpdatesFromElement(element: Element): SAnime = popularOrLatestAnime(element)
 
     // ===== SEARCH =====
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+        val seasonRegex = Regex("(?i)(?:\\s*-\\s*)?(?:staffel|season)\\s*(\\d+)$")
+        val match = seasonRegex.find(query)
+
+        val cleanQuery = if (match != null) {
+            query.replace(match.value, "").trim()
+        } else {
+            query
+        }
+
+        return super.searchAnimeRequest(page, cleanQuery, filters)
+    }
+
     override fun searchAnimeParse(response: Response): AnimesPage {
         val body = response.body.string()
         val results = json.decodeFromString<JsonArray>(body)
