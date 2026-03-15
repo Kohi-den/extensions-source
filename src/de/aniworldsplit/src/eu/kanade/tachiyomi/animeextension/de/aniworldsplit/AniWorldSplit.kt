@@ -66,19 +66,30 @@ class AniWorldSplit : AniWorldTheme("AniWorld (Split Seasons)") {
             query
         }
 
-        return super.searchAnimeRequest(page, cleanQuery, filters)
+        val request = super.searchAnimeRequest(page, cleanQuery, filters)
+        val seasonNumber = match?.groupValues?.get(1)
+
+        return if (seasonNumber != null) {
+            val urlWithSeason = request.url.newBuilder()
+                .addQueryParameter("season", seasonNumber)
+                .build()
+            request.newBuilder().url(urlWithSeason).build()
+        } else {
+            request
+        }
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage {
+        val seasonNumber = response.request.url.queryParameter("season")
         val body = response.body.string()
         val results = json.decodeFromString<JsonArray>(body)
         val animes = results
-            .mapNotNull { animeFromSearch(it.jsonObject) }
+            .mapNotNull { animeFromSearch(it.jsonObject, seasonNumber) }
             .flatten()
         return AnimesPage(animes, false)
     }
 
-    fun animeFromSearch(obj: JsonObject): List<SAnime>? {
+    fun animeFromSearch(obj: JsonObject, requestedSeason: String?): List<SAnime>? {
         val name = obj["name"]?.jsonPrimitive?.content ?: return null
         val link = obj["link"]?.jsonPrimitive?.content ?: return null
         val thumbnailUrl = obj["cover"]
@@ -96,31 +107,37 @@ class AniWorldSplit : AniWorldTheme("AniWorld (Split Seasons)") {
             val seasonUrl = element.attr("abs:href")
 
             if (seasonUrl.contains("/filme")) {
-                val moviesHtml = client.newCall(GET(seasonUrl)).execute().asJsoup()
-                val movieElements = moviesHtml.select("table.seasonEpisodesList tbody tr")
-                movieElements.forEach { movieElement ->
-                    val movieAnime =
-                        SAnime.create().apply {
-                            val movieTitle = movieElement.select("td.seasonEpisodeTitle a span").text()
-                            title = "$name - $movieTitle"
-                            url = movieElement.selectFirst("td.seasonEpisodeTitle a")!!.attr("href").substringAfter(baseUrl)
-                            thumbnail_url = thumbnailUrl
-                            this.description = description
-                            status = SAnime.COMPLETED
-                        }
-                    animes.add(movieAnime)
+                if (requestedSeason == null) {
+                    val moviesHtml = client.newCall(GET(seasonUrl)).execute().asJsoup()
+                    val movieElements = moviesHtml.select("table.seasonEpisodesList tbody tr")
+                    movieElements.forEach { movieElement ->
+                        val movieAnime =
+                            SAnime.create().apply {
+                                val movieTitle = movieElement.select("td.seasonEpisodeTitle a span").text()
+                                title = "$name - $movieTitle"
+                                url = movieElement.selectFirst("td.seasonEpisodeTitle a")!!.attr("href").substringAfter(baseUrl)
+                                thumbnail_url = thumbnailUrl
+                                this.description = description
+                                status = SAnime.COMPLETED
+                            }
+                        animes.add(movieAnime)
+                    }
                 }
             } else {
-                val seasonAnime =
-                    SAnime.create().apply {
-                        val seasonNum = element.attr("href").substringAfter("staffel-").substringBeforeLast("/")
-                        title = "$name - Staffel $seasonNum"
-                        url = seasonUrl.substringAfter(baseUrl)
-                        thumbnail_url = thumbnailUrl
-                        this.description = description
-                        status = SAnime.UNKNOWN
-                    }
-                animes.add(seasonAnime)
+                val seasonNum = element.attr("href").substringAfter("staffel-").substringBeforeLast("/")
+
+                if (requestedSeason == null || seasonNum == requestedSeason) {
+                    val seasonAnime =
+                        SAnime.create().apply {
+                            val seasonNum = element.attr("href").substringAfter("staffel-").substringBeforeLast("/")
+                            title = "$name - Staffel $seasonNum"
+                            url = seasonUrl.substringAfter(baseUrl)
+                            thumbnail_url = thumbnailUrl
+                            this.description = description
+                            status = SAnime.UNKNOWN
+                        }
+                    animes.add(seasonAnime)
+                }
             }
         }
         return animes
