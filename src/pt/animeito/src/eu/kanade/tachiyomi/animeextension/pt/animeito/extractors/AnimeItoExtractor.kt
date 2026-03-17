@@ -19,8 +19,8 @@ class AnimeItoExtractor(private val client: OkHttpClient, private val headers: H
 
         val script = if (encodedScript != null) {
             val decodedData = encodedScript.substringAfter("(").substringBefore(")")
-                .split("+\"")
-                .joinToString("") { it.replace("\"", "") }
+                .replace(Regex("\"\\s*\\+\\s*\""), "") // Remove concatenation
+                .replace(Regex("[^A-Za-z0-9+/=]"), "") // Remove non-base64 characters
                 .let { Base64.decode(it, Base64.DEFAULT) }
                 .let(::String)
             Unpacker.unpack(decodedData).ifEmpty { return emptyList() }
