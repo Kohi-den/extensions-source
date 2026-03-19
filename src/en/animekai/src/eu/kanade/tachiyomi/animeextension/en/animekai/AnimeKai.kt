@@ -22,6 +22,7 @@ import okhttp3.Headers
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import org.json.JSONObject
 import org.jsoup.Jsoup.parseBodyFragment
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -138,8 +139,9 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             ?: throw Exception("animeID not found")
 
         // then use this url to make a request to get the token
-        val token = get("${DECODE1_URL}$aniId").trim()
-        // Log.d("AnimeKai", "Extracted token: $token")
+        val tokenResponse = get("${DECODE1_URL}$aniId").trim()
+        val token = JSONObject(tokenResponse).getString("result")
+//        Log.d("AnimeKai", "Extracted token: $token")
 
         // from that response, extract the token and make a request to get episodes
         val resultHtml = getJsonValue(get("$baseUrl/ajax/episodes/list?ani_id=$aniId&_=$token", response.request.url.toString()), "result")
@@ -186,8 +188,9 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
         Log.d("AnimeKai", "Episode token: $episodeToken")
 
         // Get the secondary token from the worker endpoint
-        val secondaryToken = get("${DECODE1_URL}$episodeToken").trim()
-        Log.d("AnimeKai", "Secondary token: $secondaryToken")
+        val secondaryTokenResponse = get("${DECODE1_URL}$episodeToken").trim()
+        val secondaryToken = JSONObject(secondaryTokenResponse).getString("result")
+//        Log.d("AnimeKai", "Secondary token: $secondaryToken")
 
         // Fetch the episode server links list
         val resultHtml = getJsonValue(get("$baseUrl/ajax/links/list?token=$episodeToken&_=$secondaryToken", watchUrl), "result")
@@ -207,13 +210,16 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
             for (span in serverSpans) {
                 val serverName = span.text()
                 val serverId = span.attr("data-lid")
-                val streamToken = get("${DECODE1_URL}$serverId").trim()
+                val streamTokenResponse = get("${DECODE1_URL}$serverId").trim()
+                val streamToken = JSONObject(streamTokenResponse).getString("result")
                 val streamUrl = "$baseUrl/ajax/links/view?id=$serverId&_=$streamToken"
                 val streamJson = get(streamUrl, baseUrl)
                 val encodedLink = getJsonValue(streamJson, "result").trim()
                 val decryptedJson = get("${DECODE2_URL}$encodedLink")
-                val decryptedLink = getJsonValue(decryptedJson, "url").trim()
-                Log.d("AnimeKai", "Decrypted link for $type $serverName: $decryptedLink")
+                val root = JSONObject(decryptedJson)
+                val resultObject = root.getJSONObject("result")
+                val decryptedLink = resultObject.getString("url")
+//                Log.d("AnimeKai", "Decrypted link for $type $serverName: $decryptedLink")
                 val epServer = EpisodeServer(serverName, decryptedLink)
                 episodeServers.add(epServer)
             }
@@ -468,19 +474,19 @@ class AnimeKai : AnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     companion object {
-        // Courtesy of 50n50 for the decoding api.
-        val DECODE1_URL = "https://ilovekai.simplepostrequest.workers.dev/?ilovefeet="
-        val DECODE2_URL = "https://ilovekai.simplepostrequest.workers.dev/?ilovearmpits="
+        // Courtesy of AzartX47 for the decoding api.
+        val DECODE1_URL = "https://enc-dec.app/api/enc-kai?text="
+        val DECODE2_URL = "https://enc-dec.app/api/dec-kai?text="
 
         val PREF_DOMAIN_KEY = "preffered_domain"
         val PREF_DOMAIN_TITLE = "Preferred Domain (requires app restart)"
-        val PREF_DOMAIN_DEFAULT = "https://animekai.bz"
-        val PREF_DOMAIN_ENTRIES = arrayOf("animekai.to", "animekai.bz", "animekai.cc", "animekai.ac", "Custom")
-        val PREF_DOMAIN_VALUES = arrayOf("https://animekai.to", "https://animekai.bz", "https://animekai.cc", "https://animekai.ac", "custom")
+        val PREF_DOMAIN_DEFAULT = "https://anikai.to"
+        val PREF_DOMAIN_ENTRIES = arrayOf("anikai.to", "animekai.to/home", "animekai.fi", "animekai.fo", "animekai.gs", "animekai.la", "Custom")
+        val PREF_DOMAIN_VALUES = arrayOf("https://anikai.to", "https://animekai.to", "https://animekai.fi", "https://animekai.fo", "https://animekai.gs", "https://animekai.la", "custom")
 
         val PREF_CUSTOM_DOMAIN_KEY = "custom_domain"
         val PREF_CUSTOM_DOMAIN_TITLE = "Custom Domain (requires app restart)"
-        val PREF_CUSTOM_DOMAIN_DEFAULT = "https://animekai.to"
+        val PREF_CUSTOM_DOMAIN_DEFAULT = "https://anikai.to"
 
         val PREF_ENABLED_TYPES_KEY = "enabled_types"
         val PREF_ENABLED_TYPES_TITLE = "Enabled Video Types (Less is faster)"
