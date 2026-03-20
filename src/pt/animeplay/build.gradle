@@ -1,0 +1,15 @@
+ext {
+    extName = 'AnimePlay'
+    extClass = '.AnimePlay'
+    themePkg = 'dooplay'
+    baseUrl = 'https://animeplay.cloud'
+    overrideVersionCode = 1
+    isNsfw = true
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(":lib:blogger-extractor"))
+    implementation(project(":lib:playlist-utils"))
+}
