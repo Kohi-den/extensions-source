@@ -3,7 +3,7 @@ ext {
     extClass = '.AnimesDrive'
     themePkg = 'dooplay'
     baseUrl = 'https://animesdrive.blog'
-    overrideVersionCode = 2
+    overrideVersionCode = 3
     isNsfw = true
 }
 
@@ -11,4 +11,5 @@ apply from: "$rootDir/common.gradle"
 
 dependencies {
     implementation(project(":lib:blogger-extractor"))
+    implementation(project(":lib:playlist-utils"))
 }
