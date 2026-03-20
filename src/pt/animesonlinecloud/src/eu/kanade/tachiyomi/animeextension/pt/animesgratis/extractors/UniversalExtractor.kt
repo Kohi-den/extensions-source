@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.pt.animeplay
+package eu.kanade.tachiyomi.animeextension.pt.animesonlinecloud.extractors
 
 import android.annotation.SuppressLint
 import android.app.Application

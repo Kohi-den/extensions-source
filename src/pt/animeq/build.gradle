@@ -3,13 +3,13 @@ ext {
     extClass = '.AnimeQ'
     themePkg = 'dooplay'
     baseUrl = 'https://animeq.net'
-    overrideVersionCode = 3
+    overrideVersionCode = 4
     isNsfw = true
 }
 
 apply from: "$rootDir/common.gradle"
 
 dependencies {
-    implementation(project(":lib:m3u8-server"))
+    implementation(project(":lib:blogger-extractor"))
     implementation(project(":lib:playlist-utils"))
 }
