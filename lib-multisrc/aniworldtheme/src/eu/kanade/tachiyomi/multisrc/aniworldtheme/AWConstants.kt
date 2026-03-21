@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.de.aniworld
+package eu.kanade.tachiyomi.multisrc.aniworldtheme
 
 object AWConstants {
     const val NAME_DOOD = "Doodstream"
