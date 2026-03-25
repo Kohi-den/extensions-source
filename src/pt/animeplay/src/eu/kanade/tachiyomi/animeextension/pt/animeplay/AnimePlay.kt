@@ -35,8 +35,8 @@ class AnimePlay : DooPlay(
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val filterList = if (filters.isEmpty()) getFilterList() else filters
 
-        val orderByFilter = filters.find { it is OrderByFilter } as OrderByFilter
-        val orderFilter = filters.find { it is OrderFilter } as OrderFilter
+        val orderByFilter = filterList.find { it is OrderByFilter } as? OrderByFilter
+        val orderFilter = filterList.find { it is OrderFilter } as? OrderFilter
 
         val url = baseUrl.toHttpUrl().newBuilder().apply {
             filterList.firstOrNull { it is UriPartFilter && it.state != 0 }?.let {
@@ -52,9 +52,9 @@ class AnimePlay : DooPlay(
             addPathSegment("")
             addQueryParameter("s", query)
 
-            // order
-            addQueryParameter("orderby", orderByFilter.selected)
-            addQueryParameter("order", orderFilter.selected)
+            // order (optional)
+            if (orderByFilter != null) addQueryParameter("orderby", orderByFilter.selected)
+            if (orderFilter != null) addQueryParameter("order", orderFilter.selected)
         }.build()
 
         return GET(url.toString(), headers)
@@ -128,7 +128,7 @@ class AnimePlay : DooPlay(
                 }
             }
 
-        val url = getPlayerUrl(player) ?: return emptyList()
+        val url = getPlayerUrl(player)
 
         val videos = when {
             "blogger.com" in url -> bloggerExtractor.videosFromUrl(url, headers)
@@ -156,7 +156,7 @@ class AnimePlay : DooPlay(
         return videos
     }
 
-    private fun getPlayerUrl(player: Element): String? {
+    private fun getPlayerUrl(player: Element): String {
         val body = FormBody.Builder()
             .add("action", "doo_player_ajax")
             .add("post", player.attr("data-post"))
@@ -169,7 +169,6 @@ class AnimePlay : DooPlay(
             .substringAfter("\"embed_url\":\"")
             .substringBefore("\",")
             .replace("\\", "")
-            .takeIf(String::isNotBlank)
     }
 
     // ============================== Filters ===============================
@@ -274,7 +273,7 @@ class AnimePlay : DooPlay(
         )
     }
 
-    override fun Element.getImageUrl(): String? {
+    override fun Element.getImageUrl(): String {
         val url = when {
             hasAttr("data-src") -> attr("abs:data-src")
             hasAttr("data-lazy-src") -> attr("abs:data-lazy-src")
