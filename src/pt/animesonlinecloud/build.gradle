@@ -2,8 +2,8 @@ ext {
     extName = 'AnimesOnlineCloud'
     extClass = '.AnimesOnlineCloud'
     themePkg = 'dooplay'
-    baseUrl = 'https://animesonline.cloud/'
-    overrideVersionCode = 3
+    baseUrl = 'https://animesonline.cloud'
+    overrideVersionCode = 4
     isNsfw = true
 }
 
