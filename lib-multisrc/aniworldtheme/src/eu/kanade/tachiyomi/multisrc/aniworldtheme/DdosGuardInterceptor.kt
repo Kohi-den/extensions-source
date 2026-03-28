@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.de.aniworld
+package eu.kanade.tachiyomi.multisrc.aniworldtheme
 
 import android.webkit.CookieManager
 import eu.kanade.tachiyomi.network.GET

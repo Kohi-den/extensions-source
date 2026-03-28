@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.de.aniworld.extractors
+package eu.kanade.tachiyomi.multisrc.aniworldtheme.extractors
 
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
