@@ -39,8 +39,14 @@ class AniWorldSplit : AniWorldTheme("AniWorld (Split Seasons)") {
             else -> seasonElements.lastOrNull()
         }
 
-        anime.title = element.selectFirst("h3")!!.text() + " - " + season!!.attr("title")
-        anime.url = season.attr("href")
+        val baseTitle = element.selectFirst("h3")!!.text()
+
+        anime.title = if (seasonElements.size > 1 && season != null) {
+            "$baseTitle - ${season.attr("title")}"
+        } else {
+            baseTitle
+        }
+        anime.url = season!!.attr("href")
         anime.thumbnail_url = baseUrl + element
             .selectFirst("a")!!
             .selectFirst("img")!!
@@ -103,6 +109,8 @@ class AniWorldSplit : AniWorldTheme("AniWorld (Split Seasons)") {
         val animes = mutableListOf<SAnime>()
         val seasonElements = page.select("#stream > ul:nth-child(1) > li > a")
 
+        val regularSeasonCount = seasonElements.count { !it.attr("abs:href").contains("/filme") }
+
         seasonElements.forEach { element ->
             val seasonUrl = element.attr("abs:href")
 
@@ -130,7 +138,11 @@ class AniWorldSplit : AniWorldTheme("AniWorld (Split Seasons)") {
                     val seasonAnime =
                         SAnime.create().apply {
                             val seasonNum = element.attr("href").substringAfter("staffel-").substringBeforeLast("/")
-                            title = "$name - Staffel $seasonNum"
+                            title = if (regularSeasonCount > 1) {
+                                "$name - Staffel $seasonNum"
+                            } else {
+                                name
+                            }
                             url = seasonUrl.substringAfter(baseUrl)
                             thumbnail_url = thumbnailUrl
                             this.description = description
@@ -151,8 +163,13 @@ class AniWorldSplit : AniWorldTheme("AniWorld (Split Seasons)") {
             val movieTitle = document.select(".hosterSiteTitle h2 small").text()
             anime.title += " - $movieTitle"
         } else {
-            val seasonNum = url.substringAfter("staffel-").substringBeforeLast("/")
-            anime.title += " - Staffel $seasonNum"
+            val seasonElements = document.select("#stream > ul:nth-child(1) > li > a")
+            val regularSeasonCount = seasonElements.count { !it.attr("abs:href").contains("/filme") }
+
+            if (regularSeasonCount > 1) {
+                val seasonNum = url.substringAfter("staffel-").substringBeforeLast("/")
+                anime.title += " - Staffel $seasonNum"
+            }
         }
         return anime
     }
