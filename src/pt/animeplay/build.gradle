@@ -1,9 +1,9 @@
 ext {
-    extName = 'AnimeQ'
-    extClass = '.AnimeQ'
+    extName = 'AnimePlay'
+    extClass = '.AnimePlay'
     themePkg = 'dooplay'
-    baseUrl = 'https://animeq.net'
-    overrideVersionCode = 5
+    baseUrl = 'https://animeplay.cloud'
+    overrideVersionCode = 3
     isNsfw = true
 }
 

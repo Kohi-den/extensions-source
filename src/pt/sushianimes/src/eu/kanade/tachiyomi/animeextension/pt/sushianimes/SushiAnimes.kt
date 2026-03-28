@@ -6,7 +6,6 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
-import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
@@ -165,8 +164,6 @@ class SushiAnimes : ParsedAnimeHttpSource() {
     override fun episodeFromElement(element: Element) = throw UnsupportedOperationException()
 
     // ============================ Video Links =============================
-    private val playlistUtils by lazy { PlaylistUtils(client) }
-
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
 
@@ -182,6 +179,7 @@ class SushiAnimes : ParsedAnimeHttpSource() {
         val videoUrl = body.substringAfterLast("playerEmbed", "")
             .substringAfter("\"")
             .substringBefore("\"")
+            .replace("\\", "")
 
         return listOf(Video(videoUrl, "Sushi Animes", videoUrl))
     }

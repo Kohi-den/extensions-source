@@ -7,8 +7,8 @@ import org.jsoup.nodes.Element
 
 class AnimeIto : AnimeStream(
     "pt-BR",
-    "AnimeIto",
-    "https://animei.to",
+    "Animeito",
+    "https://animesonline.io",
 ) {
     override fun headersBuilder() = super.headersBuilder().add("Referer", baseUrl)
 

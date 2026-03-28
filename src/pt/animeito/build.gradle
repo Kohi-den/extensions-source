@@ -2,8 +2,8 @@ ext {
     extName = 'AnimeIto'
     extClass = '.AnimeIto'
     themePkg = 'animestream'
-    baseUrl = 'https://animei.to'
-    overrideVersionCode = 1
+    baseUrl = 'https://animesonline.io'
+    overrideVersionCode = 2
 }
 
 apply from: "$rootDir/common.gradle"
