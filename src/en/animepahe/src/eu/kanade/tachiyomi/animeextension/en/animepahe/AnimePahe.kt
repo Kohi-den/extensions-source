@@ -204,11 +204,15 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
         val downloadLinks = document.select("div#pickDownload > a")
-        return document.select("div#resolutionMenu > button").mapIndexed { index, btn ->
+        return document.select("div#resolutionMenu > button").mapIndexedNotNull { index, btn ->
             val kwikLink = btn.attr("data-src")
             val quality = btn.text()
             val paheWinLink = downloadLinks[index].attr("href")
-            getVideo(paheWinLink, kwikLink, quality)
+            try {
+                getVideo(paheWinLink, kwikLink, quality)
+            } catch (e: Exception) {
+                null
+            }
         }
     }
 
@@ -353,8 +357,8 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
 
         private const val PREF_DOMAIN_KEY = "preffered_domain"
         private const val PREF_DOMAIN_TITLE = "Preferred domain (requires app restart)"
-        private const val PREF_DOMAIN_DEFAULT = "https://animepahe.si"
-        private val PREF_DOMAIN_ENTRIES = arrayOf("animepahe.si", "animepahe.com", "animepahe.org")
+        private const val PREF_DOMAIN_DEFAULT = "https://animepahe.pw"
+        private val PREF_DOMAIN_ENTRIES = arrayOf("animepahe.pw", "animepahe.com", "animepahe.org")
         private val PREF_DOMAIN_VALUES by lazy {
             PREF_DOMAIN_ENTRIES.map { "https://" + it }.toTypedArray()
         }
