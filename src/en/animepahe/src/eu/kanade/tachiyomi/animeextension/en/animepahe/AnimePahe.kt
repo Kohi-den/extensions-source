@@ -260,7 +260,6 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
     }
 
     // ============================ Video Links =============================
-
     override suspend fun resolveVideo(video: Video): Video? {
         val useHLS = preferences.getBoolean(PREF_LINK_TYPE_KEY, PREF_LINK_TYPE_DEFAULT)
         val extractor = KwikExtractor(client)
