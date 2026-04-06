@@ -87,7 +87,7 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
             author = document.selectFirst("div.col-sm-4.anime-info p:contains(Studio:)")
                 ?.text()
                 ?.replace("Studio: ", "")
-            status = parseStatus(document.selectFirst("div.col-sm-4.anime-info p:contains(Status:) a")!!.text())
+            status = parseStatus(document.selectFirst("div.col-sm-4.anime-info p:contains(Status:) strong")?.text())
             thumbnail_url = document.selectFirst("div.anime-poster a")!!.attr("href")
             genre = document.select("div.anime-genre ul li").joinToString { it.text() }
             val synonyms = document.selectFirst("div.col-sm-4.anime-info p:contains(Synonyms:)")
@@ -206,7 +206,7 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
             }
         }
 
-        return listOf(Hoster(baseUrl, "AnimePahe", videos))
+        return listOf(Hoster(baseUrl, name, videos))
     }
 
     override fun List<Video>.sortVideos(): List<Video> {
@@ -270,7 +270,7 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
                 hlsUrl to Headers.headersOf("referer", "https://kwik.cx")
             } else {
                 val streamUrl = extractor.getStreamUrlFromKwik(video.videoUrl)
-                streamUrl to Headers.Builder().build()
+                streamUrl to Headers.headersOf("referer", "https://kwik.cx")
             }
 
             return Video(
@@ -368,7 +368,7 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
         return sessionId
     }
 
-    private fun parseStatus(statusString: String): Int {
+    private fun parseStatus(statusString: String?): Int {
         return when (statusString) {
             "Currently Airing" -> SAnime.ONGOING
             "Finished Airing" -> SAnime.COMPLETED
