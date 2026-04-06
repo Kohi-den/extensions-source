@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONArray
@@ -61,8 +62,11 @@ class SamatoDenVideos : AnimeHttpSource() {
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
         val payload = decodeEpisodePayload(episode.url)
+        val referer = payload.referer ?: "$baseUrl/"
         val videoHeaders = Headers.Builder()
-            .add("Referer", payload.referer ?: "$baseUrl/")
+            .add("Referer", referer)
+            .add("Origin", referer.toOrigin())
+            .add("Accept", "*/*")
             .build()
 
         return listOf(
@@ -263,6 +267,17 @@ class SamatoDenVideos : AnimeHttpSource() {
             .trim()
 
     private fun String.urlEncode(): String = URLEncoder.encode(this, Charsets.UTF_8.name())
+
+    private fun String.toOrigin(): String {
+        val parsed = toHttpUrlOrNull() ?: return baseUrl
+        val defaultPort = when (parsed.scheme) {
+            "http" -> 80
+            "https" -> 443
+            else -> -1
+        }
+        val portSuffix = if (parsed.port == defaultPort || parsed.port == -1) "" else ":${parsed.port}"
+        return "${parsed.scheme}://${parsed.host}$portSuffix"
+    }
 
     private fun parsePlaylistItems(html: String): List<PlaylistItem> {
         val playlistContent = extractJsArrayContent(html, "playlist") ?: return emptyList()
