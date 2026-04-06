@@ -138,11 +138,11 @@ class SamatoDenVideos : AnimeHttpSource() {
         val defaultImage = extractThumbnail(entry, html)
         val referer = linkHref(entry, "alternate") ?: "$baseUrl/"
 
-        val playlistEpisodes = PLAYLIST_ITEM_REGEX.findAll(html).mapIndexed { index, match ->
+        val playlistEpisodes = parsePlaylistItems(html).mapIndexed { index, item ->
             createEpisode(
-                name = match.groupValues[1].ifBlank { "$animeTitle ${index + 1}" },
-                videoUrl = match.groupValues[2],
-                thumbnail = match.groupValues[3].ifBlank { defaultImage },
+                name = item.title.ifBlank { "$animeTitle ${index + 1}" },
+                videoUrl = item.file,
+                thumbnail = item.image ?: defaultImage,
                 referer = referer,
                 episodeNumber = (index + 1).toFloat(),
                 uploadedAt = uploadedAt,
@@ -195,10 +195,22 @@ class SamatoDenVideos : AnimeHttpSource() {
     private fun extractPrimaryCredit(html: String): String? = extractCreditLines(html).firstOrNull()
 
     private fun extractCreditLines(html: String): List<String> =
-        CREDIT_REGEX.findAll(html)
-            .map { cleanCredit(cleanHtml(it.groupValues[1])) }
-            .filter { it.isNotBlank() }
-            .toList()
+        buildList {
+            EDITED_BY_CAPTURE_REGEX.findAll(html)
+                .map { cleanHtml(it.groupValues[1]) }
+                .filter { it.isNotBlank() }
+                .forEach(::add)
+
+            STRONG_ARTIST_REGEX.findAll(html)
+                .map { cleanHtml(it.groupValues[1]) }
+                .filter { it.isNotBlank() }
+                .forEach(::add)
+
+            HEADING_ARTISTS_SECTION_REGEX.findAll(html)
+                .map { cleanHtml(it.groupValues[1]) }
+                .filter { it.isNotBlank() }
+                .forEach(::add)
+        }.distinct()
 
     private fun extractThumbnail(entry: JSONObject, html: String): String? {
         val inlineImage = HIDDEN_IMAGE_REGEX.find(html)?.groupValues?.getOrNull(1)
@@ -252,6 +264,101 @@ class SamatoDenVideos : AnimeHttpSource() {
 
     private fun String.urlEncode(): String = URLEncoder.encode(this, Charsets.UTF_8.name())
 
+    private fun parsePlaylistItems(html: String): List<PlaylistItem> {
+        val playlistContent = extractJsArrayContent(html, "playlist") ?: return emptyList()
+        return extractTopLevelObjects(playlistContent).mapNotNull { block ->
+            val file = JS_FILE_REGEX.find(block)?.groupValues?.getOrNull(1).orEmpty()
+            if (file.isBlank()) return@mapNotNull null
+
+            PlaylistItem(
+                title = JS_TITLE_REGEX.find(block)?.groupValues?.getOrNull(1).orEmpty(),
+                file = file,
+                image = JS_IMAGE_REGEX.find(block)?.groupValues?.getOrNull(1)?.ifBlank { null },
+            )
+        }
+    }
+
+    private fun extractJsArrayContent(html: String, propertyName: String): String? {
+        val propertyIndex = html.indexOf("$propertyName:")
+            .takeIf { it >= 0 }
+            ?: html.indexOf("$propertyName :")
+                .takeIf { it >= 0 }
+            ?: return null
+
+        val start = html.indexOf('[', propertyIndex)
+        if (start < 0) return null
+
+        var depth = 0
+        var inString = false
+        var escaping = false
+        for (index in start until html.length) {
+            val ch = html[index]
+            if (escaping) {
+                escaping = false
+                continue
+            }
+            if (ch == '\\') {
+                escaping = true
+                continue
+            }
+            if (ch == '"') {
+                inString = !inString
+                continue
+            }
+            if (inString) continue
+
+            when (ch) {
+                '[' -> depth++
+                ']' -> {
+                    depth--
+                    if (depth == 0) {
+                        return html.substring(start + 1, index)
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    private fun extractTopLevelObjects(content: String): List<String> {
+        val objects = mutableListOf<String>()
+        var start = -1
+        var depth = 0
+        var inString = false
+        var escaping = false
+
+        content.forEachIndexed { index, ch ->
+            if (escaping) {
+                escaping = false
+                return@forEachIndexed
+            }
+            if (ch == '\\') {
+                escaping = true
+                return@forEachIndexed
+            }
+            if (ch == '"') {
+                inString = !inString
+                return@forEachIndexed
+            }
+            if (inString) return@forEachIndexed
+
+            when (ch) {
+                '{' -> {
+                    if (depth == 0) start = index
+                    depth++
+                }
+                '}' -> {
+                    depth--
+                    if (depth == 0 && start >= 0) {
+                        objects += content.substring(start, index + 1)
+                        start = -1
+                    }
+                }
+            }
+        }
+        return objects
+    }
+
     private fun encodeEpisodePayload(payload: EpisodePayload): String {
         val encoded = Base64.encodeToString(
             payload.toJson().toByteArray(Charsets.UTF_8),
@@ -290,19 +397,29 @@ class SamatoDenVideos : AnimeHttpSource() {
         }
     }
 
+    private data class PlaylistItem(
+        val title: String,
+        val file: String,
+        val image: String?,
+    )
+
     companion object {
         private const val PAGE_SIZE = 30
         private const val EPISODE_PREFIX = "samatoden://video/"
 
         private val HIDDEN_IMAGE_REGEX = Regex("""<img[^>]+src="([^"]+)"""", setOf(RegexOption.IGNORE_CASE))
-        private val CREDIT_REGEX = Regex("""<li[^>]*>(.*?)</li>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
         private val EDITED_BY_REGEX = Regex("""^\s*edited\s+by\s*:?\s*""", setOf(RegexOption.IGNORE_CASE))
         private val ARTIST_BY_REGEX = Regex("""^\s*artist(?:s)?\s*:?\s*""", setOf(RegexOption.IGNORE_CASE))
-        private val SINGLE_FILE_REGEX = Regex("""(?<!\w)file\s*:\s*"([^"]+)"""")
-        private val PLAYLIST_ITEM_REGEX = Regex(
-            """title\s*:\s*"([^"]*)"\s*,\s*file\s*:\s*"([^"]+)"(?:\s*,\s*image\s*:\s*"([^"]+)")?""",
+        private val EDITED_BY_CAPTURE_REGEX = Regex("""<li[^>]*>\s*Edited\s+by\s*([^<]+)</li>""", setOf(RegexOption.IGNORE_CASE))
+        private val STRONG_ARTIST_REGEX = Regex("""<strong>\s*Artists?:\s*</strong>\s*([^<]+)""", setOf(RegexOption.IGNORE_CASE))
+        private val HEADING_ARTISTS_SECTION_REGEX = Regex(
+            """<h3[^>]*>.*?Artists?.*?</h3>\s*<ul>\s*<li[^>]*>(.*?)</li>""",
             setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
         )
+        private val SINGLE_FILE_REGEX = Regex("""(?<!\w)file\s*:\s*"([^"]+)"""")
+        private val JS_TITLE_REGEX = Regex("""title\s*:\s*"([^"]*)"""", setOf(RegexOption.IGNORE_CASE))
+        private val JS_FILE_REGEX = Regex("""file\s*:\s*"([^"]+)"""", setOf(RegexOption.IGNORE_CASE))
+        private val JS_IMAGE_REGEX = Regex("""image\s*:\s*"([^"]+)"""", setOf(RegexOption.IGNORE_CASE))
         private val PLAYLIST_IMAGE_REGEX = Regex(
             """playlist\s*:\s*\[.*?image\s*:\s*"([^"]+)"""",
             setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
