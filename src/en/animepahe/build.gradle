@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 ext {
     extName = 'AnimePahe'
     extClass = '.AnimePahe'
@@ -6,6 +8,25 @@ ext {
 
 apply from: "$rootDir/common.gradle"
 
+android {
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
 dependencies {
     implementation(libs.jsunpacker)
+}
+
+tasks.withType(KotlinCompile).configureEach {
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force("com.github.aniyomiorg:extensions-lib:v16")
+    }
 }
