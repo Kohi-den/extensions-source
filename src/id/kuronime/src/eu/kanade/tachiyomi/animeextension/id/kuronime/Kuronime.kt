@@ -53,7 +53,7 @@ class Kuronime : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     private fun parseStatus(statusString: String): Int {
-        return when (statusString.toLowerCase(Locale.US)) {
+        return when (statusString.lowercase(Locale.US)) {
             "ongoing" -> SAnime.ONGOING
             "completed" -> SAnime.COMPLETED
             else -> SAnime.UNKNOWN
