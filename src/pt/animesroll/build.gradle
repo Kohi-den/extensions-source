@@ -3,11 +3,12 @@ ext {
     extClass = '.AnimesROLL'
     themePkg = 'dooplay'
     baseUrl = 'https://anroll.tv'
-    overrideVersionCode = 7
+    overrideVersionCode = 8
 }
 
 apply from: "$rootDir/common.gradle"
 
 dependencies {
     implementation(project(":lib:playlist-utils"))
+    implementation(libs.jsunpacker)
 }

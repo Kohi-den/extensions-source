@@ -115,11 +115,25 @@ class UniversalExtractor(private val client: OkHttpClient) {
         private val VIDEO_REGEX by lazy { Regex(".*\\.(mp4|m3u8|mpd)(\\?.*)?$") }
         private val CHECK_SCRIPT by lazy {
             """
+            const selectors = ['#player-button-container', '#overlay']
             setInterval(() => {
-                var playButton = document.getElementById('player-button-container')
-                if (playButton) {
-                    playButton.click()
+                // Click the elements with the selectors
+                selectors.forEach(selector => {
+                    const element = document.querySelector(selector)
+                    if (element) {
+                        element.click()
+                    }
+                });
+
+                // Click the center of the screen
+                const x = window.innerWidth / 2
+                const y = window.innerHeight / 2
+                const centerElement = document.elementFromPoint(x, y)
+
+                if (centerElement) {
+                    centerElement.click()
                 }
+
                 try { jwplayer(0).play(); } catch {} // Default jwplayer instance
             }, 2500)
             """.trimIndent()
