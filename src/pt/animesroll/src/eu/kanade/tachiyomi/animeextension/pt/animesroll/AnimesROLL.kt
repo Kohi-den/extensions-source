@@ -1,14 +1,17 @@
 package eu.kanade.tachiyomi.animeextension.pt.animesroll
 
 import android.util.Log
+import eu.kanade.tachiyomi.animeextension.pt.animesroll.extractors.AnrollOnlineExtractor
 import eu.kanade.tachiyomi.animeextension.pt.animesroll.extractors.UniversalExtractor
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.multisrc.dooplay.DooPlay
 import eu.kanade.tachiyomi.network.GET
+import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.asJsoup
 import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
+import okhttp3.FormBody
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -94,17 +97,17 @@ class AnimesROLL : DooPlay(
     override val prefQualityValues = arrayOf("360p", "480p", "720p", "1080p")
     override val prefQualityEntries = prefQualityValues
 
+    private val anrollOnlineExtractor by lazy { AnrollOnlineExtractor(client) }
     private val universalExtractor by lazy { UniversalExtractor(client) }
 
     private fun getPlayerVideos(player: Element): List<Video> {
         val fullName = player.selectFirst("span.title")!!.text()
         val realName = fullName.substringAfter("(").substringBefore(")")
-        val name = realName.lowercase()
         val url = getPlayerUrl(player) ?: return emptyList()
         Log.d(tag, "Fetching videos from: $url")
 
         var videos: List<Video> = when {
-            "alibabacdn" in url -> emptyList()
+            "anroll.online" in url -> anrollOnlineExtractor.videosFromUrl(url, realName)
 
             else -> emptyList()
         }
@@ -123,21 +126,18 @@ class AnimesROLL : DooPlay(
     }
 
     private fun getPlayerUrl(player: Element): String {
-        val type = player.attr("data-type")
-        val id = player.attr("data-post")
-        val num = player.attr("data-nume")
-        return try {
-            client.newCall(GET("$baseUrl/wp-json/dooplayer/v2/$id/$type/$num", headers))
-                .execute()
-                .use { response ->
-                    response.body.string()
-                        .substringAfter("\"embed_url\":\"")
-                        .substringBefore("\",")
-                        .replace("\\", "")
-                }
-        } catch (e: Exception) {
-            ""
-        }
+        val body = FormBody.Builder()
+            .add("action", "doo_player_ajax")
+            .add("post", player.attr("data-post"))
+            .add("nume", player.attr("data-nume"))
+            .add("type", player.attr("data-type"))
+            .build()
+
+        return client.newCall(POST("$baseUrl/wp-admin/admin-ajax.php", headers, body))
+            .execute().body.string()
+            .substringAfter("\"embed_url\":\"")
+            .substringBefore("\",")
+            .replace("\\", "")
     }
 
     // ============================== Filters ===============================
