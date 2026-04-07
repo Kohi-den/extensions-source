@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.animeextension.ar.animeblkom
+package eu.kanade.tachiyomi.animeextension.ar.anime3rb
 
 import android.app.Application
 import androidx.preference.ListPreference
@@ -22,9 +22,9 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.lang.Exception
 
-class AnimeBlkom : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
+class anime3rb : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
-    override val name = "أنمي بالكوم"
+    override val name = "انمي عرب"
 
     override val baseUrl by lazy { preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!! }
 
