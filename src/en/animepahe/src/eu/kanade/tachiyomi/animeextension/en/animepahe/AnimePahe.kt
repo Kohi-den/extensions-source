@@ -193,7 +193,7 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
                     videoUrl = kwikLink,
                     videoTitle = qualityStr,
                     resolution = quality,
-                    headers = Headers.headersOf("referer", "https://kwik.cx"),
+                    headers = Headers.headersOf("referer", "https://kwik.cx/"),
                     preferred = isPreferred,
                 )
             } else {
@@ -267,10 +267,10 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
         try {
             val (resolvedUrl, headers) = if (useHLS) {
                 val hlsUrl = extractor.getHlsStreamUrl(video.videoUrl, referer = baseUrl)
-                hlsUrl to Headers.headersOf("referer", "https://kwik.cx")
+                hlsUrl to Headers.headersOf("referer", "https://kwik.cx/")
             } else {
                 val streamUrl = extractor.getStreamUrlFromKwik(video.videoUrl)
-                streamUrl to Headers.headersOf("referer", "https://kwik.cx")
+                streamUrl to Headers.headersOf("referer", "https://kwik.cx/")
             }
 
             return Video(
