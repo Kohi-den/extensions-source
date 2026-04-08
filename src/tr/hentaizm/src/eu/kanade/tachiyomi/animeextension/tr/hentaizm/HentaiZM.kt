@@ -3,7 +3,7 @@ package eu.kanade.tachiyomi.animeextension.tr.hentaizm
 import android.app.Application
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
-import eu.kanade.tachiyomi.animeextension.tr.hentaizm.extractors.VideaExtractor
+import eu.kanade.tachiyomi.animeextension.tr.hentaizm.extractors.MailRuExtractor
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -30,7 +30,7 @@ class HentaiZM : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     override val name = "HentaiZM"
 
-    override val baseUrl = "https://www.hentaizm6.online/"
+    override val baseUrl = "https://www.hentaizm6.online" // Çift slash hatası olmaması için sondaki slash kaldırıldı
 
     override val lang = "tr"
 
@@ -49,7 +49,7 @@ class HentaiZM : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             withContext(Dispatchers.IO) {
                 val body = FormBody.Builder()
                     .add("user", "demo")
-                    .add("pass", "demo") // peak security
+                    .add("pass", "demo")
                     .add("redirect_to", baseUrl)
                     .build()
 
@@ -64,7 +64,10 @@ class HentaiZM : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     }
 
     // ============================== Popular ===============================
-    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/en-cok-izlenenler/page/$page", headers)
+    override fun popularAnimeRequest(page: Int): Request {
+        val url = if (page == 1) "$baseUrl/?tab=fav" else "$baseUrl/?tab=fav&page=$page"
+        return GET(url, headers)
+    }
 
     override fun popularAnimeParse(response: Response) =
         super.popularAnimeParse(response).let { page ->
@@ -72,23 +75,40 @@ class HentaiZM : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             AnimesPage(animes, page.hasNextPage)
         }
 
-    override fun popularAnimeSelector() = "div.moviefilm"
+    override fun popularAnimeSelector() = "div.video-list-item"
 
     override fun popularAnimeFromElement(element: Element) = SAnime.create().apply {
-        title = element.selectFirst("div.movief > a")!!.text()
-            .substringBefore(". Bölüm")
-            .substringBeforeLast(" ")
-        element.selectFirst("img")!!.attr("abs:src").also {
+        val titleLink = element.selectFirst("div.title > a")
+        if (titleLink != null) {
+            title = titleLink.text()
+            val href = titleLink.attr("href")
+            
+            // "/izle/slug/..." linkini "/anime/slug" detay linkine çeviriyoruz
+            if (href.contains("/izle/")) {
+                val parts = href.split("/")
+                if (parts.size >= 3) {
+                    val slug = parts[2]
+                    setUrlWithoutDomain("/anime/$slug")
+                } else {
+                    setUrlWithoutDomain(href)
+                }
+            } else {
+                setUrlWithoutDomain(href)
+            }
+        }
+
+        element.selectFirst("img")?.attr("abs:src")?.let {
             thumbnail_url = it
-            val slug = it.substringAfterLast("/").substringBefore(".")
-            setUrlWithoutDomain("/hentai-detay/$slug")
         }
     }
 
     override fun popularAnimeNextPageSelector() = "span.current + a"
 
     // =============================== Latest ===============================
-    override fun latestUpdatesRequest(page: Int) = GET("$baseUrl/yeni-eklenenler?c=${page - 1}", headers)
+    override fun latestUpdatesRequest(page: Int): Request {
+        val url = if (page == 1) baseUrl else "$baseUrl/?page=$page"
+        return GET(url, headers)
+    }
 
     override fun latestUpdatesParse(response: Response) =
         super.latestUpdatesParse(response).let { page ->
@@ -104,9 +124,10 @@ class HentaiZM : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
 
     // =============================== Search ===============================
     override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
-        return if (query.startsWith(PREFIX_SEARCH)) { // URL intent handler
+        return if (query.startsWith(PREFIX_SEARCH)) {
             val id = query.removePrefix(PREFIX_SEARCH)
-            client.newCall(GET("$baseUrl/hentai-detay/$id"))
+            // Detay linki yapısı güncellendi
+            client.newCall(GET("$baseUrl/anime/$id"))
                 .awaitSuccess()
                 .use(::searchAnimeByIdParse)
         } else {
@@ -119,7 +140,6 @@ class HentaiZM : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             setUrlWithoutDomain(response.request.url.toString())
             initialized = true
         }
-
         return AnimesPage(listOf(details), false)
     }
 
@@ -138,41 +158,62 @@ class HentaiZM : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
     // =========================== Anime Details ============================
     override fun animeDetailsParse(document: Document) = SAnime.create().apply {
         setUrlWithoutDomain(document.location())
-        val content = document.selectFirst("div.filmcontent")!!
-        title = content.selectFirst("h1")!!.text()
-        thumbnail_url = content.selectFirst("img")!!.attr("abs:src")
-        genre = content.select("tr:contains(Hentai Türü) > td > a").eachText().joinToString()
-        description = content.selectFirst("tr:contains(Özet) + tr > td")
-            ?.text()
-            ?.takeIf(String::isNotBlank)
-    }
-
-    // ============================== Episodes ==============================
-    override fun episodeListSelector() = "div#Bolumler li > a"
-
-    override fun episodeFromElement(element: Element) = SEpisode.create().apply {
-        setUrlWithoutDomain(element.attr("href"))
-        element.text().also {
-            val num = it.substringBeforeLast(". Bölüm", "")
-                .substringAfterLast(" ")
-                .ifBlank { "1" }
-
-            episode_number = num.toFloatOrNull() ?: 1F
-            name = "$num. Bölüm"
+        
+        val solKolon = document.selectFirst("div.col-md-2")
+        thumbnail_url = solKolon?.selectFirst("img")?.attr("abs:src")
+        
+        val ortaKolon = document.selectFirst("div.col-md-6")
+        if (ortaKolon != null) {
+            title = ortaKolon.selectFirst("div.head h1, div.head h2")?.text() 
+                    ?: ortaKolon.select("p.anime-detail-item:contains(Anime Adı)").text().substringAfter(":").trim()
+            
+            genre = ortaKolon.select("p.anime-detail-item:contains(Anime Türü) span").eachText().joinToString()
+            if (genre.isNullOrEmpty()) {
+                genre = ortaKolon.select("p.anime-detail-item:contains(Anime Türü)").text().substringAfter(":").trim()
+            }
+            
+            val ozet = ortaKolon.selectFirst("div.anime-synopsis p")?.text()
+            val detayListesi = ortaKolon.select("p.anime-detail-item").eachText()
+            val digerDetaylar = detayListesi.filterNot { it.contains("Anime Adı") || it.contains("Anime Türü") }.joinToString("\n")
+            
+            description = if (ozet != null) "$ozet\n\n$digerDetaylar" else digerDetaylar
         }
     }
 
-    // ============================ Video Links =============================
-    private val videaExtractor by lazy { VideaExtractor(client) }
+    // ============================== Episodes ==============================
+    override fun episodeListSelector() = "div#episodes-list-anime a.episode-list-item"
 
+    override fun episodeFromElement(element: Element) = SEpisode.create().apply {
+        setUrlWithoutDomain(element.attr("href"))
+        
+        val epName = element.selectFirst("div.text")?.text() ?: element.text()
+        name = epName
+        
+        val numRegex = Regex("""(\d+)[\.,]?\s*Bölüm""")
+        val match = numRegex.find(epName)
+        episode_number = match?.groupValues?.get(1)?.toFloatOrNull() ?: 1F
+    }
+
+    // ============================ Video Links =============================
     override fun videoListParse(response: Response): List<Video> {
-        val doc = response.asJsoup()
-        val videaItem = doc.selectFirst("div.alternatif a:contains(Videa)")!!
-        val path = videaItem.attr("onclick").substringAfter("../../").substringBefore("'")
-        val req = client.newCall(GET("$baseUrl/$path", headers)).execute()
-            .asJsoup()
-        val videaUrl = req.selectFirst("iframe")!!.attr("abs:src")
-        return videaExtractor.videosFromUrl(videaUrl)
+        val document = response.asJsoup()
+        val videoList = mutableListOf<Video>()
+
+        val playerLinkElement = document.selectFirst("div#player-area a")
+        val reklamLinki = playerLinkElement?.attr("href")
+
+        // ay.live reklamını bypass edip asıl mail.ru linkini çıkarma işlemi
+        if (reklamLinki != null && reklamLinki.contains("ay.live")) {
+            val asilVideoLinki = reklamLinki.substringAfter("url=")
+            
+            if (asilVideoLinki.contains("mail.ru")) {
+                val mailRuExtractor = MailRuExtractor(client)
+                val mailRuVideos = mailRuExtractor.videosFromUrl(asilVideoLinki)
+                videoList.addAll(mailRuVideos)
+            }
+        }
+
+        return videoList
     }
 
     private val qualityRegex by lazy { Regex("""(\d+)p""") }
@@ -184,7 +225,6 @@ class HentaiZM : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
                 { it.quality.contains(quality) },
                 { qualityRegex.find(it.quality)?.groupValues?.get(1)?.toIntOrNull() ?: 0 },
             ),
-
         ).reversed()
     }
 
