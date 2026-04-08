@@ -14,7 +14,7 @@
 
                 <data
                     android:host="www.hentaizm6.online"
-                    android:pathPattern="/hentai-detay/..*"
+                    android:pathPattern="/anime/..*"
                     android:scheme="https" />
             </intent-filter>
         </activity>
