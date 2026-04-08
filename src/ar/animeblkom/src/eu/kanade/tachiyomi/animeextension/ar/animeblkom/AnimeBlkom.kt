@@ -15,19 +15,15 @@ import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
-class Anime3rb : ParsedAnimeHttpSource() {
+class Anime3rb : ParsedAnimeHttpSource( ) {
 
     override val name = "Anime3rb"
-
     override val baseUrl = "https://anime3rb.com"
-
     override val lang = "ar"
-
     override val supportsLatest = true
-
     override val client: OkHttpClient = network.cloudflareClient
 
-    override fun headersBuilder(): Headers.Builder {
+    override fun headersBuilder( ): Headers.Builder {
         return super.headersBuilder()
             .add("Referer", baseUrl)
             .add("Accept-Language", "ar,en-US;q=0.9,en;q=0.8")
@@ -35,9 +31,7 @@ class Anime3rb : ParsedAnimeHttpSource() {
 
     // Popular Anime
     override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/titles?page=$page")
-
     override fun popularAnimeSelector(): String = "div.grid div.relative.group"
-
     override fun popularAnimeFromElement(element: Element): SAnime {
         val anime = SAnime.create()
         val link = element.select("a").first()
@@ -46,39 +40,26 @@ class Anime3rb : ParsedAnimeHttpSource() {
         anime.thumbnail_url = element.select("img").attr("src")
         return anime
     }
-
     override fun popularAnimeNextPageSelector(): String = "a[rel=next]"
 
     // Latest Anime
     override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/episodes?page=$page")
-
     override fun latestUpdatesSelector(): String = "div.grid div.relative.group"
-
     override fun latestUpdatesFromElement(element: Element): SAnime {
         val anime = SAnime.create()
         val url = element.select("a").attr("href") ?: ""
-        val animeUrl = if (url.contains("/titles/")) {
-            url.substringBeforeLast("/")
-        } else {
-            url
-        }
+        val animeUrl = if (url.contains("/titles/")) url.substringBeforeLast("/") else url
         anime.setUrlWithoutDomain(animeUrl)
         anime.title = element.select("h3").text().trim()
         anime.thumbnail_url = element.select("img").attr("src")
         return anime
     }
-
     override fun latestUpdatesNextPageSelector(): String = "a[rel=next]"
 
     // Search
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        return GET("$baseUrl/titles?query=$query&page=$page")
-    }
-
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request = GET("$baseUrl/titles?query=$query&page=$page")
     override fun searchAnimeSelector(): String = popularAnimeSelector()
-
     override fun searchAnimeFromElement(element: Element): SAnime = popularAnimeFromElement(element)
-
     override fun searchAnimeNextPageSelector(): String = popularAnimeNextPageSelector()
 
     // Anime Details
@@ -98,7 +79,6 @@ class Anime3rb : ParsedAnimeHttpSource() {
 
     // Episodes
     override fun episodeListSelector(): String = "div#episodes-list a, div.grid.grid-cols-1.gap-4 a"
-
     override fun episodeFromElement(element: Element): SEpisode {
         val episode = SEpisode.create()
         episode.setUrlWithoutDomain(element.attr("href"))
@@ -112,32 +92,22 @@ class Anime3rb : ParsedAnimeHttpSource() {
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
         val videoList = mutableListOf<Video>()
-        
         document.select("ul#servers-list li, div.servers-list button").forEach { server ->
             val name = server.text().trim()
             val url = server.attr("data-url").ifBlank { server.attr("value") }
-            if (url.isNotEmpty()) {
-                videoList.add(Video(url, name, url))
-            }
+            if (url.isNotEmpty()) videoList.add(Video(url, name, url))
         }
-        
         if (videoList.isEmpty()) {
             document.select("iframe").forEach { iframe ->
                 val src = iframe.attr("src")
-                if (src.isNotEmpty()) {
-                    videoList.add(Video(src, "Player", src))
-                }
+                if (src.isNotEmpty()) videoList.add(Video(src, "Player", src))
             }
         }
-        
         return videoList
     }
 
     override fun videoListSelector(): String = throw Exception("Not used")
     override fun videoFromElement(element: Element): Video = throw Exception("Not used")
     override fun videoUrlParse(document: Document): String = throw Exception("Not used")
-
-    override fun List<Video>.sort(): List<Video> {
-        return this.sortedByDescending { it.quality }
-    }
+    override fun List<Video>.sort(): List<Video> = this.sortedByDescending { it.quality }
 }
