@@ -101,7 +101,7 @@ class HentaiZM : ParsedAnimeHttpSource(), ConfigurableAnimeSource {
             thumbnail_url = it
         }
     }
-
+ 
     override fun popularAnimeNextPageSelector() = "span.current + a"
 
     // =============================== Latest ===============================
