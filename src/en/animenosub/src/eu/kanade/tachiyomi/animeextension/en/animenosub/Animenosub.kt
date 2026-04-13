@@ -38,7 +38,7 @@ class Animenosub :
             }
             url.contains("streamwish") || url.contains("swdyu") -> {
                 val wishHeaders = headers.newBuilder()
-                    .add("Referer", "$baseUrl/")
+                    .set("Referer", "$baseUrl/")
                     .build()
                 StreamWishExtractor(client, wishHeaders).videosFromUrl(url, prefix)
             }

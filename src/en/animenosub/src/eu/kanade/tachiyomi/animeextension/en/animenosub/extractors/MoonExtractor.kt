@@ -2,8 +2,8 @@ package eu.kanade.tachiyomi.animeextension.en.animenosub.extractors
 
 import android.util.Base64
 import android.util.Log
-import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
+import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import kotlinx.serialization.SerialName
@@ -30,7 +30,6 @@ class MoonExtractor(
         ignoreUnknownKeys = true
         isLenient = true
     }
-    private val tag = "MoonExtractor"
 
     fun videosFromUrl(url: String, prefix: String): List<Video> {
         return try {
@@ -41,12 +40,7 @@ class MoonExtractor(
             val host = httpUrl.host
 
             val videoId = httpUrl.pathSegments
-                .lastOrNull { it.isNotEmpty() } ?: run {
-                Log.e(tag, "No videoId in: $url")
-                return emptyList()
-            }
-
-            Log.d(tag, "videoId=$videoId host=$host")
+                .lastOrNull { it.isNotEmpty() } ?: return emptyList()
 
             val detailsHeaders = headers.newBuilder()
                 .set("Referer", "$siteUrl/")
@@ -55,24 +49,22 @@ class MoonExtractor(
                 .set("Accept", "application/json, text/plain, */*")
                 .build()
 
+            // Fix: use .use{} to prevent connection leaks
             val detailsBody = client.newCall(
                 GET("https://$host/api/videos/$videoId/embed/details", detailsHeaders),
-            ).execute().body.string()
+            ).execute().use { it.body.string() }
 
             val detailsResponse = try {
                 json.decodeFromString<DetailsResponse>(detailsBody)
             } catch (e: Exception) {
-                Log.e(tag, "Failed to parse details JSON: ${e.message}")
+                Log.e("MoonExtractor", "Failed to parse details JSON: ${e.message}")
                 return emptyList()
             }
 
-            val embedUrl = detailsResponse.embedFrameUrl?.takeIf { it.isNotBlank() } ?: run {
-                Log.e(tag, "No embed_frame_url in: ${detailsBody.take(300)}")
-                return emptyList()
-            }
+            val embedUrl = detailsResponse.embedFrameUrl?.takeIf { it.isNotBlank() }
+                ?: return emptyList()
 
             val embedHost = embedUrl.toHttpUrl().host
-            Log.d(tag, "embedHost=$embedHost embedUrl=$embedUrl")
 
             val viewerId = UUID.randomUUID().toString().replace("-", "")
             val deviceId = UUID.randomUUID().toString().replace("-", "")
@@ -81,7 +73,7 @@ class MoonExtractor(
 
             val fingerprintPayload = """{"viewer_id":"$viewerId","device_id":"$deviceId","confidence":0.93,"iat":$nowSec,"exp":$expSec}"""
             val payloadB64 = Base64.encodeToString(
-                fingerprintPayload.toByteArray(),
+                fingerprintPayload.toByteArray(Charsets.UTF_8),
                 Base64.NO_WRAP or Base64.URL_SAFE or Base64.NO_PADDING,
             )
             val fingerprintToken = "$payloadB64.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -109,14 +101,13 @@ class MoonExtractor(
                 .set("Sec-Fetch-Site", "same-origin")
                 .build()
 
-            val bodyString = json.encodeToString(fingerprintBody)
-            val requestBody = bodyString.toRequestBody("application/json".toMediaType())
+            val requestBody = json.encodeToString(fingerprintBody)
+                .toRequestBody("application/json".toMediaType())
             val playbackUrl = "https://$embedHost/api/videos/$videoId/embed/playback"
 
-            Log.d(tag, "POST $playbackUrl")
-            val playbackResponse = client.newCall(POST(playbackUrl, playbackHeaders, requestBody)).execute()
-            Log.d(tag, "Playback code: ${playbackResponse.code}")
-            val playbackBodyStr = playbackResponse.body.string()
+            // Fix: use .use{} to prevent connection leaks
+            val playbackBodyStr = client.newCall(POST(playbackUrl, playbackHeaders, requestBody))
+                .execute().use { it.body.string() }
 
             val response = json.decodeFromString<PlaybackResponse>(playbackBodyStr)
 
@@ -126,17 +117,14 @@ class MoonExtractor(
                 }
                 response.playback != null -> {
                     val decrypted = decryptPayload(response.playback)
-                    Log.d(tag, "Decrypted: ${decrypted.take(300)}")
-                    val inner = json.decodeFromString<InnerResponse>(decrypted)
-                    inner.sources?.firstOrNull()?.let { it.url ?: it.file }
+                    json.decodeFromString<InnerResponse>(decrypted)
+                        .sources?.firstOrNull()?.let { it.url ?: it.file }
                 }
                 else -> null
             }?.takeIf { it.isNotBlank() } ?: run {
-                Log.e(tag, "No masterUrl found in: ${playbackBodyStr.take(300)}")
+                Log.e("MoonExtractor", "No masterUrl found in: ${playbackBodyStr.take(300)}")
                 return emptyList()
             }
-
-            Log.d(tag, "masterUrl=$masterUrl")
 
             val videoHeaders = Headers.Builder()
                 .set("Referer", "https://$embedHost/")
@@ -152,7 +140,7 @@ class MoonExtractor(
                 videoNameGen = { quality -> "${prefix}Moon - $quality" },
             )
         } catch (e: Exception) {
-            Log.e(tag, "MoonExtractor failed: ${e.message}", e)
+            Log.e("MoonExtractor", "MoonExtractor failed: ${e.message}", e)
             emptyList()
         }
     }
@@ -164,17 +152,18 @@ class MoonExtractor(
         val key = SecretKeySpec(keyBytes, "AES")
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, ivBytes))
-        return String(cipher.doFinal(cipherBytes))
+        // Fix: explicit UTF-8 charset to avoid system encoding issues
+        return cipher.doFinal(cipherBytes).toString(Charsets.UTF_8)
     }
 
+    // Fix: use Base64.URL_SAFE flag directly — no need to manually replace - and _
     private fun decodeB64Url(input: String): ByteArray {
-        val base64 = input.replace('-', '+').replace('_', '/')
-        val padding = when (base64.length % 4) {
+        val padding = when (input.length % 4) {
             2 -> "=="
             3 -> "="
             else -> ""
         }
-        return Base64.decode(base64 + padding, Base64.DEFAULT)
+        return Base64.decode(input + padding, Base64.URL_SAFE)
     }
 
     @Serializable
