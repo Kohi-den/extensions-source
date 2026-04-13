@@ -40,11 +40,6 @@ class MoonExtractor(
             val httpUrl = url.toHttpUrl()
             val host = httpUrl.host
 
-            if (host.contains("upn.one")) {
-                Log.d(tag, "Skipping Nova (unsupported): $url")
-                return emptyList()
-            }
-
             val videoId = httpUrl.pathSegments
                 .lastOrNull { it.isNotEmpty() } ?: run {
                 Log.e(tag, "No videoId in: $url")
@@ -64,12 +59,14 @@ class MoonExtractor(
                 GET("https://$host/api/videos/$videoId/embed/details", detailsHeaders),
             ).execute().body.string()
 
-            val embedUrl = detailsBody
-                .substringAfter("embed_frame_url", "")
-                .substringAfter(":")
-                .substringAfter("\"")
-                .substringBefore("\"")
-                .takeIf { it.isNotBlank() } ?: run {
+            val detailsResponse = try {
+                json.decodeFromString<DetailsResponse>(detailsBody)
+            } catch (e: Exception) {
+                Log.e(tag, "Failed to parse details JSON: ${e.message}")
+                return emptyList()
+            }
+
+            val embedUrl = detailsResponse.embedFrameUrl?.takeIf { it.isNotBlank() } ?: run {
                 Log.e(tag, "No embed_frame_url in: ${detailsBody.take(300)}")
                 return emptyList()
             }
@@ -82,14 +79,11 @@ class MoonExtractor(
             val nowSec = System.currentTimeMillis() / 1000
             val expSec = nowSec + 600
 
-            // Build fingerprint payload (base64url encoded JSON)
             val fingerprintPayload = """{"viewer_id":"$viewerId","device_id":"$deviceId","confidence":0.93,"iat":$nowSec,"exp":$expSec}"""
             val payloadB64 = Base64.encodeToString(
                 fingerprintPayload.toByteArray(),
                 Base64.NO_WRAP or Base64.URL_SAFE or Base64.NO_PADDING,
             )
-            // The token format the server expects: base64url(payload).dummy_sig
-            // We use a fixed dummy signature since the server validates domain via x-embed-origin
             val fingerprintToken = "$payloadB64.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 
             val fingerprintBody = FingerprintRequest(
@@ -123,11 +117,9 @@ class MoonExtractor(
             val playbackResponse = client.newCall(POST(playbackUrl, playbackHeaders, requestBody)).execute()
             Log.d(tag, "Playback code: ${playbackResponse.code}")
             val playbackBodyStr = playbackResponse.body.string()
-            Log.d(tag, "Playback body: ${playbackBodyStr.take(400)}")
 
             val response = json.decodeFromString<PlaybackResponse>(playbackBodyStr)
 
-            // Decrypt AES-256-GCM payload
             val masterUrl = when {
                 !response.sources.isNullOrEmpty() -> {
                     response.sources.firstOrNull()?.let { it.url ?: it.file }
@@ -184,6 +176,11 @@ class MoonExtractor(
         }
         return Base64.decode(base64 + padding, Base64.DEFAULT)
     }
+
+    @Serializable
+    data class DetailsResponse(
+        @SerialName("embed_frame_url") val embedFrameUrl: String? = null,
+    )
 
     @Serializable
     data class FingerprintRequest(val fingerprint: FingerprintData)

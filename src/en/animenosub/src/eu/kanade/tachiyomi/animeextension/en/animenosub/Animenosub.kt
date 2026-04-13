@@ -11,11 +11,12 @@ import eu.kanade.tachiyomi.lib.vidmolyextractor.VidMolyExtractor
 import eu.kanade.tachiyomi.multisrc.animestream.AnimeStream
 import org.jsoup.nodes.Element
 
-class Animenosub : AnimeStream(
-    "en",
-    "Animenosub",
-    "https://animenosub.to",
-) {
+class Animenosub :
+    AnimeStream(
+        "en",
+        "Animenosub",
+        "https://animenosub.to",
+    ) {
     // ============================== Episodes ==============================
     override fun getEpisodeName(element: Element, epNum: String): String {
         val episodeTitle = element.selectFirst("div.epl-title")?.text() ?: ""
@@ -30,9 +31,6 @@ class Animenosub : AnimeStream(
         return when {
             url.contains("bysesayeveum") || url.contains("filemoon") ||
                 url.contains("fmoon") || url.contains("moonembed") -> {
-                MoonExtractor(client, headers, baseUrl).videosFromUrl(url, prefix)
-            }
-            url.contains("upn.one") -> {
                 MoonExtractor(client, headers, baseUrl).videosFromUrl(url, prefix)
             }
             url.contains("vidmoly") -> {
@@ -100,7 +98,7 @@ class Animenosub : AnimeStream(
             compareBy(
                 { it.quality.contains(type, ignoreCase = true) },
                 { it.quality.contains(quality, ignoreCase = true) },
-                { it.quality.contains(server, ignoreCase = true) },
+                { it.quality.contains(mapPreferredServer(server), ignoreCase = true) },
             ),
         ).reversed()
     }
@@ -117,11 +115,15 @@ class Animenosub : AnimeStream(
         private val PREF_SERVER_VALUES = arrayOf(
             "Moon",
             "Omega",
-            "Nova",
             "StreamWish",
             "VidMoly",
             "Vtube",
             "WolfStream",
         )
+
+        private fun mapPreferredServer(server: String): String = when (server) {
+            "Omega" -> "VidMoly"
+            else -> server
+        }
     }
 }
