@@ -21,7 +21,7 @@ class Animenosub :
     override fun getEpisodeName(element: Element, epNum: String): String {
         val episodeTitle = element.selectFirst("div.epl-title")?.text() ?: ""
         val complement = if (episodeTitle.contains("Episode $epNum", true)) "" else episodeTitle
-        return "Ep. $epNum $complement".trim()
+        return if (complement.isBlank()) "Ep. $epNum" else "Ep. $epNum $complement"
     }
 
     // ============================ Video Links =============================
@@ -55,7 +55,6 @@ class Animenosub :
     // ============================== Settings ==============================
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
-        super.setupPreferenceScreen(screen)
         val videoTypePref = ListPreference(screen.context).apply {
             key = PREF_TYPE_KEY
             title = PREF_TYPE_TITLE
@@ -63,12 +62,7 @@ class Animenosub :
             entryValues = PREF_TYPE_VALUES
             setDefaultValue(PREF_TYPE_DEFAULT)
             summary = "%s"
-            setOnPreferenceChangeListener { _, newValue ->
-                val selected = newValue as String
-                val index = findIndexOfValue(selected)
-                val entry = entryValues[index] as String
-                preferences.edit().putString(key, entry).commit()
-            }
+
         }
         val videoServerPref = ListPreference(screen.context).apply {
             key = PREF_SERVER_KEY
@@ -77,12 +71,7 @@ class Animenosub :
             entryValues = PREF_SERVER_VALUES
             setDefaultValue(PREF_SERVER_DEFAULT)
             summary = "%s"
-            setOnPreferenceChangeListener { _, newValue ->
-                val selected = newValue as String
-                val index = findIndexOfValue(selected)
-                val entry = entryValues[index] as String
-                preferences.edit().putString(key, entry).commit()
-            }
+
         }
         screen.addPreference(videoTypePref)
         screen.addPreference(videoServerPref)
@@ -98,7 +87,7 @@ class Animenosub :
             compareBy(
                 { it.quality.contains(type, ignoreCase = true) },
                 { it.quality.contains(quality, ignoreCase = true) },
-                { it.quality.contains(mapPreferredServer(server), ignoreCase = true) },
+                { it.quality.contains(server, ignoreCase = true) },
             ),
         ).reversed()
     }
