@@ -18,31 +18,43 @@ class Animenosub :
         "https://animenosub.to",
     ) {
     // ============================== Episodes ==============================
-    override fun getEpisodeName(element: Element, epNum: String): String {
-        val episodeTitle = element.selectFirst("div.epl-title")?.text() ?: ""
-        val complement = if (episodeTitle.contains("Episode $epNum", true)) "" else episodeTitle
-        return if (complement.isBlank()) "Ep. $epNum" else "Ep. $epNum $complement"
-    }
-
+    override fun getEpisodeName(element: Element, epNum: String): String = element.selectFirst("div.epl-title")?.text()
+        ?.takeIf { !it.contains("Episode $epNum", true) }
+        .let {
+            listOfNotNull(
+                "Ep. $epNum",
+                it,
+            ).joinToString(" ")
+        }
     // ============================ Video Links =============================
 
     override fun getVideoList(url: String, name: String): List<Video> {
         val prefix = "$name - "
         return when {
-            url.contains("bysesayeveum") || url.contains("filemoon") ||
-                url.contains("fmoon") || url.contains("moonembed") -> {
+            listOf(
+                "bysesayeveum",
+                "filemoon",
+                "fmoon",
+                "moonembed",
+            ).any(url::contains) -> {
                 MoonExtractor(client, headers, baseUrl).videosFromUrl(url, prefix)
             }
             url.contains("vidmoly") -> {
                 VidMolyExtractor(client, headers).videosFromUrl(url, prefix)
             }
-            url.contains("streamwish") || url.contains("swdyu") -> {
+            listOf(
+                "streamwish",
+                "swdyu",
+            ).any(url::contains) -> {
                 val wishHeaders = headers.newBuilder()
                     .set("Referer", "$baseUrl/")
                     .build()
                 StreamWishExtractor(client, wishHeaders).videosFromUrl(url, prefix)
             }
-            url.contains("vtbe") || url.contains("vtube") -> {
+            listOf(
+                "vtbe",
+                "vtube",
+            ).any(url::contains) -> {
                 VtubeExtractor(client, headers).videosFromUrl(url, baseUrl, prefix)
             }
             url.contains("wolfstream") -> {
@@ -55,6 +67,7 @@ class Animenosub :
     // ============================== Settings ==============================
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        super.setupPreferenceScreen(screen)
         val videoTypePref = ListPreference(screen.context).apply {
             key = PREF_TYPE_KEY
             title = PREF_TYPE_TITLE
@@ -109,10 +122,5 @@ class Animenosub :
             "Vtube",
             "WolfStream",
         )
-
-        private fun mapPreferredServer(server: String): String = when (server) {
-            "Omega" -> "VidMoly"
-            else -> server
-        }
     }
 }
