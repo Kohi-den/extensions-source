@@ -55,10 +55,10 @@ class AV1Encodes : AnimeHttpSource(), ConfigurableAnimeSource {
         get() = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
 
     // ─── Client Optimization ─────────────────────────────────────────────────
-    // Overriding the dispatcher to allow 20 concurrent network requests
+    // Overriding the dispatcher to allow 10 concurrent network requests
     // so the N+1 cover fetcher runs instantly instead of queuing.
     override val client: OkHttpClient = network.client.newBuilder()
-        .dispatcher(Dispatcher().apply { maxRequestsPerHost = 20 })
+        .dispatcher(Dispatcher().apply { maxRequestsPerHost = 10 })
         .build()
 
     // ─── Headers ─────────────────────────────────────────────────────────────
@@ -291,22 +291,26 @@ class AV1Encodes : AnimeHttpSource(), ConfigurableAnimeSource {
                 async(Dispatchers.IO) {
                     try {
                         val detailUrl = baseUrl + anime.url
-                        val detailResp = client.newCall(GET(detailUrl, headers)).execute()
+                        client.newCall(GET(detailUrl, headers)).execute().use { detailResp ->
+                            if (detailResp.isSuccessful) {
+                                val detailHtml = detailResp.body.string()
 
-                        if (detailResp.isSuccessful) {
-                            val detailHtml = detailResp.body.string()
-
-                            // Use fast Regex matching first to save CPU processing power
-                            val ogMatch = Regex("""<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']""").find(detailHtml)
-                            if (ogMatch != null) {
-                                anime.thumbnail_url = ogMatch.groupValues[1]
-                            } else {
-                                val detailDoc = Jsoup.parse(detailHtml)
-                                val img = detailDoc.selectFirst("img.anime-poster, img.poster, .anime-hero img")
-                                anime.thumbnail_url = img?.attr("abs:data-src")?.ifBlank { img.attr("abs:src") }
+                                // Use fast Regex matching first to save CPU processing power
+                                val ogMatch =
+                                    Regex("""<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']""").find(
+                                        detailHtml
+                                    )
+                                if (ogMatch != null) {
+                                    anime.thumbnail_url = ogMatch.groupValues[1]
+                                } else {
+                                    val detailDoc = Jsoup.parse(detailHtml)
+                                    val img =
+                                        detailDoc.selectFirst("img.anime-poster, img.poster, .anime-hero img")
+                                    anime.thumbnail_url =
+                                        img?.attr("abs:data-src")?.ifBlank { img.attr("abs:src") }
+                                }
                             }
                         }
-                        detailResp.close()
                     } catch (_: Exception) {
                         // Silently ignore network failures to prevent breaking the list
                     }
