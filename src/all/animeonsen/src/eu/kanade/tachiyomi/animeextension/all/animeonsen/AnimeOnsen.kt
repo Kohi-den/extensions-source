@@ -39,7 +39,7 @@ class AnimeOnsen : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override val name = "AnimeOnsen"
 
-    override val baseUrl = "https://animeonsen.xyz"
+    override val baseUrl = "https://www.animeonsen.xyz"
 
     private val apiUrl = "https://api.animeonsen.xyz/v4"
 
@@ -193,7 +193,7 @@ class AnimeOnsen : ConfigurableAnimeSource, AnimeHttpSource() {
     }
 }
 
-const val AO_USER_AGENT = "Aniyomi/app (mobile)"
+const val AO_USER_AGENT = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Mobile Safari/537.36"
 private const val PREF_SUB_KEY = "preferred_subLang"
 private const val PREF_SUB_TITLE = "Preferred sub language"
 const val PREF_SUB_DEFAULT = "en-US"
