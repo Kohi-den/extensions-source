@@ -38,7 +38,9 @@ import java.net.URLEncoder
 import java.util.Locale
 
 @Suppress("SpellCheckingInspection")
-class AV1Encodes : AnimeHttpSource(), ConfigurableAnimeSource {
+class AV1Encodes :
+    AnimeHttpSource(),
+    ConfigurableAnimeSource {
 
     override val name = "AV1Encodes"
     override val baseUrl = "https://av1encodes.com"
@@ -74,20 +76,15 @@ class AV1Encodes : AnimeHttpSource(), ConfigurableAnimeSource {
     // STANDARD REQUESTS
     // ══════════════════════════════════════════════════════════════════════════
 
-    override fun animeDetailsRequest(anime: SAnime): Request {
-        return GET(baseUrl + anime.url, headers)
-    }
+    override fun animeDetailsRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
 
-    override fun episodeListRequest(anime: SAnime): Request {
-        return GET(baseUrl + anime.url, headers)
-    }
+    override fun episodeListRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
 
     // ══════════════════════════════════════════════════════════════════════════
     // UNIFIED LIST PARSER
     // ══════════════════════════════════════════════════════════════════════════
 
-    override fun popularAnimeRequest(page: Int): Request =
-        GET("$baseUrl/stats#top-downloads", headers)
+    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/stats#top-downloads", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val doc = response.asJsoup()
@@ -177,11 +174,9 @@ class AV1Encodes : AnimeHttpSource(), ConfigurableAnimeSource {
         return animes
     }
 
-    override fun latestUpdatesRequest(page: Int): Request =
-        GET("$baseUrl/airing/sub?page=$page", headers)
+    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/airing/sub?page=$page", headers)
 
-    override fun latestUpdatesParse(response: Response): AnimesPage =
-        parseUniversalList(response.asJsoup())
+    override fun latestUpdatesParse(response: Response): AnimesPage = parseUniversalList(response.asJsoup())
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         if (query.isNotBlank()) {
@@ -214,8 +209,7 @@ class AV1Encodes : AnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
-    override fun searchAnimeParse(response: Response): AnimesPage =
-        parseUniversalList(response.asJsoup())
+    override fun searchAnimeParse(response: Response): AnimesPage = parseUniversalList(response.asJsoup())
 
     private fun parseUniversalList(doc: Document): AnimesPage {
         val animesMap = mutableMapOf<String, SAnime>()
@@ -264,7 +258,7 @@ class AV1Encodes : AnimeHttpSource(), ConfigurableAnimeSource {
             if (anime.thumbnail_url == null) {
                 anime.thumbnail_url = getListImageUrl(a)
                     ?: a.parent()?.let { extractBg(it) }
-                    ?: a.parent()?.parent()?.let { extractBg(it) }
+                        ?: a.parent()?.parent()?.let { extractBg(it) }
             }
         }
 
@@ -298,7 +292,7 @@ class AV1Encodes : AnimeHttpSource(), ConfigurableAnimeSource {
                                 // Use fast Regex matching first to save CPU processing power
                                 val ogMatch =
                                     Regex("""<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']""").find(
-                                        detailHtml
+                                        detailHtml,
                                     )
                                 if (ogMatch != null) {
                                     anime.thumbnail_url = ogMatch.groupValues[1]
@@ -372,7 +366,7 @@ class AV1Encodes : AnimeHttpSource(), ConfigurableAnimeSource {
             val img = doc.selectFirst("img.anime-poster, img.poster, .anime-hero img, [class*='poster'] img, [class*='hero'] img, .detail-page img, main img")
             thumbnail_url = img?.attr("abs:data-src")?.ifBlank { img.attr("abs:src") }
                 ?: doc.selectFirst("meta[property=og:image]")?.attr("content")
-                ?: extractBg(doc.selectFirst(".anime-poster, .poster, .anime-hero, [class*='poster'], [class*='hero']") ?: doc)
+                    ?: extractBg(doc.selectFirst(".anime-poster, .poster, .anime-hero, [class*='poster'], [class*='hero']") ?: doc)
 
             description = doc.selectFirst(".anime-synopsis, .synopsis, .description, [class*='synopsis'], [class*='description'], [class*='overview'], .desc")?.text()?.trim()
             genre = doc.select(".genre-tag, .tag, a[href*='/genre/'], a[href*='/tag/'], [class*='genre'] a, [class*='tag']:not(script):not(style)").joinToString { it.text().trim() }.ifBlank { null }
@@ -441,23 +435,18 @@ class AV1Encodes : AnimeHttpSource(), ConfigurableAnimeSource {
 
     private fun extractFilenames(html: String): List<String> {
         val filenames = mutableSetOf<String>()
-        val decodedHtml = try { URLDecoder.decode(html, "UTF-8") } catch (_: Exception) { html }
-
         val addDecoded = { fn: String ->
             val cleanFn = try { URLDecoder.decode(fn.trim(), "UTF-8") } catch (_: Exception) { fn.trim() }
             if (cleanFn.isNotBlank() && !cleanFn.contains("/")) {
                 filenames.add(cleanFn)
             }
         }
-
         val doc = Jsoup.parse(html)
         doc.select("a[href*='/download/']").forEach {
             addDecoded(it.attr("href").substringAfterLast("/").substringBefore("?"))
         }
-
         val mkvRegex = Regex("""([a-zA-Z0-9_ \-\[\]().%]+?\.(?:mkv|mp4))""", RegexOption.IGNORE_CASE)
         mkvRegex.findAll(html).forEach { addDecoded(it.groupValues[1]) }
-        mkvRegex.findAll(decodedHtml).forEach { addDecoded(it.groupValues[1]) }
 
         return filenames.toList()
     }
@@ -475,15 +464,14 @@ class AV1Encodes : AnimeHttpSource(), ConfigurableAnimeSource {
         }
     }
 
-    private fun parseEpisodeNumber(filename: String): Float {
-        return Regex("""\[(?:S\d+-)?E(\d+)]""").find(filename)?.groupValues?.get(1)?.toFloatOrNull() ?: 1f
-    }
+    private fun parseEpisodeNumber(filename: String): Float = Regex("""\[(?:S\d+-)?E(\d+)]""").find(filename)?.groupValues?.get(1)?.toFloatOrNull() ?: 1f
 
     // ══════════════════════════════════════════════════════════════════════════
     // VIDEO LIST
     // ══════════════════════════════════════════════════════════════════════════
 
-    override fun videoListRequest(episode: SEpisode) = GET(episode.url)
+    override fun videoListRequest(episode: SEpisode) =
+        GET(baseUrl + episode.url, headers)
     override fun videoListParse(response: Response): List<Video> = emptyList()
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
