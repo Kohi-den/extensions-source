@@ -92,15 +92,25 @@ class UAKino : ParsedAnimeHttpSource() {
     override fun searchAnimeNextPageSelector() = nextPageSelector
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+
         val body = FormBody.Builder()
             .add("do", "search")
             .add("subaction", "search")
-            .add("story", query)
+            .add("story", query.replace(" ", "+"))
             .build()
-        return POST(baseUrl, body = body)
+
+        return POST(
+            "$baseUrl/ua/",
+            headers = headers.newBuilder()
+                .add("Referer", baseUrl)
+                .add("User-Agent", "Mozilla/5.0")
+                .add("Content-Type", "application/x-www-form-urlencoded")
+                .build(),
+            body = body,
+        )
     }
 
-    override fun searchAnimeSelector() = animeSelector
+    override fun searchAnimeSelector() = "div.movie-item.short-item"
 
     // ============================== Episode ===============================
 
