@@ -92,7 +92,6 @@ class UAKino : ParsedAnimeHttpSource() {
     override fun searchAnimeNextPageSelector() = nextPageSelector
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-
         val body = FormBody.Builder()
             .add("do", "search")
             .add("subaction", "search")
