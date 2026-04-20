@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.util.asJsoup
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import okhttp3.FormBody
+import okhttp3.Headers
 import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONObject
@@ -28,11 +29,11 @@ class UAKino : ParsedAnimeHttpSource() {
     private val animeSelector = "div.movie-item"
     private val nextPageSelector = "a:contains(Далі)"
 
-    override val baseUrl = "https://uakino.club"
+    override val baseUrl = "https://uakino.best"
     private val animeUrl = "/animeukr"
     private val popularUrl = "/f/c.year=1921,2024/sort=rating;desc"
 
-    private val episodesAPI = "https://uakino.club/engine/ajax/playlists.php?news_id=%s&xfield=playlist" // %s - ID title
+    private val episodesAPI = "https://uakino.best/engine/ajax/playlists.php?news_id=%s&xfield=playlist" // %s - ID title
 
     // =========================== Anime Details ============================
 
@@ -43,7 +44,7 @@ class UAKino : ParsedAnimeHttpSource() {
 
         // Poster can be /upload... or https://...
         val posterUrl = document.select("a[data-fancybox=gallery]").attr("href")
-        if (posterUrl.contains("https://uakino.club")) {
+        if (posterUrl.contains("https://uakino.best")) {
             anime.thumbnail_url = posterUrl
         } else {
             anime.thumbnail_url = baseUrl + posterUrl
@@ -116,13 +117,34 @@ class UAKino : ParsedAnimeHttpSource() {
         var titleID = animePage.select("input[id=post_id]").attr("value")
 
         // Do call
-        val episodesList = client.newCall(GET(episodesAPI.format(titleID)))
+        val episodesList = client.newCall(
+            GET(
+                episodesAPI.format(titleID),
+                headers = Headers.Builder()
+                    .add("Referer", baseUrl)
+                    .add("X-Requested-With", "XMLHttpRequest")
+                    .add("User-Agent", "Mozilla/5.0")
+                    .build(),
+            ),
+        )
             .execute()
             .body.string()
 
         // Parse JSON
         Log.d("episodeListParse", episodesAPI.format(titleID))
-        val jsonObject = JSONTokener(episodesList).nextValue() as JSONObject
+        val parsed = try {
+            JSONTokener(episodesList).nextValue()
+        } catch (e: Exception) {
+            Log.e("UAKino", "JSON parse error: $episodesList")
+            return emptyList()
+        }
+
+        if (parsed !is JSONObject) {
+            Log.e("UAKino", "Invalid JSON response: $episodesList")
+            return emptyList()
+        }
+
+        val jsonObject = parsed
 
         // List episodes
         val episodeList = mutableListOf<SEpisode>()
@@ -131,8 +153,8 @@ class UAKino : ParsedAnimeHttpSource() {
         if (jsonObject.getBoolean("success")) {
             Jsoup.parse(jsonObject.getString("response")).select("div.playlists-videos li").forEach {
                 val episode = SEpisode.create()
-                episode.name = it.text() + " " + it.select("li").attr("data-voice")
-                var episodeUrl = it.select("li").attr("data-file")
+                episode.name = it.text() + " " + it.attr("data-voice")
+                var episodeUrl = it.attr("data-file")
 
                 // Can be without https:
                 if (episodeUrl.contains("https://")) {
@@ -162,7 +184,6 @@ class UAKino : ParsedAnimeHttpSource() {
                 for (itemVoice in episodesJSON) { // Voice
                     for (itemSeason in itemVoice.folder) { // Season
                         for (itemVideo in itemSeason.folder) { // Video
-
                             val episode = SEpisode.create()
                             episode.name = "${itemSeason.title} ${itemVideo.title} ${itemVoice.title}" // "Сезон 1 Серія 1 Озвучення"
                             episode.url = itemVideo.file
@@ -190,22 +211,41 @@ class UAKino : ParsedAnimeHttpSource() {
         var m3u8Episode = episode.url
         if (!episode.url.contains(".m3u8")) { // If not from another player
             // Get player script
-            val playerScript = client.newCall(GET(episode.url)).execute().asJsoup().select("script").html()
+            val document = client.newCall(GET(episode.url))
+                .execute()
+                .asJsoup()
+
+            val scripts = document.select("script")
 
             // Get m3u8 url
-            val regexM3u8 = """file:"(.*?)"""".toRegex()
-            m3u8Episode = regexM3u8.find(playerScript)!!.value.substring(6).dropLast(1) // Drop file:"..."
+            val regexM3u8 = """file\s*:\s*["']([^"']+)["']""".toRegex()
+
+            for (script in scripts) {
+                val data = script.data()
+                val match = regexM3u8.find(data)
+                if (match != null) {
+                    m3u8Episode = match.groupValues[1]
+                    break
+                }
+            }
         }
 
         // Parse m3u (480p/720p/1080p)
         // GET Calll m3u8 url
+        if (!m3u8Episode.contains(".m3u8")) {
+            Log.e("UAKino", "No m3u8 found: $m3u8Episode")
+            return emptyList()
+        }
+
         val masterPlaylist = client.newCall(GET(m3u8Episode)).execute().body.string()
         // Parse quality and videoUrl from m3u8 file
         masterPlaylist.substringAfter("#EXT-X-STREAM-INF:").split("#EXT-X-STREAM-INF:").forEach {
             val quality = it.substringAfter("RESOLUTION=").substringAfter("x").substringBefore(",") + "p"
             val videoUrl = it.substringAfter("\n").substringBefore("\n")
 
-            videoList.add(Video(videoUrl, quality, videoUrl))
+            if (videoUrl.isNotBlank()) {
+                videoList.add(Video(videoUrl, quality, videoUrl))
+            }
         }
 
         return videoList
