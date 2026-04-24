@@ -75,7 +75,6 @@ class Animenosub :
             entryValues = PREF_TYPE_VALUES
             setDefaultValue(PREF_TYPE_DEFAULT)
             summary = "%s"
-
         }
         val videoServerPref = ListPreference(screen.context).apply {
             key = PREF_SERVER_KEY
@@ -84,7 +83,6 @@ class Animenosub :
             entryValues = PREF_SERVER_VALUES
             setDefaultValue(PREF_SERVER_DEFAULT)
             summary = "%s"
-
         }
         screen.addPreference(videoTypePref)
         screen.addPreference(videoServerPref)
