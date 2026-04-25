@@ -2,8 +2,8 @@ package eu.kanade.tachiyomi.animeextension.en.animenosub.extractors
 
 import android.util.Base64
 import android.util.Log
-import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.animesource.model.Video
+import eu.kanade.tachiyomi.lib.playlistutils.PlaylistUtils
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import kotlinx.serialization.SerialName
@@ -34,6 +34,7 @@ class MoonExtractor(
     fun videosFromUrl(url: String, prefix: String): List<Video> {
         return try {
             val userAgent = headers["User-Agent"]
+                ?.takeIf(String::isNotBlank)
                 ?: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
             val httpUrl = url.toHttpUrl()
@@ -46,10 +47,8 @@ class MoonExtractor(
                 .set("Referer", "$siteUrl/")
                 .set("Origin", siteUrl)
                 .set("User-Agent", userAgent)
-                .set("Accept", "application/json, text/plain, */*")
                 .build()
 
-            // Fix: use .use{} to prevent connection leaks
             val detailsBody = client.newCall(
                 GET("https://$host/api/videos/$videoId/embed/details", detailsHeaders),
             ).execute().use { it.body.string() }
@@ -91,40 +90,32 @@ class MoonExtractor(
                 .set("Referer", embedUrl)
                 .set("Origin", "https://$embedHost")
                 .set("User-Agent", userAgent)
-                .set("Accept", "application/json, text/plain, */*")
-                .set("Content-Type", "application/json")
                 .set("X-Embed-Origin", siteUrl.removePrefix("https://"))
                 .set("X-Embed-Parent", "https://$host/e/$videoId")
                 .set("X-Embed-Referer", "$siteUrl/")
-                .set("Sec-Fetch-Dest", "empty")
-                .set("Sec-Fetch-Mode", "cors")
-                .set("Sec-Fetch-Site", "same-origin")
                 .build()
 
             val requestBody = json.encodeToString(fingerprintBody)
                 .toRequestBody("application/json".toMediaType())
             val playbackUrl = "https://$embedHost/api/videos/$videoId/embed/playback"
 
-            // Fix: use .use{} to prevent connection leaks
             val playbackBodyStr = client.newCall(POST(playbackUrl, playbackHeaders, requestBody))
                 .execute().use { it.body.string() }
 
             val response = json.decodeFromString<PlaybackResponse>(playbackBodyStr)
 
-            val masterUrl = when {
-                !response.sources.isNullOrEmpty() -> {
-                    response.sources.firstOrNull()?.let { it.url ?: it.file }
+            val masterUrl = (
+                response.sources?.firstOrNull()?.let { it.url ?: it.file }
+                    ?: response.playback?.let { playback ->
+                        val decrypted = decryptPayload(playback)
+                        json.decodeFromString<InnerResponse>(decrypted)
+                            .sources?.firstOrNull()?.let { it.url ?: it.file }
+                    }
+                )?.takeIf(String::isNotBlank)
+                ?: run {
+                    Log.e("MoonExtractor", "No masterUrl found.")
+                    return emptyList()
                 }
-                response.playback != null -> {
-                    val decrypted = decryptPayload(response.playback)
-                    json.decodeFromString<InnerResponse>(decrypted)
-                        .sources?.firstOrNull()?.let { it.url ?: it.file }
-                }
-                else -> null
-            }?.takeIf { it.isNotBlank() } ?: run {
-                Log.e("MoonExtractor", "No masterUrl found in: ${playbackBodyStr.take(300)}")
-                return emptyList()
-            }
 
             val videoHeaders = Headers.Builder()
                 .set("Referer", "https://$embedHost/")
@@ -134,10 +125,15 @@ class MoonExtractor(
 
             playlistUtils.extractFromHls(
                 playlistUrl = masterUrl,
-                referer = "https://$embedHost/",
                 masterHeaders = videoHeaders,
                 videoHeaders = videoHeaders,
-                videoNameGen = { quality -> "${prefix}Moon - $quality" },
+                videoNameGen = { quality ->
+                    listOfNotNull(
+                        prefix.trim().takeIf(String::isNotBlank),
+                        "Moon -".takeIf { !prefix.contains("Moon", true) },
+                        quality.trim(),
+                    ).joinToString(" ")
+                },
             )
         } catch (e: Exception) {
             Log.e("MoonExtractor", "MoonExtractor failed: ${e.message}", e)
@@ -152,11 +148,9 @@ class MoonExtractor(
         val key = SecretKeySpec(keyBytes, "AES")
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, ivBytes))
-        // Fix: explicit UTF-8 charset to avoid system encoding issues
         return cipher.doFinal(cipherBytes).toString(Charsets.UTF_8)
     }
 
-    // Fix: use Base64.URL_SAFE flag directly — no need to manually replace - and _
     private fun decodeB64Url(input: String): ByteArray {
         val padding = when (input.length % 4) {
             2 -> "=="
