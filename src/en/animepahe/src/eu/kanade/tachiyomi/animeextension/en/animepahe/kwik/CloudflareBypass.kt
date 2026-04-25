@@ -16,19 +16,23 @@ data class CloudFlareBypassResult(
 class CloudflareBypass(private val context: Context) {
 
     fun getCookies(pageUrl: String): CloudFlareBypassResult? {
+        CookieManager.getInstance().removeAllCookies(null)
+        CookieManager.getInstance().flush()
+
         val latch = CountDownLatch(1)
         var result: CloudFlareBypassResult? = null
+        var webView: WebView? = null
 
         // We MUST jump to the Main Thread because WebView is UI-bound
         Handler(Looper.getMainLooper()).post {
-            val webView = WebView(context)
+            webView = WebView(context)
             webView.settings.javaScriptEnabled = true
             webView.settings.domStorageEnabled = true
             val defaultUserAgent = webView.settings.userAgentString
 
             webView.webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, loadedUrl: String) {
-                    pollForClearance(view, pageUrl, defaultUserAgent) { bypassResult ->
+                    pollForClearance(pageUrl, defaultUserAgent) { bypassResult ->
                         result = bypassResult
                         latch.countDown() // Release the background thread
                     }
@@ -40,12 +44,18 @@ class CloudflareBypass(private val context: Context) {
         }
 
         // Wait here for up to 30 seconds
-        latch.await(30, TimeUnit.SECONDS)
+        try {
+            latch.await(30, TimeUnit.SECONDS)
+        } finally {
+            Handler(Looper.getMainLooper()).post {
+                webView?.destroy()
+            }
+        }
+
         return result
     }
 
     private fun pollForClearance(
-        view: WebView,
         url: String,
         userAgent: String,
         onComplete: (CloudFlareBypassResult) -> Unit,
@@ -58,7 +68,6 @@ class CloudflareBypass(private val context: Context) {
 
                 if (cookies?.contains("cf_clearance=") == true) {
                     val finalResult = CloudFlareBypassResult(cookies, userAgent)
-                    view.destroy()
                     onComplete(finalResult)
                 } else {
                     handler.postDelayed(this, 500)
