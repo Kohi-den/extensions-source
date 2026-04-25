@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.animeextension.en.animepahe.dto.EpisodeDto
 import eu.kanade.tachiyomi.animeextension.en.animepahe.dto.LatestAnimeDto
 import eu.kanade.tachiyomi.animeextension.en.animepahe.dto.ResponseDto
 import eu.kanade.tachiyomi.animeextension.en.animepahe.dto.SearchResultDto
+import eu.kanade.tachiyomi.animeextension.en.animepahe.kwik.KwikExtractor
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -29,8 +30,10 @@ import okhttp3.Request
 import okhttp3.Response
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import uy.kohesive.injekt.injectLazy
 import java.text.SimpleDateFormat
 import java.util.Locale
+import kotlin.getValue
 import kotlin.math.ceil
 import kotlin.math.floor
 
@@ -45,6 +48,8 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
     override val client = network.client.newBuilder()
         .addInterceptor(interceptor)
         .build()
+
+    private val appCtx: Application by injectLazy()
 
     override val name = "AnimePahe"
 
@@ -84,10 +89,10 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
         val document = response.asJsoup()
         return SAnime.create().apply {
             title = document.selectFirst("div.title-wrapper > h1 > span")!!.text()
-            author = document.selectFirst("div.col-sm-4.anime-info p:contains(Studio:)")
+            author = document.selectFirst("div.col-sm-4.anime-info p:contains(Studios:)")
                 ?.text()
-                ?.replace("Studio: ", "")
-            status = parseStatus(document.selectFirst("div.col-sm-4.anime-info p:contains(Status:) strong")?.text())
+                ?.replace("Studios: ", "")
+            status = parseStatus(document.selectFirst("div.col-sm-4.anime-info p:contains(Status:) strong")?.text()?.replace("Status: ", ""))
             thumbnail_url = document.selectFirst("div.anime-poster a")!!.attr("href")
             genre = document.select("div.anime-genre ul li").joinToString { it.text() }
             val synonyms = document.selectFirst("div.col-sm-4.anime-info p:contains(Synonyms:)")
@@ -265,19 +270,17 @@ class AnimePahe : ConfigurableAnimeSource, AnimeHttpSource() {
         val extractor = KwikExtractor(client)
 
         try {
-            val (resolvedUrl, headers) = if (useHLS) {
-                val hlsUrl = extractor.getHlsStreamUrl(video.videoUrl, referer = baseUrl)
-                hlsUrl to Headers.headersOf("referer", "https://kwik.cx/")
+            val resolvedUrl = if (useHLS) {
+                extractor.getHlsStreamUrl(video.videoUrl, referer = baseUrl)
             } else {
-                val streamUrl = extractor.getStreamUrlFromKwik(video.videoUrl)
-                streamUrl to Headers.headersOf("referer", "https://kwik.cx/")
+                extractor.getStreamUrlFromKwik(appCtx, video.videoUrl)
             }
 
             return Video(
                 videoUrl = resolvedUrl,
                 videoTitle = video.videoTitle,
                 resolution = video.resolution,
-                headers = headers,
+                headers = Headers.headersOf("referer", "https://kwik.cx/"),
                 preferred = video.preferred,
             )
         } catch (e: Exception) {
