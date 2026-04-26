@@ -38,7 +38,7 @@ import java.net.URLEncoder
 import java.util.Locale
 
 @Suppress("SpellCheckingInspection")
-class AV1Encodes :
+class Av1Encodes :
     AnimeHttpSource(),
     ConfigurableAnimeSource {
 
@@ -84,7 +84,8 @@ class AV1Encodes :
     // UNIFIED LIST PARSER
     // ══════════════════════════════════════════════════════════════════════════
 
-    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/stats#top-downloads", headers)
+    override fun popularAnimeRequest(page: Int): Request =
+        GET("$baseUrl/stats#top-downloads", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val doc = response.asJsoup()
@@ -111,14 +112,16 @@ class AV1Encodes :
             }
         }
 
-        val items = searchContext.select("a[href*='/anime/'], div[class*='card'], div[class*='item'], li")
-            .filter { el ->
-                val text = el.text().trim()
-                text.contains(Regex("""\[S\d""")) || text.length in 10..200
-            }
+        val items =
+            searchContext.select("a[href*='/anime/'], div[class*='card'], div[class*='item'], li")
+                .filter { el ->
+                    val text = el.text().trim()
+                    text.contains(Regex("""\[S\d""")) || text.length in 10..200
+                }
 
         items.forEach { el ->
-            val link = el.selectFirst("a[href*='/anime/']") ?: el.takeIf { it.tagName() == "a" && it.attr("href").contains("/anime/") }
+            val link = el.selectFirst("a[href*='/anime/']")
+                ?: el.takeIf { it.tagName() == "a" && it.attr("href").contains("/anime/") }
             if (link != null) {
                 val url = link.attr("href").let {
                     if (it.startsWith("http")) it.removePrefix(baseUrl) else it
@@ -156,7 +159,8 @@ class AV1Encodes :
                 .distinct()
                 .take(20)
                 .forEach { animeName ->
-                    val slug = animeName.lowercase(Locale.US).replace(Regex("[^a-z0-9]+"), "-").trim('-')
+                    val slug =
+                        animeName.lowercase(Locale.US).replace(Regex("[^a-z0-9]+"), "-").trim('-')
                     if (slug.length >= 3 && seen.add("/anime/$slug")) {
                         animes.add(
                             SAnime.create().apply {
@@ -174,9 +178,11 @@ class AV1Encodes :
         return animes
     }
 
-    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/airing/sub?page=$page", headers)
+    override fun latestUpdatesRequest(page: Int): Request =
+        GET("$baseUrl/airing/sub?page=$page", headers)
 
-    override fun latestUpdatesParse(response: Response): AnimesPage = parseUniversalList(response.asJsoup())
+    override fun latestUpdatesParse(response: Response): AnimesPage =
+        parseUniversalList(response.asJsoup())
 
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         if (query.isNotBlank()) {
@@ -209,14 +215,16 @@ class AV1Encodes :
         }
     }
 
-    override fun searchAnimeParse(response: Response): AnimesPage = parseUniversalList(response.asJsoup())
+    override fun searchAnimeParse(response: Response): AnimesPage =
+        parseUniversalList(response.asJsoup())
 
     private fun parseUniversalList(doc: Document): AnimesPage {
         val animesMap = mutableMapOf<String, SAnime>()
         val elements = doc.select("a[href*='/anime/']")
 
         for (a in elements) {
-            val href = a.attr("href").let { if (it.startsWith("http")) it.removePrefix(baseUrl) else it }
+            val href =
+                a.attr("href").let { if (it.startsWith("http")) it.removePrefix(baseUrl) else it }
             if (href == "/anime" || href == "/anime/") continue
 
             val slug = href.substringAfter("/anime/").substringBefore("?")
@@ -232,7 +240,12 @@ class AV1Encodes :
             var titleText = a.text().trim()
 
             // Explicitly reject the text if it's an episode button
-            val isEpisodeButton = titleText.matches(Regex("""^(?:Watch\s+)?(?:Episode|Ep\.?)\s*\d+.*""", RegexOption.IGNORE_CASE))
+            val isEpisodeButton = titleText.matches(
+                Regex(
+                    """^(?:Watch\s+)?(?:Episode|Ep\.?)\s*\d+.*""",
+                    RegexOption.IGNORE_CASE,
+                ),
+            )
             if (isEpisodeButton) {
                 titleText = ""
             }
@@ -246,7 +259,9 @@ class AV1Encodes :
                         it.className().contains("item", ignoreCase = true)
                 } ?: a.parent()
 
-                titleText = container?.selectFirst("h1, h2, h3, h4, h5, .title, .anime-title, .name")?.text()?.trim() ?: ""
+                titleText =
+                    container?.selectFirst("h1, h2, h3, h4, h5, .title, .anime-title, .name")
+                        ?.text()?.trim() ?: ""
             }
 
             titleText = extractCleanTitle(titleText)
@@ -258,7 +273,7 @@ class AV1Encodes :
             if (anime.thumbnail_url == null) {
                 anime.thumbnail_url = getListImageUrl(a)
                     ?: a.parent()?.let { extractBg(it) }
-                        ?: a.parent()?.parent()?.let { extractBg(it) }
+                    ?: a.parent()?.parent()?.let { extractBg(it) }
             }
         }
 
@@ -267,7 +282,8 @@ class AV1Encodes :
         // Apply fast N+1 cover fetcher for Latest & Filters
         fetchMissingCovers(animes)
 
-        val hasNextPage = doc.selectFirst("a[rel=next], .pagination .next, a.next-page, .nav-links .next, [aria-label='Next page']") != null
+        val hasNextPage =
+            doc.selectFirst("a[rel=next], .pagination .next, a.next-page, .nav-links .next, [aria-label='Next page']") != null
         return AnimesPage(animes, hasNextPage)
     }
 
@@ -318,7 +334,8 @@ class AV1Encodes :
     // ══════════════════════════════════════════════════════════════════════════
 
     private fun extractCleanTitle(raw: String): String {
-        var cleaned = raw.replace(Regex("""\s*·\s*\d+\s*downloads?.*""", RegexOption.IGNORE_CASE), "")
+        var cleaned =
+            raw.replace(Regex("""\s*·\s*\d+\s*downloads?.*""", RegexOption.IGNORE_CASE), "")
         cleaned = cleaned.replace(Regex("""^\[[a-zA-Z0-9_\-]+]\s*"""), "")
         cleaned = cleaned.replace(Regex("""\s*\[\d{3,4}p].*""", RegexOption.IGNORE_CASE), "")
         cleaned = cleaned.replace(Regex("""\.(mkv|mp4)$""", RegexOption.IGNORE_CASE), "")
@@ -328,7 +345,8 @@ class AV1Encodes :
     private fun getListImageUrl(anchor: Element): String? {
         val img = anchor.selectFirst("img")
         if (img != null) {
-            val url = img.attr("abs:data-src").ifBlank { img.attr("abs:data-lazy-src") }.ifBlank { img.attr("abs:src") }
+            val url = img.attr("abs:data-src").ifBlank { img.attr("abs:data-lazy-src") }
+                .ifBlank { img.attr("abs:src") }
             if (url.isNotBlank()) return url
         }
 
@@ -361,17 +379,28 @@ class AV1Encodes :
     override fun animeDetailsParse(response: Response): SAnime {
         val doc = response.asJsoup()
         return SAnime.create().apply {
-            title = doc.selectFirst(".anime-hero h1, h1.anime-title, [class*='anime-hero'] h1, [class*='detail'] h1, main h1, h1")?.text()?.trim() ?: ""
+            title =
+                doc.selectFirst(".anime-hero h1, h1.anime-title, [class*='anime-hero'] h1, [class*='detail'] h1, main h1, h1")
+                    ?.text()?.trim() ?: ""
 
-            val img = doc.selectFirst("img.anime-poster, img.poster, .anime-hero img, [class*='poster'] img, [class*='hero'] img, .detail-page img, main img")
+            val img =
+                doc.selectFirst("img.anime-poster, img.poster, .anime-hero img, [class*='poster'] img, [class*='hero'] img, .detail-page img, main img")
             thumbnail_url = img?.attr("abs:data-src")?.ifBlank { img.attr("abs:src") }
                 ?: doc.selectFirst("meta[property=og:image]")?.attr("content")
-                    ?: extractBg(doc.selectFirst(".anime-poster, .poster, .anime-hero, [class*='poster'], [class*='hero']") ?: doc)
+                ?: extractBg(
+                    doc.selectFirst(".anime-poster, .poster, .anime-hero, [class*='poster'], [class*='hero']")
+                        ?: doc,
+                )
 
-            description = doc.selectFirst(".anime-synopsis, .synopsis, .description, [class*='synopsis'], [class*='description'], [class*='overview'], .desc")?.text()?.trim()
-            genre = doc.select(".genre-tag, .tag, a[href*='/genre/'], a[href*='/tag/'], [class*='genre'] a, [class*='tag']:not(script):not(style)").joinToString { it.text().trim() }.ifBlank { null }
+            description =
+                doc.selectFirst(".anime-synopsis, .synopsis, .description, [class*='synopsis'], [class*='description'], [class*='overview'], .desc")
+                    ?.text()?.trim()
+            genre =
+                doc.select(".genre-tag, .tag, a[href*='/genre/'], a[href*='/tag/'], [class*='genre'] a, [class*='tag']:not(script):not(style)")
+                    .joinToString { it.text().trim() }.ifBlank { null }
             author = doc.selectFirst(".studio, .studio-name, [class*='studio']")?.text()?.trim()
-            status = if (doc.selectFirst("[class*='airing'], .status-airing, .airing-badge") != null) SAnime.ONGOING else SAnime.COMPLETED
+            status =
+                if (doc.selectFirst("[class*='airing'], .status-airing, .airing-badge") != null) SAnime.ONGOING else SAnime.COMPLETED
         }
     }
 
@@ -386,10 +415,11 @@ class AV1Encodes :
         val urlPath = response.request.url.encodedPath
         val slug = urlPath.split("/").last { it.isNotBlank() }
 
-        val seasons = doc.select(".season-tab[data-season], .season-option[data-season], [data-season]")
-            .map { it.attr("data-season") }
-            .distinct()
-            .ifEmpty { listOf("1") }
+        val seasons =
+            doc.select(".season-tab[data-season], .season-option[data-season], [data-season]")
+                .map { it.attr("data-season") }
+                .distinct()
+                .ifEmpty { listOf("1") }
 
         val encodedRes = prefQuality.replace(" ", "%20")
         val allEpisodes = mutableListOf<SEpisode>()
@@ -436,7 +466,11 @@ class AV1Encodes :
     private fun extractFilenames(html: String): List<String> {
         val filenames = mutableSetOf<String>()
         val addDecoded = { fn: String ->
-            val cleanFn = try { URLDecoder.decode(fn.trim(), "UTF-8") } catch (_: Exception) { fn.trim() }
+            val cleanFn = try {
+                URLDecoder.decode(fn.trim(), "UTF-8")
+            } catch (_: Exception) {
+                fn.trim()
+            }
             if (cleanFn.isNotBlank() && !cleanFn.contains("/")) {
                 filenames.add(cleanFn)
             }
@@ -445,7 +479,8 @@ class AV1Encodes :
         doc.select("a[href*='/download/']").forEach {
             addDecoded(it.attr("href").substringAfterLast("/").substringBefore("?"))
         }
-        val mkvRegex = Regex("""([a-zA-Z0-9_ \-\[\]().%]+?\.(?:mkv|mp4))""", RegexOption.IGNORE_CASE)
+        val mkvRegex =
+            Regex("""([a-zA-Z0-9_ \-\[\]().%]+?\.(?:mkv|mp4))""", RegexOption.IGNORE_CASE)
         mkvRegex.findAll(html).forEach { addDecoded(it.groupValues[1]) }
 
         return filenames.toList()
@@ -456,15 +491,20 @@ class AV1Encodes :
         return if (epMatch != null) {
             val e = epMatch.groupValues[1]
             val titlePart = epMatch.groupValues[2].trim()
-            val audioTag = Regex("""\[(Dual|Sub|Dub|English Dub)]""", RegexOption.IGNORE_CASE).find(filename)?.groupValues?.get(1) ?: ""
+            val audioTag = Regex(
+                """\[(Dual|Sub|Dub|English Dub)]""",
+                RegexOption.IGNORE_CASE,
+            ).find(filename)?.groupValues?.get(1) ?: ""
             "Season $season Ep $e - $titlePart${if (audioTag.isNotBlank()) " [$audioTag]" else ""}"
         } else {
-            val cleanName = filename.replace(Regex("""\[\d{3,4}p].*"""), "").substringBeforeLast(".").trim()
+            val cleanName =
+                filename.replace(Regex("""\[\d{3,4}p].*"""), "").substringBeforeLast(".").trim()
             if (season != "1" && season.isNotBlank()) "Season $season - $cleanName" else cleanName
         }
     }
 
-    private fun parseEpisodeNumber(filename: String): Float = Regex("""\[(?:S\d+-)?E(\d+)]""").find(filename)?.groupValues?.get(1)?.toFloatOrNull() ?: 1f
+    private fun parseEpisodeNumber(filename: String): Float =
+        Regex("""\[(?:S\d+-)?E(\d+)]""").find(filename)?.groupValues?.get(1)?.toFloatOrNull() ?: 1f
 
     // ══════════════════════════════════════════════════════════════════════════
     // VIDEO LIST
@@ -472,6 +512,7 @@ class AV1Encodes :
 
     override fun videoListRequest(episode: SEpisode) =
         GET(baseUrl + episode.url, headers)
+
     override fun videoListParse(response: Response): List<Video> = emptyList()
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
@@ -505,8 +546,11 @@ class AV1Encodes :
                 Track("${ddl.streamLink ?: ""}#sub$i", "$lang (${sub.format ?: "SUB"})")
             } ?: emptyList()
 
-            val resLabel = Regex("""\[(\d+p)]""").find(ddl.fileName ?: "")?.groupValues?.get(1) ?: prefQuality
-            val audioLabel = ddl.audioDetails?.audio?.mapNotNull { it.language }?.distinct()?.joinToString("/")?.let { " [$it]" } ?: ""
+            val resLabel =
+                Regex("""\[(\d+p)]""").find(ddl.fileName ?: "")?.groupValues?.get(1) ?: prefQuality
+            val audioLabel =
+                ddl.audioDetails?.audio?.mapNotNull { it.language }?.distinct()?.joinToString("/")
+                    ?.let { " [$it]" } ?: ""
             val sizeLabel = ddl.fileSize?.let { " · $it" } ?: ""
             val qualLabel = "AV1 · $resLabel$audioLabel$sizeLabel"
 
@@ -514,7 +558,14 @@ class AV1Encodes :
                 videos.add(Video(url, "$qualLabel · Stream", url, subtitleTracks = subtitleTracks))
             }
             ddl.downloadLink?.takeIf { it.isNotBlank() && it != ddl.streamLink }?.let { url ->
-                videos.add(Video(url, "$qualLabel · Direct DL", url, subtitleTracks = subtitleTracks))
+                videos.add(
+                    Video(
+                        url,
+                        "$qualLabel · Direct DL",
+                        url,
+                        subtitleTracks = subtitleTracks,
+                    ),
+                )
             }
 
             videos
@@ -533,8 +584,15 @@ class AV1Encodes :
         TypeFilter(),
     )
 
-    private class SortFilter : AnimeFilter.Select<String>("Sort By", arrayOf("Latest Added", "A–Z", "Z–A", "Episode Count"))
-    private class TypeFilter : AnimeFilter.Select<String>("Audio Type (overrides Sort)", arrayOf("All", "Sub only (Airing)", "Dual audio (Airing)"))
+    private class SortFilter : AnimeFilter.Select<String>(
+        "Sort By",
+        arrayOf("Latest Added", "A–Z", "Z–A", "Episode Count"),
+    )
+
+    private class TypeFilter : AnimeFilter.Select<String>(
+        "Audio Type (overrides Sort)",
+        arrayOf("All", "Sub only (Airing)", "Dual audio (Airing)"),
+    )
 
     // ══════════════════════════════════════════════════════════════════════════
     // PREFERENCES
@@ -557,7 +615,12 @@ class AV1Encodes :
 
     override fun List<Video>.sort(): List<Video> {
         val q = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
-        return this.sortedWith(compareBy({ it.quality.contains(q) }, { it.quality.replace("p", "").toIntOrNull() ?: 0 })).reversed()
+        return this.sortedWith(
+            compareBy(
+                { it.quality.contains(q) },
+                { it.quality.replace("p", "").toIntOrNull() ?: 0 },
+            ),
+        ).reversed()
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -594,7 +657,8 @@ class AV1Encodes :
     )
 
     companion object {
-        private const val DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        private const val DESKTOP_UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         private const val PREF_QUALITY_KEY = "preferred_quality"
         private const val PREF_QUALITY_DEFAULT = "1920 x 1080"
         private val QUALITY_ENTRIES = arrayOf("1080p", "720p", "480p", "360p")

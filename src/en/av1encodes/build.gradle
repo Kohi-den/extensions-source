@@ -1,6 +1,6 @@
 ext {
     extName = 'AV1Encodes'
-    extClass = '.AV1Encodes'
+    extClass = '.Av1Encodes'
     extVersionCode = 1
     isNsfw = false
 }
