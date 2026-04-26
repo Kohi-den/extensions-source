@@ -1,0 +1,8 @@
+ext {
+    extName = 'AV1Encodes'
+    extClass = '.Av1Encodes'
+    extVersionCode = 1
+    isNsfw = false
+}
+
+apply from: "$rootDir/common.gradle"
