@@ -1,0 +1,19 @@
+ext {
+    extName = 'VerAni.me'
+    extClass = '.VerAnime'
+    extVersionCode = 1
+}
+
+apply from: "$rootDir/common.gradle"
+
+dependencies {
+    implementation(project(':lib:universal-extractor'))
+    implementation(project(':lib:mp4upload-extractor'))
+    implementation(project(':lib:pixeldrain-extractor'))
+    implementation(project(':lib:voe-extractor'))
+    implementation(project(':lib:streamwish-extractor'))
+    implementation(project(':lib:streamhidevid-extractor'))
+    implementation(project(':lib:vidguard-extractor'))
+    implementation(project(':lib:okru-extractor'))
+    implementation(project(':lib:yourupload-extractor'))
+}
