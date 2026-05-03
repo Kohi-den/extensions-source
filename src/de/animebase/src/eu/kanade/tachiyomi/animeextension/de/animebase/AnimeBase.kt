@@ -1,9 +1,10 @@
 package eu.kanade.tachiyomi.animeextension.de.animebase
 
 import android.app.Application
+import android.net.Uri
+import android.util.Log
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
-import eu.kanade.tachiyomi.animeextension.de.animebase.extractors.UnpackerExtractor
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -11,13 +12,17 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.ParsedAnimeHttpSource
-import eu.kanade.tachiyomi.lib.streamwishextractor.StreamWishExtractor
-import eu.kanade.tachiyomi.lib.vidguardextractor.VidGuardExtractor
+import eu.kanade.tachiyomi.lib.luluextractor.LuluExtractor
+import eu.kanade.tachiyomi.lib.upstreamextractor.UpstreamExtractor
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.util.asJsoup
-import eu.kanade.tachiyomi.util.parallelCatchingFlatMapBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.FormBody
 import okhttp3.Request
 import okhttp3.Response
@@ -41,14 +46,36 @@ class AnimeBase : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // ============================== Popular ===============================
-    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/favorites", headers)
+    val limit = 24
 
-    override fun popularAnimeSelector() = "div.table-responsive > a"
+    override fun popularAnimeRequest(page: Int) = GET("$baseUrl/api/top-on-animebase?offset=${limit * (page - 1)}&limit=$limit", headers)
+
+    override fun popularAnimeParse(response: Response): AnimesPage {
+        val json = Json.parseToJsonElement(response.body.string())
+        val animes = mutableListOf<SAnime>()
+        for (anime in json.jsonObject["data"]?.jsonArray!!.map { it.jsonObject }) {
+            try {
+                animes += SAnime.create().apply {
+                    val cat = anime["category"]!!.jsonPrimitive.content
+                    val slug = anime["nameSlug"]!!.jsonPrimitive.content
+                    setUrlWithoutDomain("/$cat/$slug")
+                    thumbnail_url = anime["image"]!!.jsonPrimitive.content
+                    title = anime["name"]!!.jsonPrimitive.content
+                }
+            } catch (e: Exception) {
+                Log.e("animebase", "Error parsing anime from JSON: $anime", e)
+            }
+        }
+        val hasNext = json.jsonObject["meta"]!!.jsonObject["hasMore"]!!.jsonPrimitive.content.toBoolean()
+        return AnimesPage(animes, hasNext)
+    }
+
+    override fun popularAnimeSelector() = "div.grid > div > a"
 
     override fun popularAnimeFromElement(element: Element) = SAnime.create().apply {
         setUrlWithoutDomain(element.attr("href").replace("/link/", "/anime/"))
-        thumbnail_url = element.selectFirst("div.thumbnail img")?.absUrl("src")
-        title = element.selectFirst("div.caption h3")!!.text()
+        thumbnail_url = element.selectFirst("div img")?.absUrl("src")
+        title = element.selectFirst("div > div.font-medium, div h3")!!.text()
     }
 
     override fun popularAnimeNextPageSelector() = null
@@ -56,7 +83,7 @@ class AnimeBase : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     // =============================== Latest ===============================
     override fun latestUpdatesRequest(page: Int) = GET("$baseUrl/updates", headers)
 
-    override fun latestUpdatesSelector() = "div.box-header + div.box-body > a"
+    override fun latestUpdatesSelector() = "div.hidden > div > a"
 
     override fun latestUpdatesFromElement(element: Element) = popularAnimeFromElement(element)
 
@@ -103,10 +130,9 @@ class AnimeBase : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
                 val animes = doc.select(searchAnimeSelector()).map(::searchAnimeFromElement)
                 AnimesPage(animes, false)
             }
-            else -> { // pages like filmlist or animelist
-                val animes = doc.select(popularAnimeSelector()).map(::popularAnimeFromElement)
-                val hasNext = doc.selectFirst(searchAnimeNextPageSelector()) != null
-                AnimesPage(animes, hasNext)
+            else -> {
+                Log.w("animebase", "unpredicted state")
+                AnimesPage(emptyList(), false)
             }
         }
     }
@@ -119,27 +145,20 @@ class AnimeBase : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // =========================== Anime Details ============================
     override fun animeDetailsParse(document: Document) = SAnime.create().apply {
+        // could also be done with data-page.value.props.serie...
         setUrlWithoutDomain(document.location())
 
-        val boxBody = document.selectFirst("div.box-body.box-profile > center")!!
-        title = boxBody.selectFirst("h3")!!.text()
+        val boxBody = document.selectFirst(".border-zinc-700.border.p-6.shadow-lg.rounded-xl.to-zinc-950.from-zinc-800.bg-gradient-to-br")!!
+        title = boxBody.selectFirst("h2")!!.text()
         thumbnail_url = boxBody.selectFirst("img")!!.absUrl("src")
 
-        val infosDiv = document.selectFirst("div.box-body > div.col-md-9")!!
-        status = parseStatus(infosDiv.getInfo("Status"))
-        genre = infosDiv.select("strong:contains(Genre) + p > a").eachText()
-            .joinToString()
-            .takeIf(String::isNotBlank)
+        val statusBadge = boxBody.selectFirst("div > span.inline-block")
+        status = parseStatus(statusBadge?.text())
 
-        description = buildString {
-            infosDiv.getInfo("Beschreibung")?.also(::append)
-
-            infosDiv.getInfo("Originalname")?.also { append("\nOriginal name: $it") }
-            infosDiv.getInfo("Erscheinungsjahr")?.also { append("\nErscheinungsjahr: $it") }
-        }
+        description = boxBody.selectFirst("div > div > div > div.text-zinc-300")?.text()
     }
 
-    private fun parseStatus(status: String?) = when (status?.orEmpty()) {
+    private fun parseStatus(status: String?) = when (status.orEmpty()) {
         "Laufend" -> SAnime.ONGOING
         "Abgeschlossen" -> SAnime.COMPLETED
         else -> SAnime.UNKNOWN
@@ -149,18 +168,34 @@ class AnimeBase : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         selectFirst("strong:contains($selector) + p")?.text()?.trim()
 
     // ============================== Episodes ==============================
-    override fun episodeListParse(response: Response) =
-        super.episodeListParse(response).sortedWith(
-            compareBy(
-                { it.name.startsWith("Film ") },
-                { it.name.startsWith("Special ") },
-                { it.episode_number },
-            ),
-        ).reversed()
+    override fun episodeListParse(response: Response): List<SEpisode> {
+        val doc = response.asJsoup()
+        val data = doc.selectFirst("div#app")?.attr("data-page") ?: return emptyList()
+        val serie = Json.parseToJsonElement(data).jsonObject["props"]?.jsonObject?.get("serie") ?: return emptyList()
+        val episodes = serie.jsonObject["episodes"]?.jsonArray ?: return emptyList()
+        val episodeList = mutableListOf<SEpisode>()
+        for (episode in episodes) {
+            episodeList += SEpisode.create().apply {
+                name = episode.jsonObject["name"]?.jsonPrimitive?.content ?: "Unknown Episode"
+                scanlator = when (episode.jsonObject["dubsub"]?.jsonPrimitive?.intOrNull) {
+                    0 -> "Subbed"
+                    1 -> "Dubbed"
+                    else -> "Unknown"
+                }
+
+                episode_number = episode.jsonObject["episode"]?.jsonPrimitive?.intOrNull?.toFloat() ?: 0.0f
+
+                setUrlWithoutDomain(response.request.url.encodedPath + "?id=" + episode.jsonObject["id"]?.jsonPrimitive?.content)
+            }
+        }
+
+        return episodeList.sortedByDescending { it.episode_number }
+    }
 
     override fun episodeListSelector() = "div.tab-content > div > div.panel"
 
     override fun episodeFromElement(element: Element) = SEpisode.create().apply {
+        Log.e("animebase", "This should not be called")
         val epname = element.selectFirst("h3")?.text() ?: "Episode 1"
         val language = when (element.selectFirst("button")?.attr("data-dubbed").orEmpty()) {
             "0" -> "Subbed"
@@ -172,60 +207,68 @@ class AnimeBase : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         episode_number = epname.substringBefore(":").substringAfter(" ").toFloatOrNull() ?: 0F
         val selectorClass = element.classNames().first { it.startsWith("episode-div") }
         setUrlWithoutDomain(element.baseUri() + "?selector=div.panel.$selectorClass")
+        Log.d("animebase", url)
     }
 
     // ============================ Video Links =============================
-    private val hosterSettings by lazy {
-        mapOf(
-            "Streamwish" to "https://streamwish.to/e/",
-            "Voe.SX" to "https://voe.sx/e/",
-            "Lulustream" to "https://lulustream.com/e/",
-            "VTube" to "https://vtbe.to/embed-",
-            "VidGuard" to "https://vembed.net/e/",
-        )
-    }
-
     override fun videoListParse(response: Response): List<Video> {
         val doc = response.asJsoup()
-        val selector = response.request.url.queryParameter("selector")
-            ?: return emptyList()
-
-        return doc.select("$selector div.panel-body > button").toList()
-            .filter { it.text() in hosterSettings.keys }
-            .parallelCatchingFlatMapBlocking {
-                val language = when (it.attr("data-dubbed")) {
-                    "0" -> "SUB"
-                    else -> "DUB"
+        Log.d("animebase", "videoListParse called")
+        val data = doc.selectFirst("div#app")?.attr("data-page") ?: return emptyList()
+        val serie = Json.parseToJsonElement(data).jsonObject["props"]?.jsonObject?.get("serie") ?: return emptyList()
+        val episodes = serie.jsonObject["episodes"]?.jsonArray ?: return emptyList()
+        Log.d("animebase", "searching for ID")
+        val wantedId = response.request.url.queryParameter("id") ?: return emptyList()
+        val episode = episodes.find { it.jsonObject["id"]?.jsonPrimitive?.content == wantedId } ?: return emptyList()
+        Log.d("animebase", "found ID: $wantedId")
+        val videos = mutableListOf<Video>()
+        val links = episode.jsonObject.entries.filter { it.key.startsWith("link") }.map { it.value }
+        for (link in links) {
+            val url = link.jsonPrimitive.content
+            when (Uri.parse(url).host) {
+                "lulustream.com" -> {
+                    videos += LuluExtractor(client, headers).videosFromUrl(url, "")
                 }
-
-                getVideosFromHoster(it.text(), it.attr("data-streamlink"))
-                    .map { video ->
-                        Video(
-                            video.url,
-                            "$language ${video.quality}",
-                            video.videoUrl,
-                            video.headers,
-                            video.subtitleTracks,
-                            video.audioTracks,
-                        )
-                    }
+                "voe.sx" -> {
+                    videos += VoeExtractor(client, headers).videosFromUrl(url, "")
+                }
+                "byse.sx" -> {
+                    videos += UpstreamExtractor(client).videosFromUrl(url, "")
+                }
+                null -> continue
+                else -> {
+                    Log.w(
+                        "animebase",
+                        "Unknown host for video link: ${Uri.parse(link.jsonPrimitive.content).host}",
+                    )
+                }
             }
-    }
-
-    private val streamWishExtractor by lazy { StreamWishExtractor(client, headers) }
-    private val voeExtractor by lazy { VoeExtractor(client, headers) }
-    private val unpackerExtractor by lazy { UnpackerExtractor(client, headers) }
-    private val vidguardExtractor by lazy { VidGuardExtractor(client) }
-
-    private fun getVideosFromHoster(hoster: String, urlpart: String): List<Video> {
-        val url = hosterSettings.get(hoster)!! + urlpart
-        return when (hoster) {
-            "Streamwish" -> streamWishExtractor.videosFromUrl(url)
-            "Voe.SX" -> voeExtractor.videosFromUrl(url)
-            "VTube", "Lulustream" -> unpackerExtractor.videosFromUrl(url, hoster)
-            "VidGuard" -> vidguardExtractor.videosFromUrl(url)
-            else -> null
-        } ?: emptyList()
+        }
+        return videos
+//        val doc = response.asJsoup()
+//        val selector = response.request.url.queryParameter("selector")
+//            ?: return emptyList()
+//
+//        return doc.select("$selector div.panel-body > button").toList()
+//            .filter { it.text() in hosterSettings.keys }
+//            .parallelCatchingFlatMapBlocking {
+//                val language = when (it.attr("data-dubbed")) {
+//                    "0" -> "SUB"
+//                    else -> "DUB"
+//                }
+//
+//                getVideosFromHoster(it.text(), it.attr("data-streamlink"))
+//                    .map { video ->
+//                        Video(
+//                            video.url,
+//                            "$language ${video.quality}",
+//                            video.videoUrl,
+//                            video.headers,
+//                            video.subtitleTracks,
+//                            video.audioTracks,
+//                        )
+//                    }
+//            }
     }
 
     override fun List<Video>.sort(): List<Video> {
