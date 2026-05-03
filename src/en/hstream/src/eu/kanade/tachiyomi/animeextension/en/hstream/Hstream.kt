@@ -61,14 +61,11 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun popularAnimeFromElement(element: Element) = SAnime.create().apply {
         val rawUrl = element.attr("href")
         title = element.selectFirst("img")!!.attr("alt")
+        thumbnail_url = element.selectFirst("img")?.absUrl("src")
         if (preferences.getBoolean(PREF_GROUP_EPISODES_KEY, PREF_GROUP_EPISODES_DEFAULT)) {
-            url = extractSeriesSlug(rawUrl)
-            val seriesSlug = url.substringAfter("/hentai/")
-            thumbnail_url = "$baseUrl/images/$seriesSlug/cover-ep-1.webp"
+            url = extractSeriesSlug(pathFromUrl(rawUrl))
         } else {
-            url = rawUrl
-            val episode = rawUrl.substringAfterLast("-").substringBefore("/")
-            thumbnail_url = "$baseUrl/images${rawUrl.substringBeforeLast("-")}/cover-ep-$episode.webp"
+            url = pathFromUrl(rawUrl)
         }
     }
 
@@ -108,20 +105,21 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         if (preferences.getBoolean(PREF_GROUP_EPISODES_KEY, PREF_GROUP_EPISODES_DEFAULT)) {
             val seriesLink = doc.selectFirst("a.text-rose-600[href*=\"/hentai/\"]")
             val seriesUrl = seriesLink?.attr("href")?.takeIf { it.isNotBlank() }
-            val finalUrl = seriesUrl ?: response.request.url.toString().substringAfter(baseUrl)
+            val finalUrl = seriesUrl ?: pathFromUrl(response.request.url.toString())
             val finalDoc = if (seriesUrl != null) {
-                client.newCall(GET("$baseUrl$seriesUrl", headers)).execute().use { it.asJsoup() }
+                val fullUrl = if (seriesUrl.startsWith("http")) seriesUrl else "$baseUrl$seriesUrl"
+                client.newCall(GET(fullUrl, headers)).execute().use { it.asJsoup() }
             } else {
                 doc
             }
             val anime = animeDetailsParse(finalDoc).apply {
-                url = finalUrl
+                url = pathFromUrl(seriesUrl ?: response.request.url.toString())
                 initialized = true
             }
             return AnimesPage(listOf(anime), false)
         }
         val details = animeDetailsParse(doc).apply {
-            setUrlWithoutDomain(response.request.url.toString())
+            url = pathFromUrl(response.request.url.toString())
             initialized = true
         }
         return AnimesPage(listOf(details), false)
@@ -188,7 +186,7 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         val episodeLinks = doc.select("a.hover\\:text-blue-600[href*=\"/hentai/\"]")
         if (episodeLinks.isNotEmpty()) {
             return episodeLinks.mapNotNull { element ->
-                val href = element.attr("href")
+                val href = pathFromUrl(element.attr("href"))
                 val num = href.substringAfterLast("-").substringBefore("/").toFloatOrNull()
                     ?: return@mapNotNull null
                 SEpisode.create().apply {
@@ -206,7 +204,8 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             if (seriesLink != null) {
                 val seriesUrl = seriesLink.attr("href")
                 if (seriesUrl.isNotBlank()) {
-                    val seriesResponse = client.newCall(GET("$baseUrl$seriesUrl", headers)).execute()
+                    val fullUrl = if (seriesUrl.startsWith("http")) seriesUrl else "$baseUrl$seriesUrl"
+                    val seriesResponse = client.newCall(GET(fullUrl, headers)).execute()
                     return seriesResponse.use { parseEpisodeList(it, depth + 1) }
                 }
             }
@@ -321,6 +320,15 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // ============================= Utilities ==============================
+    private fun pathFromUrl(url: String): String {
+        return if (url.startsWith("http")) {
+            val path = url.substringAfter("://").substringAfter("/", "")
+            if (path.isNotEmpty()) "/$path" else url
+        } else {
+            url
+        }
+    }
+
     private fun extractSeriesSlug(url: String): String {
         val slug = url.substringAfter("/hentai/")
         val match = EPISODE_SLUG_REGEX.find(slug)
