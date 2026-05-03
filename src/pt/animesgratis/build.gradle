@@ -4,7 +4,7 @@ ext {
     extClass = '.TopAnimes'
     themePkg = 'dooplay'
     baseUrl = 'https://topanimes.net'
-    overrideVersionCode = 31
+    overrideVersionCode = 32
 }
 
 apply from: "$rootDir/common.gradle"

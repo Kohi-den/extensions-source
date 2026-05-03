@@ -101,7 +101,7 @@ class TopAnimes : DooPlay(
         }
     }
 
-    override fun episodeListSelector() = "ul.episodios > li > div.episodiotitle > a"
+    override fun episodeListSelector() = "ul.episodios > li a"
 
     override fun episodeFromElement(element: Element) = SEpisode.create().apply {
         setUrlWithoutDomain(element.attr("href"))
