@@ -3,7 +3,7 @@ package eu.kanade.tachiyomi.animeextension.en.hstream
 import android.app.Application
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
-import androidx.preference.SwitchPreference
+import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -296,7 +296,7 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // ============================== Settings ==============================
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
-        SwitchPreference(screen.context).apply {
+        SwitchPreferenceCompat(screen.context).apply {
             key = PREF_GROUP_EPISODES_KEY
             title = "Group episodes into series"
             summary = "Combine individual episodes into their parent series. Each series will list all its episodes instead of appearing as separate entries."
