@@ -221,7 +221,8 @@ class Hstream :
                         setUrlWithoutDomain(episodeUrl)
                         episode_number = fallbackEpNum?.toFloatOrNull() ?: 1F
                         name = if (fallbackEpNum != null) "Episode $fallbackEpNum" else "Episode 1"
-                        date_upload = 0L
+                        val releaseDoc = client.newCall(GET("$baseUrl$episodeUrl")).awaitSuccess().use { it.asJsoup() }
+                        date_upload = releaseDoc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.ownText().toDate()
                     },
                 )
             }
@@ -254,7 +255,8 @@ class Hstream :
                     setUrlWithoutDomain(href)
                     episode_number = epNum.toFloatOrNull() ?: 1F
                     name = "Episode $epNum"
-                    date_upload = 0L
+                    val releaseDoc = client.newCall(GET("$baseUrl$href")).awaitSuccess().use { it.asJsoup() }
+                    date_upload = releaseDoc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.ownText().toDate()
                 }
             }
 
@@ -277,7 +279,8 @@ class Hstream :
                         episode_number = 1F
                         name = "Episode 1"
                     }
-                    date_upload = 0L
+                    val releaseDoc = client.newCall(GET("$baseUrl$episodeUrl")).awaitSuccess().use { it.asJsoup() }
+                    date_upload = releaseDoc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.ownText().toDate()
                 }
 
                 logDebug("getEpisodeList") { "Returning 1 fallback episode" }
@@ -294,10 +297,10 @@ class Hstream :
 
         val doc = client.newCall(animeDetailsRequest(anime)).awaitSuccess().use { it.asJsoup() }
 
-        val uploadDateText = doc.selectFirst("a:has(i.fa-upload)")?.ownText()
+        val releaseDateText = doc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.ownText()
 
         val episode = SEpisode.create().apply {
-            date_upload = uploadDateText.toDate()
+            date_upload = releaseDateText.toDate()
             setUrlWithoutDomain(doc.location())
 
             val num = url.substringAfterLast("-").substringBefore("/")
