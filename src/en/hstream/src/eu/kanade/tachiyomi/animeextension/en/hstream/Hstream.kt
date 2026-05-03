@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.animeextension.en.hstream
 import android.app.Application
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
+import androidx.preference.SwitchPreference
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
@@ -58,13 +59,23 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun popularAnimeSelector() = "div.items-center div.w-full > a"
 
     override fun popularAnimeFromElement(element: Element) = SAnime.create().apply {
-        setUrlWithoutDomain(element.attr("href"))
+        val rawUrl = element.attr("href")
         title = element.selectFirst("img")!!.attr("alt")
-        val episode = url.substringAfterLast("-").substringBefore("/")
-        thumbnail_url = "$baseUrl/images${url.substringBeforeLast("-")}/cover-ep-$episode.webp"
+        if (preferences.getBoolean(PREF_GROUP_EPISODES_KEY, PREF_GROUP_EPISODES_DEFAULT)) {
+            url = extractSeriesSlug(rawUrl)
+            val seriesSlug = url.substringAfter("/hentai/")
+            thumbnail_url = "$baseUrl/images/$seriesSlug/cover-ep-1.webp"
+        } else {
+            url = rawUrl
+            val episode = rawUrl.substringAfterLast("-").substringBefore("/")
+            thumbnail_url = "$baseUrl/images${rawUrl.substringBeforeLast("-")}/cover-ep-$episode.webp"
+        }
     }
 
     override fun popularAnimeNextPageSelector() = "span[aria-current] + a"
+
+    override fun popularAnimeParse(response: Response): AnimesPage =
+        super.popularAnimeParse(response).deduplicateIfGrouping()
 
     // =============================== Latest ===============================
     override fun latestUpdatesRequest(page: Int) = GET("$baseUrl/search?order=recently-uploaded&page=$page")
@@ -74,6 +85,9 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     override fun latestUpdatesFromElement(element: Element) = popularAnimeFromElement(element)
 
     override fun latestUpdatesNextPageSelector() = popularAnimeNextPageSelector()
+
+    override fun latestUpdatesParse(response: Response): AnimesPage =
+        super.latestUpdatesParse(response).deduplicateIfGrouping()
 
     // =============================== Search ===============================
     override fun getFilterList() = HstreamFilters.FILTER_LIST
@@ -90,7 +104,23 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     private fun searchAnimeByIdParse(response: Response): AnimesPage {
-        val details = animeDetailsParse(response.asJsoup()).apply {
+        val doc = response.asJsoup()
+        if (preferences.getBoolean(PREF_GROUP_EPISODES_KEY, PREF_GROUP_EPISODES_DEFAULT)) {
+            val seriesLink = doc.selectFirst("a.text-rose-600[href*=\"/hentai/\"]")
+            val seriesUrl = seriesLink?.attr("href")?.takeIf { it.isNotBlank() }
+            val finalUrl = seriesUrl ?: response.request.url.toString().substringAfter(baseUrl)
+            val finalDoc = if (seriesUrl != null) {
+                client.newCall(GET("$baseUrl$seriesUrl", headers)).execute().use { it.asJsoup() }
+            } else {
+                doc
+            }
+            val anime = animeDetailsParse(finalDoc).apply {
+                url = finalUrl
+                initialized = true
+            }
+            return AnimesPage(listOf(anime), false)
+        }
+        val details = animeDetailsParse(doc).apply {
             setUrlWithoutDomain(response.request.url.toString())
             initialized = true
         }
@@ -118,6 +148,9 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     override fun searchAnimeNextPageSelector() = popularAnimeNextPageSelector()
 
+    override fun searchAnimeParse(response: Response): AnimesPage =
+        super.searchAnimeParse(response).deduplicateIfGrouping()
+
     // =========================== Anime Details ============================
     override fun animeDetailsParse(document: Document) = SAnime.create().apply {
         status = SAnime.COMPLETED
@@ -134,7 +167,52 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // ============================== Episodes ==============================
     override fun episodeListParse(response: Response): List<SEpisode> {
+        return parseEpisodeList(response, depth = 0)
+    }
+
+    private fun parseEpisodeList(response: Response, depth: Int = 0): List<SEpisode> {
         val doc = response.asJsoup()
+
+        if (!preferences.getBoolean(PREF_GROUP_EPISODES_KEY, PREF_GROUP_EPISODES_DEFAULT)) {
+            val episode = SEpisode.create().apply {
+                date_upload = doc.selectFirst("a:has(i.fa-upload)")?.ownText().toDate()
+                setUrlWithoutDomain(doc.location())
+                val num = url.substringAfterLast("-").substringBefore("/")
+                episode_number = num.toFloatOrNull() ?: 1F
+                name = "Episode $num"
+            }
+            return listOf(episode)
+        }
+
+        // Grouped behavior: parse all episode links from the series page
+        val episodeLinks = doc.select("a.hover\\:text-blue-600[href*=\"/hentai/\"]")
+        if (episodeLinks.isNotEmpty()) {
+            return episodeLinks.mapNotNull { element ->
+                val href = element.attr("href")
+                val num = href.substringAfterLast("-").substringBefore("/").toFloatOrNull()
+                    ?: return@mapNotNull null
+                SEpisode.create().apply {
+                    setUrlWithoutDomain(href)
+                    episode_number = num
+                    name = if (num == num.toInt().toFloat()) "Episode ${num.toInt()}" else "Episode $num"
+                    date_upload = 0L
+                }
+            }.sortedByDescending { it.episode_number }
+        }
+
+        // Fallback: follow series link from an episode page (only once)
+        if (depth < 1) {
+            val seriesLink = doc.selectFirst("a.text-rose-600[href*=\"/hentai/\"]")
+            if (seriesLink != null) {
+                val seriesUrl = seriesLink.attr("href")
+                if (seriesUrl.isNotBlank()) {
+                    val seriesResponse = client.newCall(GET("$baseUrl$seriesUrl", headers)).execute()
+                    return seriesResponse.use { parseEpisodeList(it, depth + 1) }
+                }
+            }
+        }
+
+        // Last resort: treat as single episode
         val episode = SEpisode.create().apply {
             date_upload = doc.selectFirst("a:has(i.fa-upload)")?.ownText().toDate()
             setUrlWithoutDomain(doc.location())
@@ -142,7 +220,6 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             episode_number = num.toFloatOrNull() ?: 1F
             name = "Episode $num"
         }
-
         return listOf(episode)
     }
 
@@ -173,7 +250,7 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
         val body = """{"episode_id": "$episodeId"}""".toRequestBody("application/json".toMediaType())
         val data = client.newCall(POST("$baseUrl/player/api", newHeaders, body)).execute()
-            .parseAs<PlayerApiResponse>()
+            .use { it.parseAs<PlayerApiResponse>() }
 
         val urlBase = data.stream_domains.random() + "/" + data.stream_url
         val subtitleList = listOf(Track("$urlBase/eng.ass", "English"))
@@ -219,6 +296,13 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
 
     // ============================== Settings ==============================
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
+        SwitchPreference(screen.context).apply {
+            key = PREF_GROUP_EPISODES_KEY
+            title = "Group episodes into series"
+            summary = "Combine individual episodes into their parent series. Each series will list all its episodes instead of appearing as separate entries."
+            setDefaultValue(PREF_GROUP_EPISODES_DEFAULT)
+        }.also(screen::addPreference)
+
         ListPreference(screen.context).apply {
             key = PREF_QUALITY_KEY
             title = PREF_QUALITY_TITLE
@@ -237,6 +321,16 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     // ============================= Utilities ==============================
+    private fun extractSeriesSlug(url: String): String {
+        val slug = url.substringAfter("/hentai/")
+        val match = EPISODE_SLUG_REGEX.find(slug)
+        return if (match != null) {
+            "/hentai/${match.groupValues[1]}"
+        } else {
+            url
+        }
+    }
+
     private fun String?.toDate(): Long {
         return runCatching { DATE_FORMATTER.parse(orEmpty().trim(' ', '|'))?.time }
             .getOrNull() ?: 0L
@@ -250,12 +344,24 @@ class Hstream : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         ).reversed()
     }
 
+    private fun AnimesPage.deduplicateIfGrouping(): AnimesPage {
+        if (!preferences.getBoolean(PREF_GROUP_EPISODES_KEY, PREF_GROUP_EPISODES_DEFAULT)) return this
+        val seen = mutableSetOf<String>()
+        val deduped = animes.filter { seen.add(it.url) }
+        return AnimesPage(deduped, hasNextPage)
+    }
+
     companion object {
+        private val EPISODE_SLUG_REGEX = """^(.+)-(\d+)$""".toRegex()
+
         private val DATE_FORMATTER by lazy {
             SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
         }
 
         const val PREFIX_SEARCH = "id:"
+
+        private const val PREF_GROUP_EPISODES_KEY = "pref_group_episodes"
+        private const val PREF_GROUP_EPISODES_DEFAULT = true
 
         private const val PREF_QUALITY_KEY = "pref_quality_key"
         private const val PREF_QUALITY_TITLE = "Preferred quality"
