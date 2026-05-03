@@ -1,7 +1,10 @@
 package eu.kanade.tachiyomi.animeextension.en.hstream
 
+import android.app.Application
+import android.content.SharedPreferences
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
+import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.animeextension.BuildConfig
 import eu.kanade.tachiyomi.animeextension.en.hstream.HstreamUtils.extractEpisodeNumber
 import eu.kanade.tachiyomi.animeextension.en.hstream.HstreamUtils.normalizeHref
@@ -20,9 +23,7 @@ import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.util.asJsoup
-import keiyoushi.utils.addSwitchPreference
-import keiyoushi.utils.getPreferencesLazy
-import keiyoushi.utils.parseAs
+import eu.kanade.tachiyomi.util.parseAs
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -32,6 +33,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.net.URLDecoder
 import java.text.SimpleDateFormat
@@ -55,7 +58,9 @@ class Hstream :
     // make aniyomi interpret it as a new source, forcing old users to migrate.
     override val versionId = 3
 
-    private val preferences by getPreferencesLazy()
+    private val preferences: SharedPreferences by lazy {
+        Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
+    }
 
     /**
      * Centralized debug logging toggle to avoid noisy logs and overhead in production.
@@ -379,12 +384,16 @@ class Hstream :
     // ============================== Settings ==============================
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         logDebug("setupPreferenceScreen") { "Setting up preferences" }
-        screen.addSwitchPreference(
-            key = PREF_GROUP_BY_SERIES_KEY,
-            default = PREF_GROUP_BY_SERIES_DEFAULT,
-            title = PREF_GROUP_BY_SERIES_TITLE,
-            summary = PREF_GROUP_BY_SERIES_SUMMARY,
-        )
+        SwitchPreferenceCompat(screen.context).apply {
+            key = PREF_GROUP_BY_SERIES_KEY
+            title = PREF_GROUP_BY_SERIES_TITLE
+            summary = PREF_GROUP_BY_SERIES_SUMMARY
+            setDefaultValue(PREF_GROUP_BY_SERIES_DEFAULT)
+            setOnPreferenceChangeListener { _, newValue ->
+                preferences.edit().putBoolean(key, newValue as Boolean).commit()
+                true
+            }
+        }.also(screen::addPreference)
 
         ListPreference(screen.context).apply {
             key = PREF_QUALITY_KEY
@@ -398,7 +407,8 @@ class Hstream :
                 val selected = newValue as String
                 val index = findIndexOfValue(selected)
                 val entry = entryValues[index] as String
-                preferences.edit().putString(key, entry).commit()
+                preferences.edit().putString(key, entry).apply()
+                true
             }
         }.also(screen::addPreference)
     }
