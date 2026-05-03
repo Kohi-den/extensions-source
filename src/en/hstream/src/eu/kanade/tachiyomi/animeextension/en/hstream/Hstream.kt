@@ -222,7 +222,7 @@ class Hstream :
                         episode_number = fallbackEpNum?.toFloatOrNull() ?: 1F
                         name = if (fallbackEpNum != null) "Episode $fallbackEpNum" else "Episode 1"
                         val releaseDoc = client.newCall(GET("$baseUrl$episodeUrl")).awaitSuccess().use { it.asJsoup() }
-                        date_upload = releaseDoc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.ownText().toDate()
+                        date_upload = releaseDoc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.text().toDate()
                     },
                 )
             }
@@ -256,7 +256,7 @@ class Hstream :
                     episode_number = epNum.toFloatOrNull() ?: 1F
                     name = "Episode $epNum"
                     val releaseDoc = client.newCall(GET("$baseUrl$href")).awaitSuccess().use { it.asJsoup() }
-                    date_upload = releaseDoc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.ownText().toDate()
+                    date_upload = releaseDoc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.text().toDate()
                 }
             }
 
@@ -280,7 +280,7 @@ class Hstream :
                         name = "Episode 1"
                     }
                     val releaseDoc = client.newCall(GET("$baseUrl$episodeUrl")).awaitSuccess().use { it.asJsoup() }
-                    date_upload = releaseDoc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.ownText().toDate()
+                    date_upload = releaseDoc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.text().toDate()
                 }
 
                 logDebug("getEpisodeList") { "Returning 1 fallback episode" }
@@ -297,7 +297,7 @@ class Hstream :
 
         val doc = client.newCall(animeDetailsRequest(anime)).awaitSuccess().use { it.asJsoup() }
 
-        val releaseDateText = doc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.ownText()
+        val releaseDateText = doc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.text()
 
         val episode = SEpisode.create().apply {
             date_upload = releaseDateText.toDate()
