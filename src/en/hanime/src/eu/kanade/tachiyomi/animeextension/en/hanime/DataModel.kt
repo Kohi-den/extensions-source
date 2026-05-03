@@ -3,29 +3,12 @@ package eu.kanade.tachiyomi.animeextension.en.hanime
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-data class SearchParameters(
-    val includedTags: ArrayList<String>,
-    val blackListedTags: ArrayList<String>,
-    val brands: ArrayList<String>,
-    val tagsMode: String,
-    val orderBy: String,
-    val ordering: String,
-)
-
-@Serializable
-data class HAnimeResponse(
-    val page: Long,
-    val nbPages: Long,
-    val nbHits: Long,
-    val hitsPerPage: Long,
-    val hits: String,
-)
-
 @Serializable
 data class HitsModel(
     val id: Long? = null,
-    val name: String,
-    val titles: List<String> = emptyList(),
+    val name: String = "",
+    @SerialName("search_titles")
+    val searchTitles: String? = null,
     val slug: String? = null,
     val description: String? = null,
     val views: Long? = null,
@@ -49,9 +32,14 @@ data class HitsModel(
     val monthlyRank: Long? = null,
     val tags: List<String> = emptyList(),
     @SerialName("created_at")
-    val createdAt: Long? = null,
+    val createdAt: String? = null,
     @SerialName("released_at")
-    val releasedAt: Long? = null,
+    val releasedAt: String? = null,
+    @SerialName("created_at_unix")
+    val createdAtUnix: Long? = null,
+    @SerialName("released_at_unix")
+    val releasedAtUnix: Long? = null,
+    val score: String? = null,
 )
 
 @Serializable
@@ -100,7 +88,7 @@ data class HentaiVideo(
     @SerialName("monthly_rank")
     val monthlyRank: Long? = null,
     @SerialName("brand_id")
-    val brandId: String? = null,
+    val brandId: Long? = null,
     @SerialName("is_banned_in")
     val isBannedIn: String? = null,
     @SerialName("created_at_unix")
@@ -152,7 +140,7 @@ data class HentaiFranchiseHentaiVideo(
     @SerialName("monthly_rank")
     val monthlyRank: Long? = null,
     @SerialName("brand_id")
-    val brandId: String? = null,
+    val brandId: Long? = null,
     @SerialName("is_banned_in")
     val isBannedIn: String? = null,
     @SerialName("created_at_unix")
@@ -194,7 +182,7 @@ data class Stream(
     @SerialName("mime_type")
     val mimeType: String? = null,
     val width: Long? = null,
-    val height: String,
+    val height: Int? = null,
     @SerialName("duration_in_ms")
     val durationInMs: Long? = null,
     @SerialName("filesize_mbs")
@@ -232,6 +220,8 @@ data class WindowNuxt(
         ) {
             @Serializable
             data class DataVideo(
+                @SerialName("hentai_video")
+                val hentai_video: HentaiVideo? = null,
                 val videos_manifest: VideosManifest,
             ) {
                 @Serializable
@@ -240,11 +230,12 @@ data class WindowNuxt(
                 ) {
                     @Serializable
                     data class Server(
+                        val name: String? = null,
                         val streams: List<Stream>,
                     ) {
                         @Serializable
                         data class Stream(
-                            val height: String,
+                            val height: Int? = null,
                             val url: String,
                         )
                     }
@@ -253,3 +244,53 @@ data class WindowNuxt(
         }
     }
 }
+
+/**
+ * Response from the manifest endpoint: GET /api/v8/guest/videos/{hv_id}/manifest
+ * The CDN wraps the manifest in a `videos_manifest` key.
+ */
+@Serializable
+data class ManifestWrapper(
+    @SerialName("videos_manifest")
+    val videosManifest: ManifestResponse = ManifestResponse(),
+)
+
+@Serializable
+data class ManifestResponse(
+    val servers: List<ManifestServer> = emptyList(),
+)
+
+@Serializable
+data class ManifestServer(
+    val id: Long? = null,
+    val name: String? = null,
+    val slug: String? = null,
+    @SerialName("is_permanent")
+    val isPermanent: Boolean? = false,
+    val streams: List<ManifestStream> = emptyList(),
+)
+
+@Serializable
+data class ManifestStream(
+    val id: Long? = null,
+    val kind: String? = null,
+    val height: Int? = null,
+    val url: String = "",
+    @SerialName("is_guest_allowed")
+    val isGuestAllowed: Boolean? = false,
+    @SerialName("is_member_allowed")
+    val isMemberAllowed: Boolean? = false,
+    @SerialName("is_premium_allowed")
+    val isPremiumAllowed: Boolean? = false,
+    @SerialName("duration_in_ms")
+    val durationInMs: Long? = null,
+    @SerialName("filesize_mbs")
+    val filesizeMbs: Long? = null,
+    val filename: String? = null,
+    val extension: String? = null,
+    @SerialName("mime_type")
+    val mimeType: String? = null,
+    val width: Long? = null,
+    @SerialName("hv_id")
+    val hvId: Long? = null,
+)
