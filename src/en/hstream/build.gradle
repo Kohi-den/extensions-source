@@ -1,8 +1,24 @@
 ext {
     extName = 'Hstream'
     extClass = '.Hstream'
-    extVersionCode = 9
+    extVersionCode = 10
     isNsfw = true
 }
 
 apply from: "$rootDir/common.gradle"
+
+android {
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+    sourceSets {
+        test {
+            java.srcDirs = ['test/kotlin']
+        }
+    }
+}
+
+dependencies {
+    testImplementation("org.jetbrains.kotlin:kotlin-test:2.2.0")
+    testImplementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.11")
+}
