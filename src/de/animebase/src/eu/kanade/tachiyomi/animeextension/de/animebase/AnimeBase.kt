@@ -92,28 +92,20 @@ class AnimeBase : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     // =============================== Search ===============================
     override fun getFilterList() = AnimeBaseFilters.FILTER_LIST
 
-    private val searchToken by lazy {
-        client.newCall(GET("$baseUrl/searching", headers)).execute()
-            .asJsoup()
-            .selectFirst("form > input[name=_token]")!!
-            .attr("value")
-    }
-
     override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
         val params = AnimeBaseFilters.getSearchParameters(filters)
 
         return when {
             params.list.isEmpty() -> {
+                if (query.length < 3) throw Exception("Please enter at least 3 characters for the search")
                 val body = FormBody.Builder()
-                    .add("_token", searchToken)
-                    .add("_token", searchToken)
-                    .add("name_serie", query)
-                    .add("jahr", params.year.toIntOrNull()?.toString() ?: "")
-                    .apply {
-                        params.languages.forEach { add("dubsub[]", it) }
-                        params.genres.forEach { add("genre[]", it) }
-                    }.build()
-                POST("$baseUrl/searching", headers, body)
+                    .add("query", query)
+                    .build()
+                // make a simple request to get the xsrf token
+                val token = client.cookieJar.loadForRequest(baseUrl.toHttpUrl()).find { it.name == "XSRF-TOKEN" }
+                if (token == null) throw Exception("XSRF token not found in cookies")
+                val headers = headers.newBuilder().add("X-XSRF-TOKEN", token.value).build()
+                POST("$baseUrl/api/search", headers, body)
             }
 
             else -> {
@@ -123,18 +115,21 @@ class AnimeBase : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage {
-        val doc = response.asJsoup()
-
-        return when {
-            doc.location().contains("/searching") -> {
-                val animes = doc.select(searchAnimeSelector()).map(::searchAnimeFromElement)
-                AnimesPage(animes, false)
-            }
-            else -> {
-                Log.w("animebase", "unpredicted state")
-                AnimesPage(emptyList(), false)
+        val body = Json.parseToJsonElement(response.body.string()).jsonObject
+        if (body["success"]?.jsonPrimitive?.booleanOrNull != true) {
+            throw Exception("Search API returned success=false: ${body["message"]?.jsonPrimitive?.contentOrNull}")
+        }
+        val animes = mutableListOf<SAnime>()
+        for (anime in body["data"]!!.jsonObject["series"]!!.jsonArray.map { it.jsonObject }) {
+            animes += SAnime.create().apply {
+                val cat = anime["category"]!!.jsonPrimitive.content
+                val slug = anime["nameSlug"]!!.jsonPrimitive.content
+                setUrlWithoutDomain("/$cat/$slug")
+                thumbnail_url = anime["image"]!!.jsonPrimitive.content
+                title = anime["name"]!!.jsonPrimitive.content
             }
         }
+        return AnimesPage(animes, false)
     }
 
     override fun searchAnimeSelector() = "div.col-lg-9.col-md-8 div.box-body > a"
@@ -192,23 +187,9 @@ class AnimeBase : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         return episodeList.sortedByDescending { it.episode_number }
     }
 
-    override fun episodeListSelector() = "div.tab-content > div > div.panel"
+    override fun episodeListSelector() = throw UnsupportedOperationException("Not used")
 
-    override fun episodeFromElement(element: Element) = SEpisode.create().apply {
-        Log.e("animebase", "This should not be called")
-        val epname = element.selectFirst("h3")?.text() ?: "Episode 1"
-        val language = when (element.selectFirst("button")?.attr("data-dubbed").orEmpty()) {
-            "0" -> "Subbed"
-            else -> "Dubbed"
-        }
-
-        name = epname
-        scanlator = language
-        episode_number = epname.substringBefore(":").substringAfter(" ").toFloatOrNull() ?: 0F
-        val selectorClass = element.classNames().first { it.startsWith("episode-div") }
-        setUrlWithoutDomain(element.baseUri() + "?selector=div.panel.$selectorClass")
-        Log.d("animebase", url)
-    }
+    override fun episodeFromElement(element: Element) = throw UnsupportedOperationException("Not used")
 
     // ============================ Video Links =============================
     override fun videoListParse(response: Response): List<Video> {
@@ -226,7 +207,7 @@ class AnimeBase : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
         for (link in links) {
             val url = link.jsonPrimitive.content
             when (Uri.parse(url).host) {
-                "lulustream.com" -> {
+                "lulustream.com", "luluvid.com" -> {
                     videos += LuluExtractor(client, headers).videosFromUrl(url, "")
                 }
                 "voe.sx" -> {
@@ -245,30 +226,6 @@ class AnimeBase : ConfigurableAnimeSource, ParsedAnimeHttpSource() {
             }
         }
         return videos
-//        val doc = response.asJsoup()
-//        val selector = response.request.url.queryParameter("selector")
-//            ?: return emptyList()
-//
-//        return doc.select("$selector div.panel-body > button").toList()
-//            .filter { it.text() in hosterSettings.keys }
-//            .parallelCatchingFlatMapBlocking {
-//                val language = when (it.attr("data-dubbed")) {
-//                    "0" -> "SUB"
-//                    else -> "DUB"
-//                }
-//
-//                getVideosFromHoster(it.text(), it.attr("data-streamlink"))
-//                    .map { video ->
-//                        Video(
-//                            video.url,
-//                            "$language ${video.quality}",
-//                            video.videoUrl,
-//                            video.headers,
-//                            video.subtitleTracks,
-//                            video.audioTracks,
-//                        )
-//                    }
-//            }
     }
 
     override fun List<Video>.sort(): List<Video> {
