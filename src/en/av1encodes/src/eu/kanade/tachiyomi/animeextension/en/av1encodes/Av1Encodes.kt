@@ -10,7 +10,6 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
-import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.network.GET
@@ -19,9 +18,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import okhttp3.Dispatcher
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -47,8 +43,6 @@ class Av1Encodes :
     override val lang = "en"
     override val supportsLatest = true
 
-    private val json = Json { ignoreUnknownKeys = true }
-
     private val preferences: SharedPreferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
@@ -57,8 +51,6 @@ class Av1Encodes :
         get() = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
 
     // ─── Client Optimization ─────────────────────────────────────────────────
-    // Overriding the dispatcher to allow 10 concurrent network requests
-    // so the N+1 cover fetcher runs instantly instead of queuing.
     override val client: OkHttpClient = network.client.newBuilder()
         .dispatcher(Dispatcher().apply { maxRequestsPerHost = 10 })
         .build()
@@ -81,7 +73,7 @@ class Av1Encodes :
     override fun episodeListRequest(anime: SAnime): Request = GET(baseUrl + anime.url, headers)
 
     // ══════════════════════════════════════════════════════════════════════════
-    // UNIFIED LIST PARSER
+    // POPULAR (Stats page)
     // ══════════════════════════════════════════════════════════════════════════
 
     override fun popularAnimeRequest(page: Int): Request =
@@ -97,7 +89,6 @@ class Av1Encodes :
         val seen = mutableSetOf<String>()
         val animes = mutableListOf<SAnime>()
 
-        // Scope the parser strictly to the "Top Downloads" section
         var searchContext: Element = doc
         val header = doc.select("h1, h2, h3, h4, h5, h6").firstOrNull {
             it.text().contains("Top Downloads", ignoreCase = true)
@@ -137,7 +128,6 @@ class Av1Encodes :
                 }
                 return@forEach
             }
-
             val rawText = el.text().trim()
             val animeName = extractCleanTitle(rawText)
             val slug = animeName.lowercase(Locale.US).replace(Regex("[^a-z0-9]+"), "-").trim('-')
@@ -172,11 +162,13 @@ class Av1Encodes :
                 }
         }
 
-        // Apply fast N+1 cover fetcher for Popular
         fetchMissingCovers(animes)
-
         return animes
     }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // LATEST & SEARCH
+    // ══════════════════════════════════════════════════════════════════════════
 
     override fun latestUpdatesRequest(page: Int): Request =
         GET("$baseUrl/airing/sub?page=$page", headers)
@@ -218,6 +210,10 @@ class Av1Encodes :
     override fun searchAnimeParse(response: Response): AnimesPage =
         parseUniversalList(response.asJsoup())
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // UNIFIED LIST PARSER  (FIX: robust title extraction for airing pages)
+    // ══════════════════════════════════════════════════════════════════════════
+
     private fun parseUniversalList(doc: Document): AnimesPage {
         val animesMap = mutableMapOf<String, SAnime>()
         val elements = doc.select("a[href*='/anime/']")
@@ -227,7 +223,7 @@ class Av1Encodes :
                 a.attr("href").let { if (it.startsWith("http")) it.removePrefix(baseUrl) else it }
             if (href == "/anime" || href == "/anime/") continue
 
-            val slug = href.substringAfter("/anime/").substringBefore("?")
+            val slug = href.substringAfter("/anime/").substringBefore("?").substringBefore("/")
             if (slug.length < 2) continue
 
             val anime = animesMap.getOrPut(slug) {
@@ -239,29 +235,45 @@ class Av1Encodes :
 
             var titleText = a.text().trim()
 
-            // Explicitly reject the text if it's an episode button
+            // Reject episode-button link text ("Episode 5", "Ep.3", "Watch Episode 2", etc.)
             val isEpisodeButton = titleText.matches(
                 Regex(
                     """^(?:Watch\s+)?(?:Episode|Ep\.?)\s*\d+.*""",
                     RegexOption.IGNORE_CASE,
                 ),
             )
-            if (isEpisodeButton) {
-                titleText = ""
-            }
+            if (isEpisodeButton) titleText = ""
 
+            // Try the anchor's own title attribute
             if (titleText.isBlank()) titleText = a.attr("title").trim()
-
+// Walk up the DOM to find the nearest card/article/list-item that
+            // contains a heading or image-alt we can use as the anime title.
             if (titleText.isBlank()) {
-                val container = a.parents().firstOrNull {
-                    it.tagName() == "article" || it.tagName() == "li" ||
-                        it.className().contains("card", ignoreCase = true) ||
-                        it.className().contains("item", ignoreCase = true)
-                } ?: a.parent()
+                // Walk up a maximum of 6 levels looking for a real container
+                val container = generateSequence(a.parent()) { it.parent() }
+                    .take(6)
+                    .firstOrNull { el ->
+                        el.tagName() == "article" ||
+                            el.tagName() == "li" ||
+                            el.className().contains("card", ignoreCase = true) ||
+                            el.className().contains("item", ignoreCase = true) ||
+                            el.className().contains("anime", ignoreCase = true) ||
+                            // Any div that directly owns a heading is a good container
+                            (el.tagName() == "div" && el.selectFirst("h1,h2,h3,h4,h5") != null)
+                    } ?: a.parent()?.parent() ?: a.parent()
 
+                // Prefer explicit heading elements
                 titleText =
-                    container?.selectFirst("h1, h2, h3, h4, h5, .title, .anime-title, .name")
-                        ?.text()?.trim() ?: ""
+                    container?.selectFirst(
+                        "h1, h2, h3, h4, h5, .title, .anime-title, .name, [class*='title'], [class*='name']",
+                    )?.text()?.trim() ?: ""
+
+                // Fall back to any img[alt] inside the container
+                if (titleText.isBlank()) {
+                    titleText = container?.selectFirst("img[alt]")
+                        ?.attr("alt")?.trim()
+                        ?.takeIf { it.length > 2 } ?: ""
+                }
             }
 
             titleText = extractCleanTitle(titleText)
@@ -279,7 +291,6 @@ class Av1Encodes :
 
         val animes = animesMap.values.filter { it.title.isNotBlank() }.toList()
 
-        // Apply fast N+1 cover fetcher for Latest & Filters
         fetchMissingCovers(animes)
 
         val hasNextPage =
@@ -288,14 +299,13 @@ class Av1Encodes :
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // PARALLEL N+1 COVER FETCHER (LIGHTNING FAST)
+    // PARALLEL N+1 COVER FETCHER
     // ══════════════════════════════════════════════════════════════════════════
 
     private fun fetchMissingCovers(animes: List<SAnime>) {
         val missingCovers = animes.filter { it.thumbnail_url == null }
         if (missingCovers.isEmpty()) return
 
-        // Launch requests concurrently using Kotlin Coroutines
         runBlocking {
             missingCovers.map { anime ->
                 async(Dispatchers.IO) {
@@ -304,8 +314,6 @@ class Av1Encodes :
                         client.newCall(GET(detailUrl, headers)).execute().use { detailResp ->
                             if (detailResp.isSuccessful) {
                                 val detailHtml = detailResp.body.string()
-
-                                // Use fast Regex matching first to save CPU processing power
                                 val ogMatch =
                                     Regex("""<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']""").find(
                                         detailHtml,
@@ -321,9 +329,7 @@ class Av1Encodes :
                                 }
                             }
                         }
-                    } catch (_: Exception) {
-                        // Silently ignore network failures to prevent breaking the list
-                    }
+                    } catch (_: Exception) { }
                 }
             }.awaitAll()
         }
@@ -349,8 +355,7 @@ class Av1Encodes :
                 .ifBlank { img.attr("abs:src") }
             if (url.isNotBlank()) return url
         }
-
-        var bg = extractBg(anchor)
+var bg = extractBg(anchor)
         if (bg != null) return bg
 
         for (child in anchor.allElements) {
@@ -405,7 +410,7 @@ class Av1Encodes :
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // EPISODE LIST
+    // EPISODE LIST  (FIX: extract full URLs with tokens directly from page)
     // ══════════════════════════════════════════════════════════════════════════
 
     override fun episodeListParse(response: Response): List<SEpisode> {
@@ -441,19 +446,49 @@ class Av1Encodes :
             }
 
             val epHtml = epResponse.body.string()
-            val filenames = extractFilenames(epHtml)
+            val epDoc = Jsoup.parse(epHtml)
             val seasonEpisodes = mutableListOf<SEpisode>()
 
-            for (filename in filenames) {
-                val encodedFilename = URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
+            // ── NEW: read the token-bearing download links directly from the page ──
+            val downloadAnchors = epDoc.select("a[href*='/download/']")
 
-                seasonEpisodes.add(
-                    SEpisode.create().apply {
-                        url = "/download/$slug/$season/$encodedRes/$encodedFilename"
-                        name = buildEpisodeLabel(filename, season)
-                        episode_number = parseEpisodeNumber(filename)
-                    },
-                )
+            if (downloadAnchors.isNotEmpty()) {
+                for (anchor in downloadAnchors) {
+                    val href = anchor.attr("href")
+                    // Make relative (strip baseUrl prefix if present)
+                    val relativeUrl =
+                        if (href.startsWith("http")) href.removePrefix(baseUrl) else href
+            // Decode the filename portion (before any '?token=…') for labels
+                    val encodedFn = relativeUrl.substringAfterLast("/").substringBefore("?")
+                    val filename = try {
+                        URLDecoder.decode(encodedFn, "UTF-8")
+                    } catch (_: Exception) {
+                        encodedFn
+                    }
+                    if (filename.isBlank() || filename.contains("/")) continue
+
+                    seasonEpisodes.add(
+                        SEpisode.create().apply {
+                            // Store full relative URL including ?token=… for direct playback
+                            url = relativeUrl
+                            name = buildEpisodeLabel(filename, season)
+                            episode_number = parseEpisodeNumber(filename)
+                        },
+                    )
+                }
+            } else {
+                // Fallback to the old filename-scraping approach (no token)
+                val filenames = extractFilenames(epHtml)
+                for (filename in filenames) {
+                    val encodedFilename = URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
+                    seasonEpisodes.add(
+                        SEpisode.create().apply {
+                            url = "/download/$slug/$season/$encodedRes/$encodedFilename"
+                            name = buildEpisodeLabel(filename, season)
+                            episode_number = parseEpisodeNumber(filename)
+                        },
+                    )
+                }
             }
 
             seasonEpisodes.sortByDescending { it.episode_number }
@@ -507,7 +542,7 @@ class Av1Encodes :
         Regex("""\[(?:S\d+-)?E(\d+)]""").find(filename)?.groupValues?.get(1)?.toFloatOrNull() ?: 1f
 
     // ══════════════════════════════════════════════════════════════════════════
-    // VIDEO LIST
+    // VIDEO LIST  (FIX: use direct token-bearing URL; no more /get_ddl)
     // ══════════════════════════════════════════════════════════════════════════
 
     override fun videoListRequest(episode: SEpisode) =
@@ -517,65 +552,33 @@ class Av1Encodes :
 
     override suspend fun getVideoList(episode: SEpisode): List<Video> {
         return try {
-            val encodedFilename = episode.url.substringAfterLast("/")
+            // episode.url already contains the full path + ?token=… from the episodes page
+            val downloadUrl = baseUrl + episode.url
 
-            val tokenHeaders = headers.newBuilder()
-                .set("Accept", "*/*")
-                .set("Sec-Fetch-Mode", "cors")
-                .set("Sec-Fetch-Site", "same-origin")
-                .build()
+            // Decode filename (strip token query param first) for quality labels
+            val encodedFn = episode.url.substringAfterLast("/").substringBefore("?")
+            val filename = try {
+                URLDecoder.decode(encodedFn, "UTF-8")
+            } catch (_: Exception) {
+                encodedFn
+            }  
+       val resLabel =
+                Regex("""\[(\d{3,4}p)]""").find(filename)?.groupValues?.get(1) ?: prefQuality
+            val audioTag =
+                Regex("""\[(Dual|Sub|Dub|English Dub)]""", RegexOption.IGNORE_CASE)
+                    .find(filename)?.groupValues?.get(1)?.let { " [$it]" } ?: ""
+            val qualLabel = "AV1 · $resLabel$audioTag"
 
-            client.newCall(GET("$baseUrl/get_token", tokenHeaders)).execute().close()
-
-            val ddlUrl = "$baseUrl/get_ddl/$encodedFilename"
-            val ddlResponse = client.newCall(
-                GET(ddlUrl, headers.newBuilder().set("Accept", "application/json").build()),
-            ).execute()
-
-            val ddlJson = ddlResponse.body.string()
-            val ddl = json.decodeFromString<DdlResponse>(ddlJson)
-
-            if (!ddl.success) {
-                return emptyList()
-            }
-
-            val videos = mutableListOf<Video>()
-
-            val subtitleTracks = ddl.subtitles?.mapIndexedNotNull { i, sub ->
-                val lang = sub.language ?: return@mapIndexedNotNull null
-                Track("${ddl.streamLink ?: ""}#sub$i", "$lang (${sub.format ?: "SUB"})")
-            } ?: emptyList()
-
-            val resLabel =
-                Regex("""\[(\d+p)]""").find(ddl.fileName ?: "")?.groupValues?.get(1) ?: prefQuality
-            val audioLabel =
-                ddl.audioDetails?.audio?.mapNotNull { it.language }?.distinct()?.joinToString("/")
-                    ?.let { " [$it]" } ?: ""
-            val sizeLabel = ddl.fileSize?.let { " · $it" } ?: ""
-            val qualLabel = "AV1 · $resLabel$audioLabel$sizeLabel"
-
-            ddl.streamLink?.takeIf { it.isNotBlank() }?.let { url ->
-                videos.add(Video(url, "$qualLabel · Stream", url, subtitleTracks = subtitleTracks))
-            }
-            ddl.downloadLink?.takeIf { it.isNotBlank() && it != ddl.streamLink }?.let { url ->
-                videos.add(
-                    Video(
-                        url,
-                        "$qualLabel · Direct DL",
-                        url,
-                        subtitleTracks = subtitleTracks,
-                    ),
-                )
-            }
-
-            videos
+            listOf(
+                Video(downloadUrl, "$qualLabel · Direct DL", downloadUrl),
+            )
         } catch (e: Exception) {
             emptyList()
         }
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // HELPERS & FILTERS
+    // FILTERS
     // ══════════════════════════════════════════════════════════════════════════
 
     override fun getFilterList(): AnimeFilterList = AnimeFilterList(
@@ -624,37 +627,8 @@ class Av1Encodes :
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // JSON MODELS & CONSTANTS
+    // CONSTANTS
     // ══════════════════════════════════════════════════════════════════════════
-
-    @Serializable
-    private data class DdlResponse(
-        @SerialName("success") val success: Boolean = false,
-        @SerialName("stream_link") val streamLink: String? = null,
-        @SerialName("download_link") val downloadLink: String? = null,
-        @SerialName("file_name") val fileName: String? = null,
-        @SerialName("file_size") val fileSize: String? = null,
-        @SerialName("subtitles") val subtitles: List<SubtitleInfo>? = null,
-        @SerialName("audio_details") val audioDetails: AudioDetailsWrapper? = null,
-    )
-
-    @Serializable
-    private data class SubtitleInfo(
-        @SerialName("format") val format: String? = null,
-        @SerialName("language") val language: String? = null,
-    )
-
-    @Serializable
-    private data class AudioDetailsWrapper(
-        @SerialName("audio") val audio: List<AudioTrackInfo>? = null,
-    )
-
-    @Serializable
-    private data class AudioTrackInfo(
-        @SerialName("language") val language: String? = null,
-        @SerialName("format") val format: String? = null,
-        @SerialName("bit_rate") val bitRate: String? = null,
-    )
 
     companion object {
         private const val DESKTOP_UA =
@@ -666,4 +640,5 @@ class Av1Encodes :
         private val SORT_VALUES = arrayOf("", "a-z", "z-a", "episodes")
         private val TYPE_VALUES = arrayOf("", "sub", "dual")
     }
-}
+    }     
+    
