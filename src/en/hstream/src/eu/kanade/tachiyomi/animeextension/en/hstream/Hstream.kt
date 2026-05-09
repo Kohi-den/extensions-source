@@ -258,7 +258,7 @@ class Hstream :
                     val releaseDoc = client.newCall(GET("$baseUrl$href")).awaitSuccess().use { it.asJsoup() }
                     date_upload = releaseDoc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.text().toDate()
                 }
-            }
+            }.distinctBy { it.url }
 
             logDebug("getEpisodeList") { "Matched ${episodes.size} episodes from ${searchResults.size} results" }
 
