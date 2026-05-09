@@ -30,7 +30,7 @@ object HstreamFilters {
     ): List<String> = (first { it is R } as CheckBoxFilterList).state
         .asSequence()
         .filter { it.state }
-        .map { checkbox -> options.find { it.first == checkbox.name }!!.second }
+        .mapNotNull { checkbox -> options.find { it.first == checkbox.name }?.second }
         .filter(String::isNotBlank)
         .toList()
 
@@ -38,7 +38,7 @@ object HstreamFilters {
         options: Array<Pair<String, String>>,
     ): List<List<String>> = (first { it is R } as TriStateFilterList).state
         .filterNot { it.isIgnored() }
-        .map { filter -> filter.state to options.find { it.first == filter.name }!!.second }
+        .mapNotNull { filter -> options.find { it.first == filter.name }?.second?.let { filter.state to it } }
         .groupBy { it.first } // group by state
         .let { dict ->
             val included = dict.get(TriState.STATE_INCLUDE)?.map { it.second }.orEmpty()

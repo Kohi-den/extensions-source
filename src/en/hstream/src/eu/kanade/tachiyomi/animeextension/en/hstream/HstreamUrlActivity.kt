@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import kotlin.system.exitProcess
 
 /**
@@ -28,6 +29,7 @@ class HstreamUrlActivity : Activity() {
                 startActivity(mainIntent)
             } catch (e: ActivityNotFoundException) {
                 HstreamLogger.error("HstreamUrlActivity", e.toString())
+                Toast.makeText(this@HstreamUrlActivity, "Unable to open Aniyomi. Please ensure the app is installed.", Toast.LENGTH_LONG).show()
             }
         } else {
             HstreamLogger.error("HstreamUrlActivity", "could not parse uri from intent $intent")

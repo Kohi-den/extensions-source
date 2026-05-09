@@ -91,7 +91,7 @@ class Hstream :
         } else {
             setUrlWithoutDomain(episodeUrl)
             title = element.selectFirst("img")!!.attr("alt")
-            val episode = url.substringAfterLast("-").substringBefore("/")
+            val episode = url.extractEpisodeNumber() ?: url.substringAfterLast("-").substringBefore("/")
             thumbnail_url = "$baseUrl/images${url.substringBeforeLast("-")}/cover-ep-$episode.webp"
         }
         logDebug("popularAnimeFromElement") { "rawHref='$rawHref', url='$url', title='$title'" }
@@ -220,7 +220,7 @@ class Hstream :
                     SEpisode.create().apply {
                         setUrlWithoutDomain(episodeUrl)
                         episode_number = fallbackEpNum?.toFloatOrNull() ?: 1F
-                        name = if (fallbackEpNum != null) "Episode $fallbackEpNum" else "Episode 1"
+                        name = if (fallbackEpNum != null) "Episode $fallbackEpNum (fallback)" else "Episode 1 (fallback)"
                         val releaseDoc = client.newCall(GET("$baseUrl$episodeUrl")).awaitSuccess().use { it.asJsoup() }
                         date_upload = releaseDoc.selectFirst("a:has(i.fa-regular.fa-calendar)")?.text().toDate()
                     },
@@ -287,7 +287,11 @@ class Hstream :
                 return listOf(fallbackEp)
             }
 
-            val sortedEpisodes = episodes.sortedByDescending { it.episode_number }
+            val sortedEpisodes = if (preferences.getString(PREF_EPISODE_ORDER_KEY, "desc") == "desc") {
+                episodes.sortedByDescending { it.episode_number }
+            } else {
+                episodes.sortedBy { it.episode_number }
+            }
             logDebug("getEpisodeList") { "Returning ${sortedEpisodes.size} sorted episodes" }
             return sortedEpisodes
         }
@@ -303,7 +307,7 @@ class Hstream :
             date_upload = releaseDateText.toDate()
             setUrlWithoutDomain(doc.location())
 
-            val num = url.substringAfterLast("-").substringBefore("/")
+            val num = url.extractEpisodeNumber() ?: url.substringAfterLast("-").substringBefore("/")
             episode_number = num.toFloatOrNull() ?: 1F
             name = "Episode $num"
         }
@@ -325,7 +329,7 @@ class Hstream :
 
         val token = client.cookieJar.loadForRequest(response.request.url)
             .find { it.name == "XSRF-TOKEN" }?.value
-            ?: throw Exception("XSRF-TOKEN cookie not found")
+            ?: throw Exception("Unable to load video — session may have expired. Try refreshing the page or restarting the app.")
         logDebug("videoListParse") { "XSRF token found: ${token.take(10)}..." }
 
         val episodeId = doc.selectFirst("input#e_id")!!.attr("value")
@@ -414,12 +418,21 @@ class Hstream :
                 true
             }
         }.also(screen::addPreference)
+
+        ListPreference(screen.context).apply {
+            key = PREF_EPISODE_ORDER_KEY
+            title = PREF_EPISODE_ORDER_TITLE
+            summary = PREF_EPISODE_ORDER_SUMMARY
+            entries = arrayOf("Newest first", "Oldest first")
+            entryValues = arrayOf("desc", "asc")
+            setDefaultValue("desc")
+        }.also(screen::addPreference)
     }
 
     // ============================= Utilities ==============================
 
     private fun String?.toDate(): Long = runCatching { DATE_FORMATTER.parse(orEmpty().trim(' ', '|'))?.time }
-        .getOrNull() ?: 0L
+        .getOrNull() ?: -1L
 
     override fun List<Video>.sort(): List<Video> {
         val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
@@ -442,7 +455,7 @@ class Hstream :
 
         private const val PREF_GROUP_BY_SERIES_KEY = "pref_group_by_series_key"
         private const val PREF_GROUP_BY_SERIES_TITLE = "Group by series"
-        private const val PREF_GROUP_BY_SERIES_SUMMARY = "Merge episodes of the same series into a single entry"
+        private const val PREF_GROUP_BY_SERIES_SUMMARY = "ON: Shows all episodes merged under the series entry\nOFF: Each page is treated as a separate entry"
         private const val PREF_GROUP_BY_SERIES_DEFAULT = true
 
         private const val PREF_QUALITY_KEY = "pref_quality_key"
@@ -450,5 +463,9 @@ class Hstream :
         private const val PREF_QUALITY_DEFAULT = "720p"
         private val PREF_QUALITY_ENTRIES = arrayOf("720p (HD)", "1080p (FULLHD)", "2160p (4K)")
         private val PREF_QUALITY_VALUES = arrayOf("720p", "1080p", "2160p")
+
+        private const val PREF_EPISODE_ORDER_KEY = "pref_episode_order_key"
+        private const val PREF_EPISODE_ORDER_TITLE = "Episode order"
+        private const val PREF_EPISODE_ORDER_SUMMARY = "Set the default sorting order for episodes"
     }
 }
