@@ -16,42 +16,35 @@ object HstreamFilters {
         fun toQueryPart() = vals[state].second
     }
 
-    open class CheckBoxFilterList(name: String, val pairs: Array<Pair<String, String>>) :
-        AnimeFilter.Group<AnimeFilter.CheckBox>(name, pairs.map { CheckBoxVal(it.first, false) })
+    open class CheckBoxFilterList(name: String, val pairs: Array<Pair<String, String>>) : AnimeFilter.Group<AnimeFilter.CheckBox>(name, pairs.map { CheckBoxVal(it.first, false) })
 
     private class CheckBoxVal(name: String, state: Boolean = false) : AnimeFilter.CheckBox(name, state)
 
     open class TriStateFilterList(name: String, values: List<TriFilterVal>) : AnimeFilter.Group<TriState>(name, values)
     class TriFilterVal(name: String) : TriState(name)
 
-    private inline fun <reified R> AnimeFilterList.asQueryPart(): String {
-        return (first { it is R } as QueryPartFilter).toQueryPart()
-    }
+    private inline fun <reified R> AnimeFilterList.asQueryPart(): String = (first { it is R } as QueryPartFilter).toQueryPart()
 
     private inline fun <reified R> AnimeFilterList.parseCheckbox(
         options: Array<Pair<String, String>>,
-    ): List<String> {
-        return (first { it is R } as CheckBoxFilterList).state
-            .asSequence()
-            .filter { it.state }
-            .map { checkbox -> options.find { it.first == checkbox.name }!!.second }
-            .filter(String::isNotBlank)
-            .toList()
-    }
+    ): List<String> = (first { it is R } as CheckBoxFilterList).state
+        .asSequence()
+        .filter { it.state }
+        .mapNotNull { checkbox -> options.find { it.first == checkbox.name }?.second }
+        .filter(String::isNotBlank)
+        .toList()
 
     private inline fun <reified R> AnimeFilterList.parseTriFilter(
         options: Array<Pair<String, String>>,
-    ): List<List<String>> {
-        return (first { it is R } as TriStateFilterList).state
-            .filterNot { it.isIgnored() }
-            .map { filter -> filter.state to options.find { it.first == filter.name }!!.second }
-            .groupBy { it.first } // group by state
-            .let { dict ->
-                val included = dict.get(TriState.STATE_INCLUDE)?.map { it.second }.orEmpty()
-                val excluded = dict.get(TriState.STATE_EXCLUDE)?.map { it.second }.orEmpty()
-                listOf(included, excluded)
-            }
-    }
+    ): List<List<String>> = (first { it is R } as TriStateFilterList).state
+        .filterNot { it.isIgnored() }
+        .mapNotNull { filter -> options.find { it.first == filter.name }?.second?.let { filter.state to it } }
+        .groupBy { it.first } // group by state
+        .let { dict ->
+            val included = dict.get(TriState.STATE_INCLUDE)?.map { it.second }.orEmpty()
+            val excluded = dict.get(TriState.STATE_EXCLUDE)?.map { it.second }.orEmpty()
+            listOf(included, excluded)
+        }
 
     class GenresFilter : TriStateFilterList("Genres", HstreamFiltersData.GENRES.map { TriFilterVal(it.first) })
     class StudiosFilter : CheckBoxFilterList("Studios", HstreamFiltersData.STUDIOS)
@@ -76,12 +69,16 @@ object HstreamFilters {
 
         val (added, blacklisted) = filters.parseTriFilter<GenresFilter>(HstreamFiltersData.GENRES)
 
-        return FilterSearchParams(
+        val params = FilterSearchParams(
             added,
             blacklisted,
             filters.parseCheckbox<StudiosFilter>(HstreamFiltersData.STUDIOS),
             filters.asQueryPart<OrderFilter>(),
         )
+
+        HstreamLogger.debug("getSearchParameters", "Parsed filters: genres=${params.genres.size}, blacklisted=${params.blacklisted.size}, studios=${params.studios.size}, order=${params.order}")
+
+        return params
     }
 
     private object HstreamFiltersData {

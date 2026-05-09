@@ -4,7 +4,7 @@ import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
+import android.widget.Toast
 import kotlin.system.exitProcess
 
 /**
@@ -12,8 +12,6 @@ import kotlin.system.exitProcess
  * and redirects them to the main Aniyomi process.
  */
 class HstreamUrlActivity : Activity() {
-
-    private val tag = javaClass.simpleName
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,12 +25,14 @@ class HstreamUrlActivity : Activity() {
             }
 
             try {
+                HstreamLogger.debug("HstreamUrlActivity", "Redirecting to Aniyomi with item=$item")
                 startActivity(mainIntent)
             } catch (e: ActivityNotFoundException) {
-                Log.e(tag, e.toString())
+                HstreamLogger.error("HstreamUrlActivity", e.toString())
+                Toast.makeText(this@HstreamUrlActivity, "Unable to open Aniyomi. Please ensure the app is installed.", Toast.LENGTH_LONG).show()
             }
         } else {
-            Log.e(tag, "could not parse uri from intent $intent")
+            HstreamLogger.error("HstreamUrlActivity", "could not parse uri from intent $intent")
         }
 
         finish()
