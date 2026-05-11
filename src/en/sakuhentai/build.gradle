@@ -1,0 +1,13 @@
+ext {
+    extName = 'Sakuhentai'
+    extClass = '.Sakuhentai'
+    extVersionCode = 2
+    isNsfw = true
+}
+
+dependencies {
+    implementation(project(':lib:voe-extractor'))
+    implementation(project(':lib:playlist-utils'))
+}
+
+apply from: "$rootDir/common.gradle"
