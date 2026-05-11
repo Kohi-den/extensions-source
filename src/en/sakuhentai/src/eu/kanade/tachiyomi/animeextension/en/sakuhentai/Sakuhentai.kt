@@ -152,7 +152,10 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
         }
 
         return SAnime.create().apply {
-            title = document.selectFirst("h1.entry-title")?.text()?.trim() ?: "Unknown"
+            val rawTitle = document.selectFirst("h1.entry-title")?.text()?.trim() ?: "Unknown"
+            val authorMatch = Regex("""\s+by\s+(\S.+)$""", RegexOption.IGNORE_CASE).find(rawTitle)
+            title = authorMatch?.groupValues?.get(1)?.let { rawTitle.removeSuffix(" by $it") } ?: rawTitle
+            author = authorMatch?.groupValues?.get(1) ?: ""
             thumbnail_url = thumbnailUrl
             description = descriptionText
             genre = genreList.joinToString(", ")
@@ -167,7 +170,7 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
 
         // Each animation is a single episode
         val episode = SEpisode.create().apply {
-            url = response.request.url.toString()
+            url = response.request.url.toString().removePrefix(baseUrl)
             name = "Episode 1"
             episode_number = 1f
             date_upload = parseDate(document.selectFirst("time.entry-date")?.attr("datetime"))
@@ -273,13 +276,17 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
     // ============================== Helpers ==============================
 
     private fun Element.toSAnime(): SAnime = SAnime.create().apply {
-        title = selectFirst(".entry-title a")?.text()?.trim() ?: "Unknown"
+        val rawTitle = selectFirst(".entry-title a")?.text()?.trim() ?: "Unknown"
+        val authorMatch = Regex("""\s+by\s+(\S.+)$""", RegexOption.IGNORE_CASE).find(rawTitle)
+        title = authorMatch?.groupValues?.get(1)?.let { rawTitle.removeSuffix(" by $it") } ?: rawTitle
         url = selectFirst(".entry-title a")?.absUrl("href") ?: ""
         thumbnail_url = selectFirst("img.wp-post-image")?.absUrl("src") ?: ""
     }
 
     private fun Element.recpostToSAnime(): SAnime = SAnime.create().apply {
-        title = selectFirst(".recpost-title a")?.text()?.trim() ?: "Unknown"
+        val rawTitle = selectFirst(".recpost-title a")?.text()?.trim() ?: "Unknown"
+        val authorMatch = Regex("""\s+by\s+(\S.+)$""", RegexOption.IGNORE_CASE).find(rawTitle)
+        title = authorMatch?.groupValues?.get(1)?.let { rawTitle.removeSuffix(" by $it") } ?: rawTitle
         url = selectFirst(".recpost-title a")?.absUrl("href") ?: ""
         thumbnail_url = selectFirst(".recpost-thumb img")?.absUrl("src") ?: ""
     }
