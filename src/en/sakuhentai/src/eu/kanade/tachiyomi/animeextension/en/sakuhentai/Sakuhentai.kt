@@ -13,17 +13,17 @@ import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.lib.voeextractor.VoeExtractor
 import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.util.asJsoup
-import okhttp3.Headers
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.text.SimpleDateFormat
+import java.util.Locale
 
-class Sakuhentai : AnimeHttpSource(), ConfigurableAnimeSource {
+class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override val name = "Sakuhentai"
 
@@ -33,274 +33,289 @@ class Sakuhentai : AnimeHttpSource(), ConfigurableAnimeSource {
 
     override val supportsLatest = true
 
+    override val client: OkHttpClient = network.cloudflareClient
+
     private val preferences: SharedPreferences by lazy {
         Injekt.get<Application>().getSharedPreferences("source_$id", 0x0000)
     }
 
     private val voeExtractor by lazy { VoeExtractor(client, headers) }
 
-    override fun headersBuilder(): Headers.Builder = Headers.Builder()
-        .add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
-        .add("Referer", "$baseUrl/")
-        .add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-        .add("Accept-Language", "en-US,en;q=0.5")
+    private val redirectRegex = Regex("""window\.location\.href\s*=\s*'([^']+)'""")
 
-    // ============================== Popular ==============================
+    // ============================== Popular ===============================
 
-    override fun popularAnimeRequest(page: Int): Request {
-        return GET("$baseUrl/hentai-animation-online/page/$page/", headers)
-    }
+    override fun popularAnimeRequest(page: Int): Request = GET("$baseUrl/hentai-animation-online/page/$page/", headers)
 
     override fun popularAnimeParse(response: Response): AnimesPage {
         val document = response.asJsoup()
-        val animeList = document.select("article").mapNotNull { it.toSAnime() }
-        return AnimesPage(animeList, hasNextPage(document))
+        val animeList = mutableListOf<SAnime>()
+
+        // Only animation articles - gallery articles are excluded by CSS class filter
+        document.select("article.category-hentai-animation-online").forEach { article ->
+            animeList.add(article.toSAnime())
+        }
+
+        val hasNextPage = document.selectFirst(".page-numbers a.next") != null
+        return AnimesPage(animeList, hasNextPage)
     }
 
-    // ============================== Latest ==============================
+    // =============================== Latest ===============================
 
-    override fun latestUpdatesRequest(page: Int): Request {
-        return GET("$baseUrl/page/$page/", headers)
-    }
+    override fun latestUpdatesRequest(page: Int): Request = GET("$baseUrl/page/$page/", headers)
 
     override fun latestUpdatesParse(response: Response): AnimesPage {
         val document = response.asJsoup()
-        val animeList = document.select("article").mapNotNull { it.toSAnime() }
-        return AnimesPage(animeList, hasNextPage(document))
-    }
+        val animeList = mutableListOf<SAnime>()
 
-    // ============================== Search ==============================
-
-    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
-        val params = SakuhentaiFilters.getSearchParameters(filters)
-
-        // If a series filter is selected, use that path
-        val categoryPath = when {
-            params.series.isNotBlank() -> "/${params.series}/"
-            else -> null
-        }
-
-        return if (categoryPath != null) {
-            GET("$baseUrl${categoryPath}page/$page/", headers)
-        } else if (query.isNotBlank()) {
-            if (page == 1) {
-                GET("$baseUrl/?s=${java.net.URLEncoder.encode(query, "UTF-8")}", headers)
-            } else {
-                GET("$baseUrl/page/$page/?s=${java.net.URLEncoder.encode(query, "UTF-8")}", headers)
+        // Homepage uses .recpost elements (36 per page), NOT article elements
+        val recposts = document.select(".recpost")
+        if (recposts.isNotEmpty()) {
+            recposts.forEach { recpost ->
+                val title = recpost.selectFirst(".recpost-title a")?.text() ?: ""
+                // Filter: only include animations, skip galleries by title keyword
+                if (!title.contains("Gallery", ignoreCase = true)) {
+                    animeList.add(recpost.recpostToSAnime())
+                }
             }
         } else {
-            GET("$baseUrl/hentai-animation-online/page/$page/", headers)
+            // Fallback: some pages might use article elements
+            document.select("article.category-hentai-animation-online").forEach { article ->
+                animeList.add(article.toSAnime())
+            }
         }
+
+        // Homepage has no pagination
+        return AnimesPage(animeList, false)
+    }
+
+    // =============================== Search ===============================
+
+    override fun searchAnimeRequest(page: Int, query: String, filters: AnimeFilterList): Request {
+        if (query.isNotBlank()) {
+            val encoded = java.net.URLEncoder.encode(query, "UTF-8")
+            return if (page == 1) {
+                GET("$baseUrl/?s=$encoded", headers)
+            } else {
+                GET("$baseUrl/page/$page/?s=$encoded", headers)
+            }
+        }
+
+        return popularAnimeRequest(page)
     }
 
     override fun searchAnimeParse(response: Response): AnimesPage {
         val document = response.asJsoup()
-        val animeList = document.select("article").mapNotNull { it.toSAnime() }
-        return AnimesPage(animeList, hasNextPage(document))
-    }
+        val animeList = mutableListOf<SAnime>()
 
-    // Handle prefix search from URL intent
-    override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
-        if (query.startsWith(PREFIX_SEARCH)) {
-            val slug = query.removePrefix(PREFIX_SEARCH)
-            return client.newCall(GET("$baseUrl/$slug/", headers))
-                .awaitSuccess()
-                .use { searchAnimeByIdParse(it) }
+        // Search results use article elements with category CSS classes
+        document.select("article.category-hentai-animation-online").forEach { article ->
+            animeList.add(article.toSAnime())
         }
-        return super.getSearchAnime(page, query, filters)
+
+        // Also check articles without category classes (title keyword fallback)
+        document.select("article").forEach { article ->
+            if (!article.hasClass("category-hentai-animation-online") &&
+                !article.hasClass("category-hentai-gallery")
+            ) {
+                val title = article.selectFirst(".entry-title a")?.text() ?: ""
+                if (title.contains("Animation", ignoreCase = true)) {
+                    animeList.add(article.toSAnime())
+                }
+            }
+        }
+
+        val hasNextPage = document.selectFirst(".page-numbers a.next") != null
+        return AnimesPage(animeList, hasNextPage)
     }
 
-    private fun searchAnimeByIdParse(response: Response): AnimesPage {
-        val anime = animeDetailsParse(response)
-        return AnimesPage(listOf(anime), false)
-    }
-
-    override fun getFilterList(): AnimeFilterList = SakuhentaiFilters.FILTER_LIST
-
-    // ============================== Details ==============================
+    // =========================== Anime Details ===========================
 
     override fun animeDetailsParse(response: Response): SAnime {
         val document = response.asJsoup()
 
+        // CRITICAL: img.wp-post-image is WRONG on detail pages - it picks up
+        // the PREVIOUS anime thumbnail from prev-next-thumbnail navigation.
+        // The correct thumbnail is img.thumb-v (video player poster image).
+        val thumbnailUrl = document.selectFirst("img.thumb-v")?.attr("src")
+            ?: document.selectFirst("img.wp-post-image")?.attr("src")
+            ?: ""
+
+        val descriptionText = document.selectFirst("p.saku")?.text()?.trim() ?: ""
+
+        val genreList = mutableListOf<String>()
+        document.select(".breadcrumb a").forEach { breadcrumb ->
+            val text = breadcrumb.text().trim()
+            if (text.isNotBlank() && text != "Home" && text != "Sakuhentai") {
+                genreList.add(text)
+            }
+        }
+
         return SAnime.create().apply {
             title = document.selectFirst("h1.entry-title")?.text()?.trim() ?: "Unknown"
-            thumbnail_url = document.selectFirst("img.wp-post-image")?.attr("abs:src")
-                ?: document.selectFirst("img.wp-post-image")?.attr("data-src")
-            description = document.selectFirst("p.saku")?.text()?.trim()
+            thumbnail_url = thumbnailUrl
+            description = descriptionText
+            genre = genreList.joinToString(", ")
             status = SAnime.COMPLETED
-
-            // Extract genre/series from breadcrumbs
-            val breadcrumbs = document.select(".breadcrumb a")
-            val genres = breadcrumbs.mapNotNull { a ->
-                val href = a.attr("href")
-                val text = a.text().trim()
-                // Skip the "Home" breadcrumb
-                if (text.equals("Home", ignoreCase = true) || href == baseUrl || href == "$baseUrl/") {
-                    null
-                } else {
-                    text
-                }
-            }.filter { it.isNotBlank() }
-
-            genre = genres.joinToString(", ").ifBlank { null }
-
-            // Extract artist from description format "by ArtistName"
-            artist = description?.let { desc ->
-                Regex("""by\s+(\S+)""").find(desc)?.groupValues?.get(1)
-            }
-
-            initialized = true
         }
     }
 
     // ============================== Episodes ==============================
 
     override fun episodeListParse(response: Response): List<SEpisode> {
-        return listOf(
-            SEpisode.create().apply {
-                name = "Episode 1"
-                episode_number = 1f
-                url = response.request.url.toString()
-            },
-        )
+        val document = response.asJsoup()
+
+        // Each animation is a single episode
+        val episode = SEpisode.create().apply {
+            url = response.request.url.toString()
+            name = "Episode 1"
+            episode_number = 1f
+            date_upload = parseDate(document.selectFirst("time.entry-date")?.attr("datetime"))
+        }
+
+        return listOf(episode)
     }
 
-    // ============================== Video Sources ==============================
+    private fun parseDate(dateStr: String?): Long {
+        if (dateStr.isNullOrBlank()) return 0L
+
+        return try {
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.ENGLISH).parse(dateStr)?.time ?: 0L
+        } catch (_: Exception) {
+            try {
+                SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH).parse(dateStr)?.time ?: 0L
+            } catch (_: Exception) {
+                0L
+            }
+        }
+    }
+
+    // =============================== Videos ==============================
 
     override fun videoListParse(response: Response): List<Video> {
         val document = response.asJsoup()
         val videos = mutableListOf<Video>()
 
-        // CORRECT SELECTOR: .change-video[data-embed] (these are DIVs, not spans)
+        // Get all video embed buttons - these are SPAN elements with .change-video class
         val embedElements = document.select(".change-video[data-embed]")
+        if (embedElements.isEmpty()) return emptyList()
 
-        if (embedElements.isEmpty()) {
-            // Fallback: try the lazy-v container
-            val lazyEmbed = document.selectFirst(".lazy-v[data-embed]")
-            lazyEmbed?.attr("data-embed")?.takeIf { it.isNotBlank() }?.let { embedUrl ->
-                extractFromEmbed(embedUrl, "Voe - ", videos)
-            }
+        val preferredServer = preferences.getString(PREF_SERVER_KEY, PREF_SERVER_DEFAULT)!!
+
+        // Process embeds - try preferred server first
+        val sortedEmbeds = if (preferredServer != "all") {
+            embedElements.sortedByDescending { it.attr("data-embed").contains(preferredServer, ignoreCase = true) }
+        } else {
+            embedElements.toList()
         }
 
-        embedElements.forEach { element ->
-            val embedUrl = element.attr("data-embed")
-            if (embedUrl.isBlank()) return@forEach
-
-            val prefix = when {
-                embedUrl.contains("natsumi", ignoreCase = true) -> "Natsumi - "
-                embedUrl.contains("hglink", ignoreCase = true) -> "HgLink - "
-                else -> "Server - "
+        for (embedElement in sortedEmbeds) {
+            val embedUrl = embedElement.attr("data-embed")
+            if (embedUrl.isNotBlank()) {
+                val prefix = when {
+                    embedUrl.contains("natsumi", ignoreCase = true) -> "Natsumi - "
+                    embedUrl.contains("hglink", ignoreCase = true) -> "HgLink - "
+                    else -> "Server - "
+                }
+                extractFromEmbed(embedUrl, prefix, videos)
             }
-
-            extractFromEmbed(embedUrl, prefix, videos)
         }
 
         return videos.distinctBy { it.url }
     }
 
     private fun extractFromEmbed(embedUrl: String, prefix: String, videos: MutableList<Video>) {
+        // Phase 1: Try VoeExtractor directly (it handles natsumi/hglink -> VOE redirect internally)
         try {
             val extractedVideos = voeExtractor.videosFromUrl(embedUrl, prefix)
-            videos.addAll(extractedVideos)
+            if (extractedVideos.isNotEmpty()) {
+                videos.addAll(extractedVideos)
+                return
+            }
         } catch (_: Exception) {
-            // Silently skip failed extractions - the other server may still work
+        }
+
+        // Phase 2: Manual redirect resolution - VoeExtractor only checks the FIRST script tag,
+        // but some pages put the redirect in a different script tag or use a different format.
+        try {
+            val embedHeaders = headers.newBuilder()
+                .set("Referer", embedUrl)
+                .build()
+            val embedDoc = client.newCall(GET(embedUrl, embedHeaders)).execute().asJsoup()
+
+            // Search ALL script tags for the redirect, not just the first one
+            val redirectUrl = embedDoc.select("script").mapNotNull { script ->
+                redirectRegex.find(script.data())?.groupValues?.get(1)
+            }.firstOrNull()
+
+            if (redirectUrl != null) {
+                val voeVideos = voeExtractor.videosFromUrl(redirectUrl, prefix)
+                if (voeVideos.isNotEmpty()) {
+                    videos.addAll(voeVideos)
+                }
+            }
+        } catch (_: Exception) {
         }
     }
 
     override fun List<Video>.sort(): List<Video> {
-        val quality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
-        val server = preferences.getString(PREF_SERVER_KEY, PREF_SERVER_DEFAULT)!!
-
-        return sortedWith(
-            compareByDescending<Video> { it.quality.contains(server, ignoreCase = true) }
-                .thenByDescending { it.quality.contains(quality, ignoreCase = true) },
-        )
+        val preferredQuality = preferences.getString(PREF_QUALITY_KEY, PREF_QUALITY_DEFAULT)!!
+        val preferredServer = preferences.getString(PREF_SERVER_KEY, PREF_SERVER_DEFAULT)!!
+        return this.sortedWith(
+            compareBy(
+                { it.quality.contains(preferredServer, true) },
+                { it.quality.contains(preferredQuality, true) },
+                { Regex("""(\d+)p""").find(it.quality)?.groupValues?.get(1)?.toIntOrNull() ?: 0 },
+            ),
+        ).reversed()
     }
 
-    // ============================== Preferences ==============================
+    // ============================== Helpers ==============================
+
+    private fun Element.toSAnime(): SAnime = SAnime.create().apply {
+        title = selectFirst(".entry-title a")?.text()?.trim() ?: "Unknown"
+        url = selectFirst(".entry-title a")?.absUrl("href") ?: ""
+        thumbnail_url = selectFirst("img.wp-post-image")?.absUrl("src") ?: ""
+    }
+
+    private fun Element.recpostToSAnime(): SAnime = SAnime.create().apply {
+        title = selectFirst(".recpost-title a")?.text()?.trim() ?: "Unknown"
+        url = selectFirst(".recpost-title a")?.absUrl("href") ?: ""
+        thumbnail_url = selectFirst(".recpost-thumb img")?.absUrl("src") ?: ""
+    }
+
+    // ============================ Preferences ============================
 
     override fun setupPreferenceScreen(screen: PreferenceScreen) {
         ListPreference(screen.context).apply {
             key = PREF_QUALITY_KEY
             title = "Preferred quality"
-            entries = PREF_QUALITY_ENTRIES
-            entryValues = PREF_QUALITY_VALUES
+            entries = QUALITY_ENTRIES
+            entryValues = QUALITY_ENTRIES
             setDefaultValue(PREF_QUALITY_DEFAULT)
             summary = "%s"
-
-            setOnPreferenceChangeListener { _, newValue ->
-                val selected = newValue as String
-                val index = findIndexOfValue(selected)
-                val entry = entryValues[index] as String
-                preferences.edit().putString(key, entry).commit()
-            }
         }.also(screen::addPreference)
 
         ListPreference(screen.context).apply {
             key = PREF_SERVER_KEY
             title = "Preferred server"
-            entries = PREF_SERVER_ENTRIES
-            entryValues = PREF_SERVER_VALUES
+            entries = SERVER_DISPLAY_ENTRIES
+            entryValues = SERVER_VALUE_ENTRIES
             setDefaultValue(PREF_SERVER_DEFAULT)
             summary = "%s"
-
-            setOnPreferenceChangeListener { _, newValue ->
-                val selected = newValue as String
-                val index = findIndexOfValue(selected)
-                val entry = entryValues[index] as String
-                preferences.edit().putString(key, entry).commit()
-            }
         }.also(screen::addPreference)
     }
 
-    // ============================== Utilities ==============================
-
-    private fun Element.toSAnime(): SAnime? {
-        val titleEl = selectFirst(".entry-title a") ?: return null
-        val link = titleEl.attr("abs:href")
-        if (link.isBlank()) return null
-
-        // Skip non-animation articles (e.g. galleries)
-        val isAnimation = className().contains("hentai-animation-online") || className().contains("hentai-ani")
-        if (!isAnimation) return null
-
-        val thumbnailEl = selectFirst("img.wp-post-image")
-        val thumbnailUrl = thumbnailEl?.attr("abs:src")?.takeIf { it.isNotBlank() }
-            ?: thumbnailEl?.attr("data-src")?.takeIf { it.isNotBlank() }
-
-        return SAnime.create().apply {
-            title = titleEl.text().trim()
-            thumbnail_url = thumbnailUrl
-            setUrlWithoutDomain(link)
-            status = SAnime.COMPLETED
-        }
-    }
-
-    private fun hasNextPage(document: Document): Boolean {
-        // Method 1: Check for .page-numbers a.next
-        if (document.select(".page-numbers a.next").isNotEmpty()) return true
-
-        // Method 2: Check if there's an <a> after the current page span
-        val currentSpan = document.selectFirst(".page-numbers span.current")
-        if (currentSpan != null) {
-            val nextSibling = currentSpan.nextElementSibling()
-            if (nextSibling != null && nextSibling.tagName() == "a") return true
-        }
-
-        return false
-    }
-
     companion object {
-        const val PREFIX_SEARCH = "slug:"
-
         private const val PREF_QUALITY_KEY = "preferred_quality"
-        private const val PREF_QUALITY_DEFAULT = "1080"
-        private val PREF_QUALITY_ENTRIES = arrayOf("360p", "480p", "720p", "1080p")
-        private val PREF_QUALITY_VALUES = arrayOf("360", "480", "720", "1080")
+        private const val PREF_QUALITY_DEFAULT = "1080p"
+        private val QUALITY_ENTRIES = arrayOf("1080p", "720p", "480p", "360p")
 
         private const val PREF_SERVER_KEY = "preferred_server"
         private const val PREF_SERVER_DEFAULT = "natsumi"
-        private val PREF_SERVER_ENTRIES = arrayOf("Player 1 (Natsumi)", "Player 2 (HgLink)")
-        private val PREF_SERVER_VALUES = arrayOf("natsumi", "hglink")
+        private val SERVER_DISPLAY_ENTRIES = arrayOf("All", "Natsumi", "HgLink")
+        private val SERVER_VALUE_ENTRIES = arrayOf("all", "natsumi", "hglink")
+
+        const val PREFIX_SEARCH = "id:"
     }
 }
