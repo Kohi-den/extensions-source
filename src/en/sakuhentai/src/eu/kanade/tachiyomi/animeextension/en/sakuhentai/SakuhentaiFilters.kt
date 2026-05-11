@@ -11,13 +11,11 @@ object SakuhentaiFilters {
     ) : AnimeFilter.Select<String>(
         displayName,
         vals.map { it.first }.toTypedArray(),
-        vals.map { it.second }.toTypedArray(),
-        0,
     ) {
         fun getValue() = vals[state].second
     }
 
-    private val seriesPairs = arrayOf(
+    private val SERIES_PAIRS = arrayOf(
         Pair("None", ""),
         Pair("Naruto", "naruto-hentai"),
         Pair("One Piece", "one-piece"),
@@ -26,7 +24,7 @@ object SakuhentaiFilters {
         Pair("Spy x Family", "spy-x-family"),
     )
 
-    class SeriesFilter : SelectFilter("Series", seriesPairs)
+    class SeriesFilter : SelectFilter("Series", SERIES_PAIRS)
 
     val FILTER_LIST get() = AnimeFilterList(
         AnimeFilter.Header("Note: Series filter overrides text search"),
