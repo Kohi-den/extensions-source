@@ -44,22 +44,21 @@ internal fun extractBg(el: Element, baseUrl: String): String? {
 /**
  * Extracts the X-DDL-Token from the episode page's inline JavaScript.
  *
- * FIX: Expanded from 2 patterns to 5 to handle variations in how the site
- * embeds the token (object literal, variable assignment, data attribute,
- * bare key, or any *Token variable with a long value).
+ * The token always appears as one of:
+ *   'X-DDL-Token': "VALUE"   (fetch header object literal)
+ *   ddl_token = "VALUE"      (variable assignment)
+ *
+ * Broader fallback patterns (data-token, bare "token" key, any *Token variable)
+ * were removed because pattern 5 in particular matched the ?token= query param
+ * found in episode download hrefs on the same page, silently returning the
+ * wrong value and causing /get_ddl/ calls to fail.
  */
 internal fun extractDdlToken(html: String): String? {
     val patterns = listOf(
-        // "X-DDL-Token": "VALUE"  (fetch header map / object literal)
+        // 'X-DDL-Token': "VALUE"  or  "X-DDL-Token": "VALUE"
         Regex("""['"]X-DDL-Token['"]\s*:\s*['"]([A-Za-z0-9+/=_\-]+)['"]"""),
-        // ddl_token = "VALUE"  (variable assignment)
+        // ddl_token = "VALUE"  /  ddltoken = "VALUE"  /  ddl-token: "VALUE"
         Regex("""ddl[_\-]?token['"\s]*[=:]\s*['"]([A-Za-z0-9+/=_\-]+)['"]""", RegexOption.IGNORE_CASE),
-        // data-token="VALUE"  (HTML attribute)
-        Regex("""data-token=['"]([A-Za-z0-9+/=_\-]+)['"]""", RegexOption.IGNORE_CASE),
-        // token: "VALUE"  (bare key in JS object)
-        Regex("""['"]token['"]\s*:\s*['"]([A-Za-z0-9+/=_\-]+)['"]""", RegexOption.IGNORE_CASE),
-        // any *Token variable holding a long value (authToken, csrfToken, secToken, etc.)
-        Regex("""[a-z]*[Tt]oken['"\s]*[=:]\s*['"]([A-Za-z0-9+/=_\-]{20,})['"]"""),
     )
     for (pattern in patterns) {
         val match = pattern.find(html)

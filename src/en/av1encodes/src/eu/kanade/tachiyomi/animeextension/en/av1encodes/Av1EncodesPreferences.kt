@@ -6,6 +6,11 @@ import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
 import eu.kanade.tachiyomi.animesource.model.Video
 
+internal const val PREF_DOMAIN_KEY = "preferred_domain"
+internal const val PREF_DOMAIN_DEFAULT = "https://av1encodes.com"
+internal val DOMAIN_ENTRIES = arrayOf("av1encodes.com (default)", "av1please.com (mirror)")
+internal val DOMAIN_VALUES = arrayOf("https://av1encodes.com", "https://av1please.com")
+
 internal const val PREF_QUALITY_KEY = "preferred_quality"
 internal const val PREF_QUALITY_DEFAULT = "1920 x 1080"
 internal val QUALITY_ENTRIES = arrayOf("1080p", "720p", "480p", "360p")
@@ -19,6 +24,20 @@ internal const val PREF_SHOW_TORRENT_KEY = "show_torrent"
 internal const val PREF_SHOW_TORRENT_DEFAULT = true
 
 internal fun buildPreferenceScreen(screen: PreferenceScreen, preferences: SharedPreferences) {
+    // ── Domain ────────────────────────────────────────────────────────────────
+    ListPreference(screen.context).apply {
+        key = PREF_DOMAIN_KEY
+        title = "Domain"
+        summary = "%s\n\nSwitch to the mirror if the default domain is unreachable. Restart the app after changing."
+        entries = DOMAIN_ENTRIES
+        entryValues = DOMAIN_VALUES
+        setDefaultValue(PREF_DOMAIN_DEFAULT)
+        setOnPreferenceChangeListener { _, newValue ->
+            preferences.edit().putString(PREF_DOMAIN_KEY, newValue as String).apply()
+            true
+        }
+    }.also(screen::addPreference)
+
     // ── Preferred Resolution ──────────────────────────────────────────────────
     ListPreference(screen.context).apply {
         key = PREF_QUALITY_KEY

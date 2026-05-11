@@ -41,7 +41,9 @@ class Av1Encodes :
     ConfigurableAnimeSource {
 
     override val name = "AV1Encodes"
-    override val baseUrl = "https://av1please.com"
+    override val baseUrl by lazy {
+        preferences.getString(PREF_DOMAIN_KEY, PREF_DOMAIN_DEFAULT)!!
+    }
     override val lang = "en"
     override val supportsLatest = true
 
@@ -566,9 +568,6 @@ class Av1Encodes :
             }
         }
 
-        // API JSON copy entry — use the raw response as the video URL so it can be copied
-        videos.add(Video(raw, "[JSON] Copy API Response", raw))
-
         return videos
     }
 
@@ -590,11 +589,8 @@ class Av1Encodes :
         buildPreferenceScreen(screen, preferences)
     }
 
-    override fun List<Video>.sort(): List<Video> {
-        val jsonEntry = filter { it.quality == "[JSON] Copy API Response" }
-        val rest = filter { it.quality != "[JSON] Copy API Response" }.sortByPreferredQuality(preferences)
-        return rest + jsonEntry
-    }
+    override fun List<Video>.sort(): List<Video> =
+        sortByPreferredQuality(preferences)
 
     // ══════════════════════════════════════════════════════════════════════════
     // CONSTANTS
