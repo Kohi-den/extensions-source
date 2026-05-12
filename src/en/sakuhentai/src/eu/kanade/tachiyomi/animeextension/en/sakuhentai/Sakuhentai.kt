@@ -144,7 +144,7 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
 
     private fun searchAnimeByIdParse(response: Response): AnimesPage {
         val anime = animeDetailsParse(response).apply {
-            setUrlWithoutDomain(response.request.url.toString())
+            setUrlWithoutDomain(response.request.url.toString().substringAfter(baseUrl).ifEmpty { "/" })
             initialized = true
         }
         return AnimesPage(listOf(anime), false)
