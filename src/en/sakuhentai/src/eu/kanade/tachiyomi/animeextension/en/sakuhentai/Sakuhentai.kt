@@ -156,7 +156,7 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun animeDetailsParse(response: Response): SAnime {
         val document = response.asJsoup()
-        val thumbnailUrl = document.selectFirst("img.thumb-v")?.absUrl("src")
+        val thumbnailUrl = document.selectFirst("meta[property=og:image]")?.attr("content")
             ?.ifBlank { document.selectFirst("img.wp-post-image")?.absUrl("src") }
             ?: ""
         val descriptionText = document.selectFirst("p.saku")?.text()?.trim() ?: ""
