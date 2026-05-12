@@ -273,7 +273,7 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
         val authorMatch = authorRegex.find(rawTitle)
         title = authorMatch?.groupValues?.get(1)?.let { rawTitle.removeSuffix(" by $it") }
             ?: rawTitle
-        setUrlWithoutDomain(selectFirst(".entry-title a")?.attr("href") ?: "")
+        setUrlWithoutDomain(selectFirst(".entry-title a")?.attr("href")?.substringAfter(baseUrl) ?: "")
         thumbnail_url = selectFirst("img.wp-post-image")?.absUrl("src") ?: ""
     }
 
@@ -282,7 +282,7 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
         val authorMatch = authorRegex.find(rawTitle)
         title = authorMatch?.groupValues?.get(1)?.let { rawTitle.removeSuffix(" by $it") }
             ?: rawTitle
-        setUrlWithoutDomain(selectFirst(".recpost-title a")?.attr("href") ?: "")
+        setUrlWithoutDomain(selectFirst(".recpost-title a")?.attr("href")?.substringAfter(baseUrl) ?: "")
         thumbnail_url = selectFirst(".recpost-thumb img")?.absUrl("src") ?: ""
     }
 
