@@ -176,6 +176,7 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
         val authorName = authorMatch?.groupValues?.get(1) ?: ""
 
         return SAnime.create().apply {
+            setUrlWithoutDomain(response.request.url.toString().substringAfter(baseUrl).ifEmpty { "/" })
             title = cleanTitle
             author = authorName
             artist = authorName
@@ -184,6 +185,11 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
             genre = genreList.joinToString(", ")
             status = SAnime.COMPLETED
         }
+    }
+
+    override fun animeDetailsRequest(anime: SAnime): Request {
+        val url = anime.url
+        return GET(if (url.startsWith("http")) url else baseUrl + url, headers)
     }
 
     // ============================== Episodes ==============================
@@ -217,7 +223,8 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
     // =============================== Videos ==============================
 
     override fun videoListRequest(episode: SEpisode): Request {
-        return GET(baseUrl + episode.url, headers)
+        val url = episode.url
+        return GET(if (url.startsWith("http")) url else baseUrl + url, headers)
     }
 
     override fun videoListParse(response: Response): List<Video> {
