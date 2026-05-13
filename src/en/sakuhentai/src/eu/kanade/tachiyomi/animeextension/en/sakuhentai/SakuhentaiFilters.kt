@@ -17,10 +17,18 @@ object SakuhentaiFilters {
 
     private val SERIES_PAIRS = arrayOf(
         Pair("None", ""),
+        Pair("Black Clover", "black-clover"),
+        Pair("Bleach", "bleach"),
+        Pair("Blue Archive", "blue-archive"),
+        Pair("Boku no Hero Academia", "boku-no-hero-academia"),
+        Pair("Boruto", "boruto"),
+        Pair("Chainsaw Man", "chainsaw-man"),
+        Pair("Dragon Ball", "dragon-ball"),
+        Pair("Fairy Tail", "fairy-tail"),
+        Pair("Genshin Impact", "genshin-impact"),
+        Pair("Jujutsu Kaisen", "jujutsu-kaisen"),
         Pair("Naruto", "naruto-hentai"),
         Pair("One Piece", "one-piece"),
-        Pair("Bleach", "bleach"),
-        Pair("Genshin Impact", "genshin-impact"),
         Pair("Spy x Family", "spy-x-family"),
     )
 

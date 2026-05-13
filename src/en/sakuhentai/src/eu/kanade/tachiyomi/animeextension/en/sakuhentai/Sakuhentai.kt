@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.animeextension.en.sakuhentai
 
 import android.app.Application
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.preference.ListPreference
 import androidx.preference.PreferenceScreen
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
@@ -49,7 +50,11 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
         val document = response.asJsoup()
         val animeList = mutableListOf<SAnime>()
         document.select("article.category-hentai-animation-online").forEach { article ->
-            animeList.add(article.toSAnime())
+            try {
+                animeList.add(article.toSAnime())
+            } catch (e: Exception) {
+                Log.w("Sakuhentai", "Failed to parse popular anime entry: ${e.message}")
+            }
         }
         val hasNextPage = document.selectFirst(".page-numbers a.next") != null
         return AnimesPage(animeList, hasNextPage)
@@ -66,14 +71,22 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
         val recposts = document.select(".recpost")
         if (recposts.isNotEmpty()) {
             recposts.forEach { recpost ->
-                val title = recpost.selectFirst(".recpost-title a")?.text() ?: ""
-                if (!title.contains("Gallery", ignoreCase = true)) {
-                    animeList.add(recpost.recpostToSAnime())
+                try {
+                    val title = recpost.selectFirst(".recpost-title a")?.text() ?: ""
+                    if (!title.contains("Gallery", ignoreCase = true)) {
+                        animeList.add(recpost.recpostToSAnime())
+                    }
+                } catch (e: Exception) {
+                    Log.w("Sakuhentai", "Failed to parse latest recpost entry: ${e.message}")
                 }
             }
         } else {
             document.select("article.category-hentai-animation-online").forEach { article ->
-                animeList.add(article.toSAnime())
+                try {
+                    animeList.add(article.toSAnime())
+                } catch (e: Exception) {
+                    Log.w("Sakuhentai", "Failed to parse latest anime entry: ${e.message}")
+                }
             }
         }
         return AnimesPage(animeList, false)
@@ -103,27 +116,39 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
 
         // Primary: animation category articles
         document.select("article.category-hentai-animation-online").forEach { article ->
-            animeList.add(article.toSAnime())
+            try {
+                animeList.add(article.toSAnime())
+            } catch (e: Exception) {
+                Log.w("Sakuhentai", "Failed to parse search animation entry: ${e.message}")
+            }
         }
 
         // Secondary: gallery articles with "Animation" in title (common on series pages)
         document.select("article.category-hentai-gallery").forEach { article ->
-            val title = article.selectFirst(".entry-title a")?.text() ?: ""
-            if (title.contains("Animation", ignoreCase = true)) {
-                animeList.add(article.toSAnime())
+            try {
+                val title = article.selectFirst(".entry-title a")?.text() ?: ""
+                if (title.contains("Animation", ignoreCase = true)) {
+                    animeList.add(article.toSAnime())
+                }
+            } catch (e: Exception) {
+                Log.w("Sakuhentai", "Failed to parse search gallery entry: ${e.message}")
             }
         }
 
         // Tertiary: uncategorized articles with "Animation" in title
         document.select("article").forEach { article ->
-            if (
-                !article.hasClass("category-hentai-animation-online") &&
-                !article.hasClass("category-hentai-gallery")
-            ) {
-                val title = article.selectFirst(".entry-title a")?.text() ?: ""
-                if (title.contains("Animation", ignoreCase = true)) {
-                    animeList.add(article.toSAnime())
+            try {
+                if (
+                    !article.hasClass("category-hentai-animation-online") &&
+                    !article.hasClass("category-hentai-gallery")
+                ) {
+                    val title = article.selectFirst(".entry-title a")?.text() ?: ""
+                    if (title.contains("Animation", ignoreCase = true)) {
+                        animeList.add(article.toSAnime())
+                    }
                 }
+            } catch (e: Exception) {
+                Log.w("Sakuhentai", "Failed to parse search uncategorized entry: ${e.message}")
             }
         }
 
@@ -156,34 +181,43 @@ class Sakuhentai : ConfigurableAnimeSource, AnimeHttpSource() {
 
     override fun animeDetailsParse(response: Response): SAnime {
         val document = response.asJsoup()
-        val thumbnailUrl = document.selectFirst("meta[property=og:image]")?.attr("content")
-            ?.ifBlank { document.selectFirst("img.wp-post-image")?.absUrl("src") }
-            ?: ""
-        val descriptionText = document.selectFirst("p.saku")?.text()?.trim() ?: ""
+        return try {
+            val thumbnailUrl = document.selectFirst("meta[property=og:image]")?.attr("content")
+                ?.ifBlank { document.selectFirst("img.wp-post-image")?.absUrl("src") }
+                ?: ""
+            val descriptionText = document.selectFirst("p.saku")?.text()?.trim() ?: ""
 
-        val genreList = mutableListOf<String>()
-        document.select(".breadcrumb a").forEach { breadcrumb ->
-            val text = breadcrumb.text().trim()
-            if (text.isNotBlank() && text != "Sakuhentai") {
-                genreList.add(text)
+            val genreList = mutableListOf<String>()
+            document.select(".breadcrumb a").forEach { breadcrumb ->
+                val text = breadcrumb.text().trim()
+                if (text.isNotBlank() && text != "Sakuhentai") {
+                    genreList.add(text)
+                }
             }
-        }
 
-        val rawTitle = document.selectFirst("h1.entry-title")?.text()?.trim() ?: "Unknown"
-        val authorMatch = authorRegex.find(rawTitle)
-        val cleanTitle = authorMatch?.groupValues?.get(1)?.let { rawTitle.removeSuffix(" by $it") }
-            ?: rawTitle
-        val authorName = authorMatch?.groupValues?.get(1) ?: ""
+            val rawTitle = document.selectFirst("h1.entry-title")?.text()?.trim() ?: "Unknown"
+            val authorMatch = authorRegex.find(rawTitle)
+            val cleanTitle = authorMatch?.groupValues?.get(1)?.let { rawTitle.removeSuffix(" by $it") }
+                ?: rawTitle
+            val authorName = authorMatch?.groupValues?.get(1) ?: ""
 
-        return SAnime.create().apply {
-            setUrlWithoutDomain(response.request.url.toString().substringAfter(baseUrl).ifEmpty { "/" })
-            title = cleanTitle
-            author = authorName
-            artist = authorName
-            thumbnail_url = thumbnailUrl
-            description = descriptionText
-            genre = genreList.joinToString(", ")
-            status = SAnime.COMPLETED
+            SAnime.create().apply {
+                setUrlWithoutDomain(response.request.url.toString().substringAfter(baseUrl).ifEmpty { "/" })
+                title = cleanTitle
+                author = authorName
+                artist = authorName
+                thumbnail_url = thumbnailUrl
+                description = descriptionText
+                genre = genreList.joinToString(", ")
+                status = SAnime.COMPLETED
+            }
+        } catch (e: Exception) {
+            Log.w("Sakuhentai", "Failed to parse anime details: ${e.message}")
+            SAnime.create().apply {
+                setUrlWithoutDomain(response.request.url.toString().substringAfter(baseUrl).ifEmpty { "/" })
+                title = "Error loading details"
+                status = SAnime.UNKNOWN
+            }
         }
     }
 

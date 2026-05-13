@@ -26,39 +26,51 @@ class SakuhentaiExtractor(
 
     fun videosFromUrl(url: String, prefix: String = ""): List<Video> {
         val videoList = mutableListOf<Video>()
-        try {
-            val document = client.newCall(GET(url, headers)).execute().asJsoup()
 
-            val redirectUrl = document.select("script").mapNotNull { script ->
-                redirectRegex.find(script.data())?.groupValues?.get(1)
-            }.firstOrNull()
+        val document = try {
+            client.newCall(GET(url, headers)).execute().asJsoup()
+        } catch (e: Exception) {
+            Log.w("Sakuhentai", "Failed to fetch embed page $url: ${e.message}")
+            return videoList
+        }
 
-            val finalUrl = redirectUrl ?: url
+        val redirectUrl = document.select("script").mapNotNull { script ->
+            redirectRegex.find(script.data())?.groupValues?.get(1)
+        }.firstOrNull()
 
-            val voeDoc = client.newCall(GET(finalUrl, headers)).execute().asJsoup()
+        val finalUrl = redirectUrl ?: url
 
-            val encodedString = voeDoc.selectFirst("script[type=application/json]")?.data()
-                ?.trim()
-                ?.substringAfter("[\"")
-                ?.substringBeforeLast("\"]")
-                ?: return videoList
+        val voeDoc = try {
+            client.newCall(GET(finalUrl, headers)).execute().asJsoup()
+        } catch (e: Exception) {
+            Log.w("Sakuhentai", "Failed to fetch Voe page $finalUrl: ${e.message}")
+            return videoList
+        }
 
-            val decryptedJson = decryptF7(encodedString) ?: return videoList
+        val encodedString = voeDoc.selectFirst("script[type=application/json]")?.data()
+            ?.trim()
+            ?.substringAfter("[\"")
+            ?.substringBeforeLast("\"]")
+            ?: return videoList
 
-            val m3u8 = decryptedJson["source"]?.jsonPrimitive?.content
-            if (m3u8 != null) {
+        val decryptedJson = decryptF7(encodedString) ?: return videoList
+
+        val m3u8 = decryptedJson["source"]?.jsonPrimitive?.content
+        if (m3u8 != null) {
+            try {
                 playlistUtils.extractFromHls(m3u8, videoNameGen = { quality ->
                     "${prefix}Voe:$quality"
                 }).forEach { videoList.add(it) }
+            } catch (e: Exception) {
+                Log.w("Sakuhentai", "Failed to extract HLS from $m3u8: ${e.message}")
             }
-
-            val mp4 = decryptedJson["direct_access_url"]?.jsonPrimitive?.content
-            if (mp4 != null) {
-                videoList.add(Video(mp4, "${prefix}Voe:MP4", mp4, headers))
-            }
-        } catch (e: Exception) {
-            Log.w("Sakuhentai", "Failed to extract videos from $url: ${e.message}")
         }
+
+        val mp4 = decryptedJson["direct_access_url"]?.jsonPrimitive?.content
+        if (mp4 != null) {
+            videoList.add(Video(mp4, "${prefix}Voe:MP4", mp4, headers))
+        }
+
         return videoList
     }
 
@@ -72,7 +84,10 @@ class SakuhentaiExtractor(
             val vF6 = reverse(vF5)
             val vAtob = base64Decode(vF6)
             json.decodeFromString<JsonObject>(vAtob)
-        } catch (_: Exception) { null }
+        } catch (e: Exception) {
+            Log.w("Sakuhentai", "Decryption failed: ${e.message}")
+            null
+        }
     }
 
     private fun rot13(input: String): String {
@@ -100,6 +115,16 @@ class SakuhentaiExtractor(
 
     private fun reverse(input: String): String = input.reversed()
 
+    // ISO_8859_1 is intentionally used here, not UTF-8.
+    // The decryption pipeline (decryptF7) performs two Base64 decodes with
+    // intermediate string transformations (charShift, reverse) between them.
+    // The first Base64 decode produces raw bytes that are NOT valid UTF-8 —
+    // they are an intermediate binary blob. ISO_8859_1 provides a bijective
+    // 1:1 mapping between each byte (0x00-0xFF) and a Unicode code point
+    // (U+0000-U+00FF), preserving the raw bytes through the intermediate
+    // string operations intact. Using UTF-8 would corrupt bytes 0x80-0xFF
+    // as multi-byte sequence starters/continuation bytes, breaking the
+    // second Base64 decode.
     private fun base64Decode(input: String): String {
         val decodedBytes = Base64.decode(input, Base64.DEFAULT)
         return String(decodedBytes, Charsets.ISO_8859_1)
